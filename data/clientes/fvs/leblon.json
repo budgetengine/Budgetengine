@@ -1,0 +1,228 @@
+{
+  "servicos": {},
+  "valores_proprietario": {},
+  "valores_profissional": {},
+  "proprietarios": {},
+  "profissionais": {},
+  "despesas": {},
+  "custo_pessoal_mensal": 0,
+  "mes_dissidio": 5,
+  "sazonalidade": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "operacional": {
+    "num_fisioterapeutas": 0,
+    "num_salas": 0,
+    "horas_atendimento_dia": 0,
+    "dias_uteis_mes": 0,
+    "modelo_tributario": "PJ - Simples Nacional",
+    "modo_calculo_sessoes": "servico"
+  },
+  "cadastro_salas": {
+    "horas_funcionamento_dia": 0,
+    "dias_uteis_mes": 0,
+    "salas": [
+      {
+        "numero": 1,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": true
+      },
+      {
+        "numero": 2,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 3,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 4,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 5,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 6,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 7,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 8,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 9,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 10,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 11,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 12,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 13,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 14,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      },
+      {
+        "numero": 15,
+        "metros_quadrados": 0.0,
+        "tipo": "Individual",
+        "servicos_atendidos": [],
+        "ativa": false
+      }
+    ]
+  },
+  "macro": {
+    "ipca": 0.0,
+    "igpm": 0.0,
+    "dissidio": 0.0,
+    "reajuste_tarifas": 0.0,
+    "reajuste_contratos": 0.0,
+    "taxa_cartao_credito": 0.0354,
+    "taxa_cartao_debito": 0.0211,
+    "taxa_antecipacao": 0.05
+  },
+  "pagamento": {
+    "dinheiro_pix": 0.0,
+    "cartao_credito": 0.0,
+    "cartao_debito": 0.0,
+    "outros": 0.0,
+    "pct_antecipacao": 0.0
+  },
+  "premissas_folha": {
+    "regime_tributario": "PJ - Simples Nacional",
+    "deducao_dependente_ir": 189.59,
+    "aliquota_fgts": 0.08,
+    "desconto_vt_pct": 0.06,
+    "dias_uteis_mes": 22,
+    "mes_dissidio": 5,
+    "pct_dissidio": 0.05
+  },
+  "funcionarios_clt": {},
+  "socios_prolabore": {},
+  "fisioterapeutas": {},
+  "premissas_fisio": {
+    "niveis_remuneracao": {
+      "1": 0.0,
+      "2": 0.0,
+      "3": 0.0,
+      "4": 0.0
+    },
+    "pct_producao_propria": 0.6,
+    "pct_faturamento_total": 0.2,
+    "pct_base_remuneracao_prop": 0.75,
+    "pct_gerencia_equipe": 0.01,
+    "pct_base_remuneracao_ger": 0.75
+  },
+  "premissas_simples": {
+    "faturamento_pf_anual": 0.0,
+    "aliquota_inss_pf": 0.11,
+    "teto_inss_pf": 908.86,
+    "limite_fator_r": 0.28
+  },
+  "premissas_dividendos": {
+    "distribuir": true,
+    "pct_reserva_legal": 0.05,
+    "pct_reserva_investimento": 0.2,
+    "frequencia": "Trimestral",
+    "pct_distribuir": 0.3,
+    "mostrar_no_dre": true
+  },
+  "premissas_fc": {
+    "caixa_inicial": 0.0,
+    "cp_impostos": 0,
+    "cp_folha_colaboradores": 0.0,
+    "cp_folha_fisioterapeutas": 0,
+    "cp_retirada_proprietarios": 0.0,
+    "cp_encargos_clt": 0.0,
+    "cp_fornecedores": 0,
+    "usar_cp_folha_auto": true,
+    "receita_out_ano_anterior": 0.0,
+    "receita_nov_ano_anterior": 0.0,
+    "receita_dez_ano_anterior": 0.0,
+    "usar_receita_auto": true,
+    "recebimento_avista_no_mes": true,
+    "saldo_minimo": 0.0,
+    "pct_cartao_1x": 0.3333,
+    "pct_cartao_2x": 0.3333,
+    "pct_cartao_3x": 0.3334,
+    "pct_cartao_4x": 0.0,
+    "pct_cartao_5x": 0.0,
+    "pct_cartao_6x": 0.0
+  },
+  "aplicacoes": {
+    "saldo_inicial": 0.0,
+    "taxa_selic_anual": 0.1225,
+    "pct_cdi": 1.0
+  },
+  "investimentos": [],
+  "financiamentos": []
+}
