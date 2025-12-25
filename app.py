@@ -18,6 +18,29 @@ from datetime import datetime
 from config import *
 # import database as db  # Substituído por cliente_manager
 from modules.excel_parser import BudgetExcelParser, importar_budget
+
+# ============================================
+# SISTEMA DE AUTENTICAÇÃO
+# ============================================
+try:
+    from auth import (
+        is_authenticated, 
+        login, 
+        logout, 
+        get_current_user,
+        show_login_form,
+        show_user_menu
+    )
+    from admin_users import pagina_admin
+    AUTH_ENABLED = True
+except ImportError:
+    AUTH_ENABLED = False
+    # Funções dummy se auth não estiver disponível
+    def is_authenticated(): return True
+    def get_current_user(): return None
+    def show_user_menu(): pass
+    def pagina_admin(): 
+        st.warning("Módulo de administração não disponível")
 from motor_calculo import MotorCalculo, criar_motor_padrao, criar_motor_vazio, Investimento, FinanciamentoExistente, Servico, Fisioterapeuta, FuncionarioCLT, DespesaFixa, Profissional
 from modules.cliente_manager import ClienteManager, motor_para_dict, dict_para_motor
 from realizado_manager import RealizadoManager, LancamentoMesRealizado, RealizadoAnual, AnaliseVariacao, criar_dre_comparativo
@@ -846,6 +869,115 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
     return motor_consolidado
 
 # ============================================
+# FUNÇÃO DE TELA DE LOGIN PERSONALIZADA
+# ============================================
+
+def mostrar_tela_login():
+    """Exibe tela de login personalizada do Budget Engine"""
+    
+    # Configuração mínima da página para login
+    st.set_page_config(
+        page_title="Budget Engine - Login",
+        page_icon="🔐",
+        layout="centered",
+        initial_sidebar_state="collapsed"
+    )
+    
+    # CSS para tela de login
+    st.markdown("""
+    <style>
+        /* Oculta sidebar no login */
+        [data-testid="stSidebar"] {display: none;}
+        
+        /* Estilo do container de login */
+        .login-box {
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            padding: 2rem;
+            border-radius: 16px;
+            color: white;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-box h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+        
+        .login-box p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+        
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Layout centralizado
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        # Header
+        st.markdown("""
+        <div class="login-box">
+            <h1>📊 Budget Engine</h1>
+            <p>Sistema de Orçamento para Clínicas de Fisioterapia</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Formulário de login
+        st.markdown("### 🔐 Acesse sua conta")
+        
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("📧 Email", placeholder="seu@email.com")
+            senha = st.text_input("🔒 Senha", type="password", placeholder="Sua senha")
+            
+            col_btn1, col_btn2 = st.columns([2, 1])
+            with col_btn1:
+                submitted = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+            with col_btn2:
+                st.form_submit_button("Esqueci", use_container_width=True, disabled=True)
+            
+            if submitted:
+                if not email or not senha:
+                    st.error("⚠️ Preencha email e senha!")
+                else:
+                    with st.spinner("Verificando credenciais..."):
+                        user = login(email, senha)
+                        
+                        if user:
+                            st.session_state["user"] = user
+                            st.session_state["authenticated"] = True
+                            st.session_state["company_id"] = user.get("company_id")
+                            st.session_state["user_id"] = user.get("id")
+                            st.success(f"✅ Bem-vindo, {user.get('name', 'Usuário')}!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Email ou senha incorretos!")
+        
+        # Credenciais de teste (remover em produção)
+        with st.expander("🧪 Credenciais de Teste", expanded=False):
+            st.code("""
+Email: admin@demo.com
+Senha: Budget2024!
+            """)
+            st.caption("⚠️ Remova este bloco em produção!")
+        
+        # Footer
+        st.markdown("---")
+        st.caption("Budget Engine © 2024 - Sistema de Consultoria Financeira")
+
+# ============================================
+# VERIFICAÇÃO DE AUTENTICAÇÃO
+# ============================================
+
+# Se autenticação está habilitada, verifica login
+if AUTH_ENABLED and not is_authenticated():
+    mostrar_tela_login()
+    st.stop()
+
+# ============================================
 # CONFIGURAÇÃO DA PÁGINA
 # ============================================
 
@@ -1184,38 +1316,65 @@ with st.sidebar:
     st.title(APP_NAME)
     st.caption(f"v{APP_VERSION}")
     
+    # ========== USUÁRIO LOGADO ==========
+    if AUTH_ENABLED and is_authenticated():
+        user = get_current_user()
+        if user:
+            st.markdown("---")
+            st.markdown(f"👤 **{user.get('name', 'Usuário')}**")
+            company = user.get("companies", {})
+            if company:
+                st.caption(f"🏢 {company.get('name', 'Empresa')}")
+            
+            if st.button("🚪 Sair", use_container_width=True):
+                logout()
+                st.rerun()
+    # ====================================
+    
     st.markdown("---")
     
     # Menu de navegação com ícones
+    # Define opções base
+    opcoes_menu = [
+        "🏠 Dashboard", 
+        "🤖 Consultor IA",
+        "⚙️ Premissas", 
+        "📈 Atendimentos", 
+        "👔 Folha Funcionários", 
+        "🏥 Folha Fisioterapeutas", 
+        "💼 Simples Nacional", 
+        "💰 Financeiro", 
+        "📊 Dividendos",
+        "📋 DRE Simulado", 
+        "🏦 FC Simulado", 
+        "📊 Taxa Ocupação",
+        "⚖️ Ponto Equilíbrio",
+        "🎯 Custeio ABC",
+        "───────────────",  # Separador visual
+        "✅ Lançar Realizado",
+        "📊 Orçado x Realizado",
+        "📋 DRE Comparativo",
+        "───────────────",  # Separador visual
+        "👥 Clientes", 
+        "📥 Importar Dados", 
+        "📄 DRE (Excel)", 
+        "📄 FC (Excel)",
+    ]
+    
+    # Adiciona opções de Admin apenas para administradores
+    user_logado = get_current_user() if AUTH_ENABLED else None
+    is_admin_user = user_logado and user_logado.get("role") == "admin" if user_logado else True
+    
+    if is_admin_user:
+        opcoes_menu.extend([
+            "───────────────",  # Separador visual
+            "🔧 Admin",
+            "🛠️ Diagnóstico Dev"
+        ])
+    
     pagina = st.radio(
         "Navegação",
-        [
-            "🏠 Dashboard", 
-            "🤖 Consultor IA",
-            "⚙️ Premissas", 
-            "📈 Atendimentos", 
-            "👔 Folha Funcionários", 
-            "🏥 Folha Fisioterapeutas", 
-            "💼 Simples Nacional", 
-            "💰 Financeiro", 
-            "📊 Dividendos",
-            "📋 DRE Simulado", 
-            "🏦 FC Simulado", 
-            "📊 Taxa Ocupação",
-            "⚖️ Ponto Equilíbrio",
-            "🎯 Custeio ABC",
-            "───────────────",  # Separador visual
-            "✅ Lançar Realizado",
-            "📊 Orçado x Realizado",
-            "📋 DRE Comparativo",
-            "───────────────",  # Separador visual
-            "👥 Clientes", 
-            "📥 Importar Dados", 
-            "📄 DRE (Excel)", 
-            "📄 FC (Excel)",
-            "───────────────",  # Separador visual
-            "🛠️ Diagnóstico Dev"
-        ],
+        opcoes_menu,
         label_visibility="collapsed"
     )
     
@@ -1302,8 +1461,25 @@ def render_seletor_cliente_filial():
     with st.container():
         col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
         
-        # Lista de clientes
-        clientes = manager.listar_clientes()
+        # Lista de clientes - FILTRA POR EMPRESA DO USUÁRIO
+        todos_clientes = manager.listar_clientes()
+        
+        # Verificar se deve filtrar
+        user = get_current_user() if AUTH_ENABLED else None
+        is_admin = user and user.get("role") == "admin" if user else True
+        
+        if is_admin:
+            # Admin vê todos os clientes
+            clientes = todos_clientes
+        else:
+            # Usuário comum vê apenas clientes da sua empresa
+            empresa_nome = user.get("companies", {}).get("name", "") if user else ""
+            clientes = [c for c in todos_clientes if c["nome"].lower() == empresa_nome.lower()]
+            
+            # Se não encontrar cliente com nome exato, tenta busca parcial
+            if not clientes and empresa_nome:
+                clientes = [c for c in todos_clientes if empresa_nome.lower() in c["nome"].lower() or c["nome"].lower() in empresa_nome.lower()]
+        
         opcoes_clientes = ["Selecione um cliente..."] + [c["nome"] for c in clientes]
         ids_clientes = [None] + [c["id"] for c in clientes]
         
@@ -6630,15 +6806,35 @@ def pagina_clientes():
     
     manager = st.session_state.cliente_manager
     
-    # Lista de clientes
-    clientes = manager.listar_clientes()
+    # Lista de clientes - FILTRA POR EMPRESA DO USUÁRIO
+    todos_clientes = manager.listar_clientes()
+    
+    # Verificar se deve filtrar
+    user = get_current_user() if AUTH_ENABLED else None
+    is_admin = user and user.get("role") == "admin" if user else True
+    
+    if is_admin:
+        # Admin vê todos os clientes
+        clientes = todos_clientes
+    else:
+        # Usuário comum vê apenas clientes da sua empresa
+        empresa_nome = user.get("companies", {}).get("name", "") if user else ""
+        clientes = [c for c in todos_clientes if c["nome"].lower() == empresa_nome.lower()]
+        
+        # Se não encontrar cliente com nome exato, tenta busca parcial
+        if not clientes and empresa_nome:
+            clientes = [c for c in todos_clientes if empresa_nome.lower() in c["nome"].lower() or c["nome"].lower() in empresa_nome.lower()]
     
     col_header1, col_header2 = st.columns([3, 1])
     with col_header1:
         st.markdown(f"**{len(clientes)} cliente(s) cadastrado(s)**")
     with col_header2:
-        if st.button("➕ Novo Cliente", use_container_width=True):
-            st.session_state.show_novo_cliente = True
+        # Só admin pode criar novos clientes
+        if is_admin:
+            if st.button("➕ Novo Cliente", use_container_width=True):
+                st.session_state.show_novo_cliente = True
+        else:
+            st.caption("Somente admin pode criar clientes")
     
     # Formulário de novo cliente
     if st.session_state.get('show_novo_cliente', False):
@@ -16359,6 +16555,8 @@ elif pagina == "📄 DRE (Excel)":
     pagina_dre()
 elif pagina == "📄 FC (Excel)":
     pagina_fluxo_caixa()
+elif pagina == "🔧 Admin":
+    pagina_admin()
 elif pagina == "🛠️ Diagnóstico Dev":
     pagina_diagnostico_dev()
 
