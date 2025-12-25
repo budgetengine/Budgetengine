@@ -1,45 +1,41 @@
 """
 Gerenciador de Clientes e Filiais
 Sistema multi-tenant para consultoria
-VERSÃO SUPABASE - Salva dados no banco de dados
+COM SUPABASE - Salva dados no banco de dados
 """
 
 import json
 import os
 import sys
-import streamlit as st
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional
 from datetime import datetime
 
-# Tenta importar Supabase
+# ============================================
+# SUPABASE - Conexão com banco de dados
+# ============================================
 try:
-    from supabase import create_client, Client
-    SUPABASE_AVAILABLE = True
+    import streamlit as st
+    from supabase import create_client
+    SUPABASE_DISPONIVEL = True
 except ImportError:
-    SUPABASE_AVAILABLE = False
+    SUPABASE_DISPONIVEL = False
 
-# Adiciona diretório pai ao path para imports do motor_calculo
-_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _parent_dir not in sys.path:
-    sys.path.insert(0, _parent_dir)
-
-
-# ============================================
-# CONEXÃO SUPABASE
-# ============================================
-
-def get_supabase_client() -> Optional['Client']:
-    """Retorna cliente Supabase"""
-    if not SUPABASE_AVAILABLE:
+def _conectar_supabase():
+    """Conecta ao Supabase se disponível"""
+    if not SUPABASE_DISPONIVEL:
         return None
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
-    except Exception as e:
-        print(f"Erro ao conectar Supabase: {e}")
+    except:
         return None
+
+# Adiciona diretório pai ao path para imports do motor_calculo
+_parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
 
 
 @dataclass
@@ -68,8 +64,6 @@ class Cliente:
     premissas_macro: PremissasMacroCliente = field(default_factory=PremissasMacroCliente)
     data_criacao: str = ""
     data_atualizacao: str = ""
-    # Campo para ID do Supabase
-    supabase_id: str = ""
     
     def __post_init__(self):
         if not self.data_criacao:
@@ -78,23 +72,33 @@ class Cliente:
 
 
 class ClienteManager:
-    """
-    Gerencia clientes e seus dados
-    VERSÃO SUPABASE - Salva no banco de dados
-    """
+    """Gerencia clientes e seus dados"""
     
     def __init__(self, data_dir: str = "data/clientes"):
         self.data_dir = data_dir
-        self.supabase = get_supabase_client()
+        self.supabase = _conectar_supabase()
         self._garantir_diretorio()
     
     def _garantir_diretorio(self):
-        """Cria diretório de dados se não existir (fallback)"""
+        """Cria diretório de dados se não existir"""
         os.makedirs(self.data_dir, exist_ok=True)
+    
+    def _path_cliente(self, cliente_id: str) -> str:
+        """Retorna caminho da pasta do cliente"""
+        return os.path.join(self.data_dir, cliente_id)
+    
+    def _path_config(self, cliente_id: str) -> str:
+        """Retorna caminho do arquivo de configuração do cliente"""
+        return os.path.join(self._path_cliente(cliente_id), "config.json")
+    
+    def _path_filial(self, cliente_id: str, filial_id: str) -> str:
+        """Retorna caminho do arquivo de dados da filial"""
+        return os.path.join(self._path_cliente(cliente_id), f"{filial_id}.json")
     
     def _gerar_id(self, nome: str) -> str:
         """Gera ID a partir do nome"""
         import re
+        # Remove acentos e caracteres especiais
         id_base = nome.lower()
         id_base = re.sub(r'[áàãâä]', 'a', id_base)
         id_base = re.sub(r'[éèêë]', 'e', id_base)
@@ -106,42 +110,10 @@ class ClienteManager:
         id_base = re.sub(r'_+', '_', id_base).strip('_')
         return id_base
     
-    # ============================================
-    # MÉTODOS DE CLIENTE
-    # ============================================
-    
     def listar_clientes(self) -> List[Dict]:
-        """Lista todos os clientes do Supabase"""
-        if not self.supabase:
-            return self._listar_clientes_local()
-        
-        try:
-            response = self.supabase.table("companies").select("*").eq("is_active", True).execute()
-            
-            clientes = []
-            for company in response.data or []:
-                # Buscar filiais
-                filiais_resp = self.supabase.table("branches").select("slug").eq(
-                    "company_id", company["id"]
-                ).eq("is_active", True).execute()
-                
-                filiais = [f["slug"] for f in filiais_resp.data or []]
-                
-                clientes.append({
-                    "id": company["name"].lower().replace(" ", "_"),
-                    "nome": company["name"],
-                    "filiais": filiais,
-                    "supabase_id": company["id"]
-                })
-            
-            return sorted(clientes, key=lambda x: x["nome"])
-        except Exception as e:
-            print(f"Erro ao listar clientes Supabase: {e}")
-            return self._listar_clientes_local()
-    
-    def _listar_clientes_local(self) -> List[Dict]:
-        """Fallback: Lista clientes do JSON local"""
+        """Lista todos os clientes"""
         clientes = []
+        
         if not os.path.exists(self.data_dir):
             return clientes
         
@@ -161,66 +133,37 @@ class ClienteManager:
         
         return sorted(clientes, key=lambda x: x["nome"])
     
+    def criar_cliente(self, nome: str, cnpj: str = "", contato: str = "", 
+                      email: str = "", telefone: str = "") -> Cliente:
+        """Cria um novo cliente"""
+        cliente_id = self._gerar_id(nome)
+        
+        # Verifica se já existe
+        path = self._path_cliente(cliente_id)
+        if os.path.exists(path):
+            raise ValueError(f"Cliente '{nome}' já existe")
+        
+        # Cria diretório
+        os.makedirs(path)
+        
+        # Cria cliente
+        cliente = Cliente(
+            id=cliente_id,
+            nome=nome,
+            cnpj=cnpj,
+            contato=contato,
+            email=email,
+            telefone=telefone
+        )
+        
+        # Salva configuração
+        self._salvar_config_cliente(cliente)
+        
+        return cliente
+    
     def carregar_cliente(self, cliente_id: str) -> Optional[Cliente]:
         """Carrega dados de um cliente"""
-        if not self.supabase:
-            return self._carregar_cliente_local(cliente_id)
-        
-        try:
-            # Busca por nome (id é derivado do nome)
-            response = self.supabase.table("companies").select("*").eq("is_active", True).execute()
-            
-            company = None
-            for c in response.data or []:
-                if self._gerar_id(c["name"]) == cliente_id or c["name"].lower().replace(" ", "_") == cliente_id:
-                    company = c
-                    break
-            
-            if not company:
-                return self._carregar_cliente_local(cliente_id)
-            
-            # Buscar filiais
-            filiais_resp = self.supabase.table("branches").select("slug").eq(
-                "company_id", company["id"]
-            ).eq("is_active", True).execute()
-            
-            filiais = [f["slug"] for f in filiais_resp.data or []]
-            
-            # Premissas macro
-            premissas_data = company.get("premissas_macro", {}) or {}
-            premissas = PremissasMacroCliente(
-                ipca=premissas_data.get("ipca", 0.045),
-                igpm=premissas_data.get("igpm", 0.05),
-                dissidio=premissas_data.get("dissidio", 0.06),
-                reajuste_tarifas=premissas_data.get("reajuste_tarifas", 0.08),
-                reajuste_contratos=premissas_data.get("reajuste_contratos", 0.05),
-                taxa_credito=premissas_data.get("taxa_credito", 0.0354),
-                taxa_debito=premissas_data.get("taxa_debito", 0.0211),
-                taxa_antecipacao=premissas_data.get("taxa_antecipacao", 0.05)
-            )
-            
-            cliente = Cliente(
-                id=self._gerar_id(company["name"]),
-                nome=company["name"],
-                cnpj=company.get("cnpj", ""),
-                contato=company.get("contato", ""),
-                email=company.get("email", ""),
-                telefone=company.get("telefone", ""),
-                filiais=filiais,
-                premissas_macro=premissas,
-                data_criacao=company.get("created_at", ""),
-                data_atualizacao=company.get("updated_at", ""),
-                supabase_id=company["id"]
-            )
-            
-            return cliente
-        except Exception as e:
-            print(f"Erro ao carregar cliente Supabase: {e}")
-            return self._carregar_cliente_local(cliente_id)
-    
-    def _carregar_cliente_local(self, cliente_id: str) -> Optional[Cliente]:
-        """Fallback: Carrega cliente do JSON local"""
-        path_config = os.path.join(self.data_dir, cliente_id, "config.json")
+        path_config = self._path_config(cliente_id)
         
         if not os.path.exists(path_config):
             return None
@@ -229,10 +172,11 @@ class ClienteManager:
             with open(path_config, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
+            # Reconstrói premissas
             premissas_data = data.get("premissas_macro", {})
             premissas = PremissasMacroCliente(**premissas_data)
             
-            return Cliente(
+            cliente = Cliente(
                 id=data.get("id", cliente_id),
                 nome=data.get("nome", ""),
                 cnpj=data.get("cnpj", ""),
@@ -244,179 +188,19 @@ class ClienteManager:
                 data_criacao=data.get("data_criacao", ""),
                 data_atualizacao=data.get("data_atualizacao", "")
             )
+            
+            return cliente
         except Exception as e:
-            print(f"Erro ao carregar cliente local: {e}")
+            print(f"Erro ao carregar cliente: {e}")
             return None
-    
-    # ============================================
-    # MÉTODOS DE FILIAL
-    # ============================================
-    
-    def carregar_dados_filial(self, cliente_id: str, filial_id: str) -> Dict:
-        """Carrega dados completos de uma filial"""
-        if not self.supabase:
-            return self._carregar_dados_filial_local(cliente_id, filial_id)
-        
-        try:
-            # Primeiro encontra o company_id
-            cliente = self.carregar_cliente(cliente_id)
-            if not cliente or not cliente.supabase_id:
-                return self._carregar_dados_filial_local(cliente_id, filial_id)
-            
-            # Busca filial
-            response = self.supabase.table("branches").select("*").eq(
-                "company_id", cliente.supabase_id
-            ).eq("slug", filial_id).execute()
-            
-            if response.data and len(response.data) > 0:
-                branch = response.data[0]
-                dados = branch.get("data", {})
-                if dados:
-                    return dados
-            
-            # Fallback para local se não encontrar no Supabase
-            return self._carregar_dados_filial_local(cliente_id, filial_id)
-            
-        except Exception as e:
-            print(f"Erro ao carregar filial Supabase: {e}")
-            return self._carregar_dados_filial_local(cliente_id, filial_id)
-    
-    def _carregar_dados_filial_local(self, cliente_id: str, filial_id: str) -> Dict:
-        """Fallback: Carrega filial do JSON local"""
-        path_filial = os.path.join(self.data_dir, cliente_id, f"{filial_id}.json")
-        
-        if not os.path.exists(path_filial):
-            return {}
-        
-        try:
-            with open(path_filial, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            return {}
-    
-    def salvar_dados_filial(self, cliente_id: str, filial_id: str, dados: Dict):
-        """Salva dados completos de uma filial no Supabase"""
-        if not self.supabase:
-            return self._salvar_dados_filial_local(cliente_id, filial_id, dados)
-        
-        try:
-            # Primeiro encontra o company_id
-            cliente = self.carregar_cliente(cliente_id)
-            if not cliente or not cliente.supabase_id:
-                return self._salvar_dados_filial_local(cliente_id, filial_id, dados)
-            
-            # Verifica se filial existe
-            response = self.supabase.table("branches").select("id").eq(
-                "company_id", cliente.supabase_id
-            ).eq("slug", filial_id).execute()
-            
-            if response.data and len(response.data) > 0:
-                # UPDATE
-                branch_id = response.data[0]["id"]
-                self.supabase.table("branches").update({
-                    "data": dados,
-                    "updated_at": datetime.now().isoformat()
-                }).eq("id", branch_id).execute()
-            else:
-                # INSERT
-                self.supabase.table("branches").insert({
-                    "company_id": cliente.supabase_id,
-                    "name": filial_id.replace("_", " ").title(),
-                    "slug": filial_id,
-                    "is_active": True,
-                    "data": dados
-                }).execute()
-                
-                # Atualiza lista de filiais do cliente
-                if filial_id not in cliente.filiais:
-                    cliente.filiais.append(filial_id)
-            
-            # Também salva localmente como backup
-            self._salvar_dados_filial_local(cliente_id, filial_id, dados)
-            
-            return True
-            
-        except Exception as e:
-            print(f"Erro ao salvar filial Supabase: {e}")
-            import traceback
-            traceback.print_exc()
-            return self._salvar_dados_filial_local(cliente_id, filial_id, dados)
-    
-    def _salvar_dados_filial_local(self, cliente_id: str, filial_id: str, dados: Dict):
-        """Fallback: Salva filial no JSON local"""
-        try:
-            path_cliente = os.path.join(self.data_dir, cliente_id)
-            os.makedirs(path_cliente, exist_ok=True)
-            
-            path_filial = os.path.join(path_cliente, f"{filial_id}.json")
-            
-            with open(path_filial, 'w', encoding='utf-8') as f:
-                json.dump(dados, f, ensure_ascii=False, indent=2)
-            return True
-        except Exception as e:
-            print(f"Erro ao salvar local: {e}")
-            return False
-    
-    # ============================================
-    # OUTROS MÉTODOS (mantidos para compatibilidade)
-    # ============================================
-    
-    def criar_cliente(self, nome: str, cnpj: str = "", contato: str = "", 
-                      email: str = "", telefone: str = "") -> Cliente:
-        """Cria um novo cliente"""
-        cliente_id = self._gerar_id(nome)
-        
-        if self.supabase:
-            try:
-                # Cria no Supabase
-                response = self.supabase.table("companies").insert({
-                    "name": nome,
-                    "cnpj": cnpj,
-                    "email": email,
-                    "telefone": telefone,
-                    "contato": contato,
-                    "is_active": True
-                }).execute()
-                
-                if response.data:
-                    return Cliente(
-                        id=cliente_id,
-                        nome=nome,
-                        cnpj=cnpj,
-                        contato=contato,
-                        email=email,
-                        telefone=telefone,
-                        supabase_id=response.data[0]["id"]
-                    )
-            except Exception as e:
-                print(f"Erro ao criar cliente Supabase: {e}")
-        
-        # Fallback local
-        path = os.path.join(self.data_dir, cliente_id)
-        if os.path.exists(path):
-            raise ValueError(f"Cliente '{nome}' já existe")
-        
-        os.makedirs(path)
-        
-        cliente = Cliente(
-            id=cliente_id,
-            nome=nome,
-            cnpj=cnpj,
-            contato=contato,
-            email=email,
-            telefone=telefone
-        )
-        
-        self._salvar_config_cliente(cliente)
-        return cliente
     
     def _salvar_config_cliente(self, cliente: Cliente):
         """Salva configuração do cliente"""
         cliente.data_atualizacao = datetime.now().isoformat()
         
-        path_config = os.path.join(self.data_dir, cliente.id, "config.json")
-        os.makedirs(os.path.dirname(path_config), exist_ok=True)
+        path_config = self._path_config(cliente.id)
         
+        # Converte para dicionário
         data = {
             "id": cliente.id,
             "nome": cliente.nome,
@@ -435,20 +219,16 @@ class ClienteManager:
     
     def atualizar_cliente(self, cliente: Cliente):
         """Atualiza dados do cliente"""
-        if self.supabase and cliente.supabase_id:
-            try:
-                self.supabase.table("companies").update({
-                    "name": cliente.nome,
-                    "cnpj": cliente.cnpj,
-                    "email": cliente.email,
-                    "telefone": cliente.telefone,
-                    "contato": cliente.contato,
-                    "premissas_macro": asdict(cliente.premissas_macro)
-                }).eq("id", cliente.supabase_id).execute()
-            except Exception as e:
-                print(f"Erro ao atualizar cliente Supabase: {e}")
-        
         self._salvar_config_cliente(cliente)
+    
+    def excluir_cliente(self, cliente_id: str):
+        """Exclui um cliente e todos os seus dados"""
+        import shutil
+        path = self._path_cliente(cliente_id)
+        if os.path.exists(path):
+            shutil.rmtree(path)
+    
+    # ========== FILIAIS ==========
     
     def criar_filial(self, cliente_id: str, nome_filial: str) -> str:
         """Cria uma nova filial para o cliente"""
@@ -461,28 +241,36 @@ class ClienteManager:
         if filial_id in cliente.filiais:
             raise ValueError(f"Filial '{nome_filial}' já existe")
         
-        # Dados iniciais da filial
+        # Adiciona à lista de filiais
+        cliente.filiais.append(filial_id)
+        self._salvar_config_cliente(cliente)
+        
+        # CORREÇÃO: Cria arquivo da filial com TODOS os campos necessários
+        # incluindo macro, operacional, pagamento para garantir persistência
         dados_filial = {
             "id": filial_id,
             "nome": nome_filial,
+            # Premissas Macro (NOVO!)
             "macro": {
-                "ipca": 0.045,
-                "igpm": 0.05,
-                "dissidio": 0.06,
-                "reajuste_tarifas": 0.08,
-                "reajuste_contratos": 0.05,
+                "ipca": 0.0,
+                "igpm": 0.0,
+                "dissidio": 0.0,
+                "reajuste_tarifas": 0.0,
+                "reajuste_contratos": 0.0,
                 "taxa_cartao_credito": 0.0354,
                 "taxa_cartao_debito": 0.0211,
                 "taxa_antecipacao": 0.05
             },
+            # Premissas Operacionais (NOVO!)
             "operacional": {
                 "num_fisioterapeutas": 0,
                 "num_salas": 0,
                 "horas_atendimento_dia": 0,
-                "dias_uteis_mes": 22,
+                "dias_uteis_mes": 0,
                 "modelo_tributario": "PJ - Simples Nacional",
                 "modo_calculo_sessoes": "servico"
             },
+            # Formas de Pagamento (NOVO!)
             "pagamento": {
                 "dinheiro_pix": 0.0,
                 "cartao_credito": 0.0,
@@ -490,6 +278,7 @@ class ClienteManager:
                 "outros": 0.0,
                 "pct_antecipacao": 0.0
             },
+            # Dados de serviços e equipe
             "servicos": {},
             "valores_proprietario": {},
             "valores_profissional": {},
@@ -499,6 +288,7 @@ class ClienteManager:
             "custo_pessoal_mensal": 0,
             "mes_dissidio": 5,
             "sazonalidade": [1.0] * 12,
+            # Premissas de Folha (NOVO!)
             "premissas_folha": {
                 "regime_tributario": "PJ - Simples Nacional",
                 "deducao_dependente_ir": 189.59,
@@ -519,19 +309,97 @@ class ClienteManager:
             },
             "cadastro_salas": {
                 "salas": {},
-                "horas_funcionamento_dia": 8,
+                "horas_funcionamento_dia": 0,
                 "dias_uteis_mes": 22
             }
         }
         
-        # Salva no Supabase (ou local)
-        self.salvar_dados_filial(cliente_id, filial_id, dados_filial)
-        
-        # Atualiza lista de filiais
-        cliente.filiais.append(filial_id)
-        self.atualizar_cliente(cliente)
+        path_filial = self._path_filial(cliente_id, filial_id)
+        # Garantir que o diretório existe
+        os.makedirs(os.path.dirname(path_filial), exist_ok=True)
+        with open(path_filial, 'w', encoding='utf-8') as f:
+            json.dump(dados_filial, f, ensure_ascii=False, indent=2)
         
         return filial_id
+    
+    def carregar_filial(self, cliente_id: str, filial_id: str) -> Optional[Dict]:
+        """Carrega dados de uma filial (Supabase primeiro, depois JSON local)"""
+        
+        # ============================================
+        # TENTA CARREGAR DO SUPABASE PRIMEIRO
+        # ============================================
+        if self.supabase:
+            try:
+                # Busca company_id pelo nome do cliente
+                resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
+                
+                if resp_company.data:
+                    company_id = resp_company.data[0]["id"]
+                    
+                    # Busca filial
+                    resp_branch = self.supabase.table("branches").select("data").eq("company_id", company_id).eq("slug", filial_id).execute()
+                    
+                    if resp_branch.data and resp_branch.data[0].get("data"):
+                        return resp_branch.data[0]["data"]
+            except Exception as e:
+                print(f"Aviso: Erro ao carregar do Supabase: {e}")
+        
+        # ============================================
+        # FALLBACK: JSON LOCAL
+        # ============================================
+        path_filial = self._path_filial(cliente_id, filial_id)
+        
+        if not os.path.exists(path_filial):
+            return None
+        
+        try:
+            with open(path_filial, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return None
+    
+    def salvar_filial(self, cliente_id: str, filial_id: str, dados: Dict):
+        """Salva dados de uma filial (JSON local + Supabase)"""
+        path_filial = self._path_filial(cliente_id, filial_id)
+        
+        # CORREÇÃO: Garantir que o diretório existe antes de salvar
+        os.makedirs(os.path.dirname(path_filial), exist_ok=True)
+        
+        # Salva JSON local (backup)
+        with open(path_filial, 'w', encoding='utf-8') as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        
+        # ============================================
+        # SALVA NO SUPABASE
+        # ============================================
+        if self.supabase:
+            try:
+                # Busca company_id pelo nome do cliente
+                resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
+                
+                if resp_company.data:
+                    company_id = resp_company.data[0]["id"]
+                    
+                    # Verifica se filial já existe
+                    resp_branch = self.supabase.table("branches").select("id").eq("company_id", company_id).eq("slug", filial_id).execute()
+                    
+                    if resp_branch.data:
+                        # UPDATE
+                        self.supabase.table("branches").update({
+                            "data": dados,
+                            "updated_at": datetime.now().isoformat()
+                        }).eq("id", resp_branch.data[0]["id"]).execute()
+                    else:
+                        # INSERT
+                        self.supabase.table("branches").insert({
+                            "company_id": company_id,
+                            "name": filial_id.replace("_", " ").title(),
+                            "slug": filial_id,
+                            "is_active": True,
+                            "data": dados
+                        }).execute()
+            except Exception as e:
+                print(f"Aviso: Erro ao salvar no Supabase: {e}")
     
     def excluir_filial(self, cliente_id: str, filial_id: str):
         """Exclui uma filial"""
@@ -539,461 +407,804 @@ class ClienteManager:
         if not cliente:
             return
         
-        if self.supabase and cliente.supabase_id:
-            try:
-                self.supabase.table("branches").update({
-                    "is_active": False
-                }).eq("company_id", cliente.supabase_id).eq("slug", filial_id).execute()
-            except Exception as e:
-                print(f"Erro ao excluir filial Supabase: {e}")
-        
-        # Remove da lista
         if filial_id in cliente.filiais:
             cliente.filiais.remove(filial_id)
-            self.atualizar_cliente(cliente)
+            self._salvar_config_cliente(cliente)
         
-        # Remove arquivo local
-        path_filial = os.path.join(self.data_dir, cliente_id, f"{filial_id}.json")
+        path_filial = self._path_filial(cliente_id, filial_id)
         if os.path.exists(path_filial):
             os.remove(path_filial)
     
-    def excluir_cliente(self, cliente_id: str):
-        """Exclui um cliente e todos os seus dados"""
+    def listar_filiais(self, cliente_id: str) -> List[Dict]:
+        """Lista filiais de um cliente"""
         cliente = self.carregar_cliente(cliente_id)
+        if not cliente:
+            return []
         
-        if self.supabase and cliente and cliente.supabase_id:
-            try:
-                # Soft delete no Supabase
-                self.supabase.table("companies").update({
-                    "is_active": False
-                }).eq("id", cliente.supabase_id).execute()
-            except Exception as e:
-                print(f"Erro ao excluir cliente Supabase: {e}")
+        filiais = []
+        for filial_id in cliente.filiais:
+            dados = self.carregar_filial(cliente_id, filial_id)
+            if dados:
+                filiais.append({
+                    "id": filial_id,
+                    "nome": dados.get("nome", filial_id)
+                })
         
-        # Remove local
-        import shutil
-        path = os.path.join(self.data_dir, cliente_id)
-        if os.path.exists(path):
-            shutil.rmtree(path)
+        return filiais
 
-
-# ============================================
-# FUNÇÕES DE CONVERSÃO MOTOR ↔ DICT
-# ============================================
 
 def motor_para_dict(motor) -> Dict:
-    """Converte MotorCalculo para dicionário serializável"""
-    try:
-        from motor_calculo import MotorCalculo
-        
-        dados = {
-            # Serviços
-            "servicos": {},
-            "valores_proprietario": getattr(motor, 'valores_proprietario', {}),
-            "valores_profissional": getattr(motor, 'valores_profissional', {}),
-            
-            # Equipe
-            "proprietarios": {},
-            "profissionais": {},
-            
-            # Despesas
-            "despesas": {},
-            
-            # Premissas operacionais
-            "operacional": {
-                "num_fisioterapeutas": motor.num_fisioterapeutas,
-                "num_salas": motor.num_salas,
-                "horas_atendimento_dia": motor.horas_atendimento_dia,
-                "dias_uteis_mes": motor.dias_uteis_mes,
-                "modelo_tributario": motor.modelo_tributario,
-                "modo_calculo_sessoes": getattr(motor, 'modo_calculo_sessoes', 'servico')
-            },
-            
-            # Premissas macro
-            "macro": {
-                "ipca": motor.ipca,
-                "igpm": motor.igpm,
-                "dissidio": motor.dissidio,
-                "reajuste_tarifas": motor.reajuste_tarifas,
-                "reajuste_contratos": motor.reajuste_contratos,
-                "taxa_cartao_credito": motor.taxa_cartao_credito,
-                "taxa_cartao_debito": motor.taxa_cartao_debito,
-                "taxa_antecipacao": motor.taxa_antecipacao
-            },
-            
-            # Pagamento
-            "pagamento": {
-                "dinheiro_pix": motor.dinheiro_pix,
-                "cartao_credito": motor.cartao_credito,
-                "cartao_debito": motor.cartao_debito,
-                "outros": motor.outros,
-                "pct_antecipacao": motor.pct_antecipacao
-            },
-            
-            # Outros
-            "custo_pessoal_mensal": motor.custo_pessoal_mensal,
-            "mes_dissidio": motor.mes_dissidio,
-            "sazonalidade": motor.sazonalidade,
-            
-            # Folha
-            "premissas_folha": getattr(motor, 'premissas_folha', {}),
-            "funcionarios_clt": {},
-            "socios_prolabore": {},
-            "fisioterapeutas": {},
-            "premissas_fisio": getattr(motor, 'premissas_fisio', {}),
-            
-            # Salas
-            "cadastro_salas": getattr(motor, 'cadastro_salas', {}),
-            
-            # Simples
-            "premissas_simples": getattr(motor, 'premissas_simples', {}),
-            
-            # Dividendos
-            "premissas_dividendos": getattr(motor, 'premissas_dividendos', {}),
-            
-            # FC
-            "premissas_fc": getattr(motor, 'premissas_fc', {}),
-            
-            # Aplicações
-            "aplicacoes": getattr(motor, 'aplicacoes', {}),
-            
-            # Investimentos
-            "investimentos": [],
-            
-            # Financiamentos
-            "financiamentos": []
+    """Converte MotorCalculo para dicionário (para salvar)"""
+    from dataclasses import asdict
+    
+    dados = {
+        "servicos": {},
+        "valores_proprietario": motor.valores_proprietario,
+        "valores_profissional": motor.valores_profissional,
+        "proprietarios": {},
+        "profissionais": {},
+        "despesas": {},
+        "custo_pessoal_mensal": motor.custo_pessoal_mensal,
+        "mes_dissidio": motor.mes_dissidio,
+        "sazonalidade": motor.sazonalidade.fatores
+    }
+    
+    # NOVO: Premissas Operacionais
+    dados["operacional"] = {
+        "num_fisioterapeutas": motor.operacional.num_fisioterapeutas,
+        "num_salas": motor.operacional.num_salas,
+        "horas_atendimento_dia": motor.operacional.horas_atendimento_dia,
+        "dias_uteis_mes": motor.operacional.dias_uteis_mes,
+        "modelo_tributario": getattr(motor.operacional, 'modelo_tributario', 'PJ - Simples Nacional'),
+        "modo_calculo_sessoes": getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+    }
+    
+    # NOVO v1.79.0: Cadastro de Salas (TDABC)
+    dados["cadastro_salas"] = motor.cadastro_salas.to_dict()
+    
+    # NOVO: Premissas Macro
+    dados["macro"] = {
+        "ipca": motor.macro.ipca,
+        "igpm": motor.macro.igpm,
+        "dissidio": motor.macro.dissidio,
+        "reajuste_tarifas": motor.macro.reajuste_tarifas,
+        "reajuste_contratos": motor.macro.reajuste_contratos,
+        "taxa_cartao_credito": motor.macro.taxa_cartao_credito,
+        "taxa_cartao_debito": motor.macro.taxa_cartao_debito,
+        "taxa_antecipacao": motor.macro.taxa_antecipacao
+    }
+    
+    # NOVO: Formas de Pagamento
+    dados["pagamento"] = {
+        "dinheiro_pix": motor.pagamento.dinheiro_pix,
+        "cartao_credito": motor.pagamento.cartao_credito,
+        "cartao_debito": motor.pagamento.cartao_debito,
+        "outros": motor.pagamento.outros,
+        "pct_antecipacao": motor.pagamento.pct_antecipacao
+    }
+    
+    # Serviços
+    for nome, srv in motor.servicos.items():
+        dados["servicos"][nome] = {
+            "nome": srv.nome,
+            "duracao_minutos": srv.duracao_minutos,
+            "valor_2026": srv.valor_2026,
+            "sessoes_mes_base": srv.sessoes_mes_base,
+            "pct_reajuste": srv.pct_reajuste,
+            "mes_reajuste": srv.mes_reajuste,
+            "pct_crescimento": srv.pct_crescimento,
+            "usa_sala": srv.usa_sala
         }
-        
-        # Serializa serviços
-        for nome, servico in motor.servicos.items():
-            dados["servicos"][nome] = {
-                "nome": servico.nome,
-                "duracao_minutos": servico.duracao_minutos,
-                "valor_2026": servico.valor_2026,
-                "sessoes_mes_base": servico.sessoes_mes_base,
-                "pct_reajuste": getattr(servico, 'pct_reajuste', 0),
-                "mes_reajuste": getattr(servico, 'mes_reajuste', 1),
-                "pct_crescimento": getattr(servico, 'pct_crescimento', 0),
-                "usa_sala": getattr(servico, 'usa_sala', True)
-            }
-        
-        # Serializa proprietários
-        for nome, prop in getattr(motor, 'proprietarios', {}).items():
-            dados["proprietarios"][nome] = {
-                "nome": prop.nome,
-                "tipo": "proprietario",
-                "ativo": getattr(prop, 'ativo', True),
-                "sessoes_por_servico": getattr(prop, 'sessoes_por_servico', {}),
-                "pct_crescimento_por_servico": getattr(prop, 'pct_crescimento_por_servico', {})
-            }
-        
-        # Serializa profissionais
-        for nome, prof in getattr(motor, 'profissionais', {}).items():
-            dados["profissionais"][nome] = {
-                "nome": prof.nome,
-                "tipo": "profissional",
-                "ativo": getattr(prof, 'ativo', True),
-                "sessoes_por_servico": getattr(prof, 'sessoes_por_servico', {}),
-                "pct_crescimento_por_servico": getattr(prof, 'pct_crescimento_por_servico', {})
-            }
-        
-        # Serializa despesas
-        for nome, desp in motor.despesas_fixas.items():
-            dados["despesas"][nome] = {
-                "nome": desp.nome,
-                "categoria": desp.categoria,
-                "valor_mensal": desp.valor_mensal,
-                "tipo_reajuste": desp.tipo_reajuste,
-                "mes_reajuste": desp.mes_reajuste,
-                "pct_adicional": getattr(desp, 'pct_adicional', 0),
-                "aplicar_reajuste": getattr(desp, 'aplicar_reajuste', True),
-                "tipo_sazonalidade": getattr(desp, 'tipo_sazonalidade', 'uniforme'),
-                "valores_2025": getattr(desp, 'valores_2025', [desp.valor_mensal] * 12),
-                "ativa": getattr(desp, 'ativa', True),
-                "tipo_despesa": getattr(desp, 'tipo_despesa', 'fixa'),
-                "base_variavel": getattr(desp, 'base_variavel', 'receita'),
-                "pct_receita": getattr(desp, 'pct_receita', 0),
-                "valor_por_sessao": getattr(desp, 'valor_por_sessao', 0)
-            }
-        
-        # Serializa funcionários CLT
-        for nome, func in getattr(motor, 'funcionarios_clt', {}).items():
-            dados["funcionarios_clt"][nome] = {
-                "nome": func.nome,
-                "cargo": func.cargo,
-                "salario_base": func.salario_base,
-                "vale_transporte": getattr(func, 'vale_transporte', 0),
-                "vale_refeicao": getattr(func, 'vale_refeicao', 0),
-                "plano_saude": getattr(func, 'plano_saude', 0),
-                "outros_beneficios": getattr(func, 'outros_beneficios', 0),
-                "dependentes_ir": getattr(func, 'dependentes_ir', 0),
-                "data_admissao": getattr(func, 'data_admissao', ''),
-                "mes_reajuste": getattr(func, 'mes_reajuste', 5),
-                "pct_aumento": getattr(func, 'pct_aumento', 0),
-                "ativo": getattr(func, 'ativo', True)
-            }
-        
-        # Serializa sócios
-        for nome, socio in getattr(motor, 'socios_prolabore', {}).items():
-            dados["socios_prolabore"][nome] = {
-                "nome": socio.nome,
-                "prolabore": socio.prolabore,
-                "dependentes_ir": getattr(socio, 'dependentes_ir', 0),
-                "mes_reajuste": getattr(socio, 'mes_reajuste', 5),
-                "pct_aumento": getattr(socio, 'pct_aumento', 0),
-                "ativo": getattr(socio, 'ativo', True)
-            }
-        
-        # Serializa fisioterapeutas
-        for nome, fisio in getattr(motor, 'fisioterapeutas', {}).items():
-            dados["fisioterapeutas"][nome] = {
-                "nome": fisio.nome,
-                "cargo": getattr(fisio, 'cargo', 'Fisioterapeuta'),
-                "nivel": getattr(fisio, 'nivel', 1),
-                "filial": getattr(fisio, 'filial', ''),
-                "ativo": getattr(fisio, 'ativo', True),
-                "sessoes_por_servico": getattr(fisio, 'sessoes_por_servico', {}),
-                "pct_crescimento_por_servico": getattr(fisio, 'pct_crescimento_por_servico', {}),
-                "tipo_remuneracao": getattr(fisio, 'tipo_remuneracao', 'percentual'),
-                "valores_fixos_por_servico": getattr(fisio, 'valores_fixos_por_servico', {}),
-                "pct_customizado": getattr(fisio, 'pct_customizado', 0),
-                "escala_semanal": getattr(fisio, 'escala_semanal', {})
-            }
-        
-        # Serializa investimentos
-        for inv in getattr(motor, 'investimentos', []):
-            dados["investimentos"].append({
-                "descricao": inv.descricao,
-                "valor": inv.valor,
-                "mes": inv.mes,
-                "tipo": getattr(inv, 'tipo', 'equipamento'),
-                "forma_pagamento": getattr(inv, 'forma_pagamento', 'avista'),
-                "num_parcelas": getattr(inv, 'num_parcelas', 1)
-            })
-        
-        # Serializa financiamentos
-        for fin in getattr(motor, 'financiamentos', []):
-            dados["financiamentos"].append({
-                "descricao": fin.descricao,
-                "saldo_devedor": fin.saldo_devedor,
-                "taxa_mensal": fin.taxa_mensal,
-                "parcelas_total": fin.parcelas_total,
-                "parcelas_pagas": fin.parcelas_pagas,
-                "mes_inicio_2026": getattr(fin, 'mes_inicio_2026', 1),
-                "valor_parcela": getattr(fin, 'valor_parcela', 0),
-                "ativo": getattr(fin, 'ativo', True)
-            })
-        
-        return dados
-        
-    except Exception as e:
-        print(f"Erro ao converter motor para dict: {e}")
-        import traceback
-        traceback.print_exc()
-        return {}
+    
+    # Proprietários
+    for nome, prop in motor.proprietarios.items():
+        dados["proprietarios"][nome] = {
+            "nome": prop.nome,
+            "tipo": prop.tipo,
+            "ativo": prop.ativo,
+            "sessoes_por_servico": prop.sessoes_por_servico,
+            "pct_crescimento_por_servico": prop.pct_crescimento_por_servico
+        }
+    
+    # Profissionais
+    for nome, prof in motor.profissionais.items():
+        dados["profissionais"][nome] = {
+            "nome": prof.nome,
+            "tipo": prof.tipo,
+            "ativo": prof.ativo,
+            "sessoes_por_servico": prof.sessoes_por_servico,
+            "pct_crescimento_por_servico": prof.pct_crescimento_por_servico
+        }
+    
+    # Despesas (é um dicionário, não lista)
+    for nome, desp in motor.despesas_fixas.items():
+        dados["despesas"][nome] = {
+            "nome": desp.nome,
+            "categoria": desp.categoria,
+            "valor_mensal": desp.valor_mensal,
+            "tipo_reajuste": desp.tipo_reajuste,
+            "mes_reajuste": desp.mes_reajuste,
+            "pct_adicional": desp.pct_adicional,
+            "aplicar_reajuste": desp.aplicar_reajuste,
+            "tipo_sazonalidade": desp.tipo_sazonalidade,
+            "valores_2025": desp.valores_2025,
+            "ativa": desp.ativa,
+            # Campos de despesas variáveis
+            "tipo_despesa": getattr(desp, 'tipo_despesa', 'fixa'),
+            "base_variavel": getattr(desp, 'base_variavel', 'receita'),
+            "pct_receita": getattr(desp, 'pct_receita', 0.0),
+            "valor_por_sessao": getattr(desp, 'valor_por_sessao', 0.0)
+        }
+    
+    # Premissas Folha
+    pf = motor.premissas_folha
+    dados["premissas_folha"] = {
+        "regime_tributario": pf.regime_tributario,
+        "deducao_dependente_ir": pf.deducao_dependente_ir,
+        "aliquota_fgts": pf.aliquota_fgts,
+        "desconto_vt_pct": pf.desconto_vt_pct,
+        "dias_uteis_mes": pf.dias_uteis_mes,
+        "mes_dissidio": pf.mes_dissidio,
+        "pct_dissidio": pf.pct_dissidio
+    }
+    
+    # Funcionários CLT
+    dados["funcionarios_clt"] = {}
+    for nome, func in motor.funcionarios_clt.items():
+        dados["funcionarios_clt"][nome] = {
+            "nome": func.nome,
+            "cargo": func.cargo,
+            "salario_base": func.salario_base,
+            "tipo_vinculo": func.tipo_vinculo,
+            "dependentes_ir": func.dependentes_ir,
+            "vt_dia": func.vt_dia,
+            "vr_dia": func.vr_dia,
+            "plano_saude": func.plano_saude,
+            "plano_odonto": func.plano_odonto,
+            "mes_admissao": func.mes_admissao,
+            "mes_aumento": func.mes_aumento,
+            "pct_reajuste": func.pct_reajuste,
+            "ativo": func.ativo
+        }
+    
+    # Sócios Pró-Labore
+    dados["socios_prolabore"] = {}
+    for nome, socio in motor.socios_prolabore.items():
+        dados["socios_prolabore"][nome] = {
+            "nome": socio.nome,
+            "prolabore": socio.prolabore,
+            "dependentes_ir": socio.dependentes_ir,
+            "mes_reajuste": socio.mes_reajuste,
+            "pct_aumento": socio.pct_aumento,
+            "ativo": socio.ativo
+        }
+    
+    # Fisioterapeutas
+    dados["fisioterapeutas"] = {}
+    for nome, fisio in motor.fisioterapeutas.items():
+        dados["fisioterapeutas"][nome] = {
+            "nome": fisio.nome,
+            "cargo": fisio.cargo,
+            "nivel": fisio.nivel,
+            "filial": fisio.filial,
+            "ativo": fisio.ativo,
+            "sessoes_por_servico": fisio.sessoes_por_servico,
+            "pct_crescimento_por_servico": fisio.pct_crescimento_por_servico,
+            "tipo_remuneracao": fisio.tipo_remuneracao,
+            "valores_fixos_por_servico": fisio.valores_fixos_por_servico,
+            "pct_customizado": getattr(fisio, 'pct_customizado', 0.0),
+            # v1.79.0: Escala semanal para taxa de ocupação
+            "escala_semanal": fisio.escala_semanal
+        }
+    
+    # Premissas Fisioterapeutas
+    pf = motor.premissas_fisio
+    dados["premissas_fisio"] = {
+        "niveis_remuneracao": pf.niveis_remuneracao,
+        "pct_producao_propria": pf.pct_producao_propria,
+        "pct_faturamento_total": pf.pct_faturamento_total,
+        "pct_base_remuneracao_prop": pf.pct_base_remuneracao_prop,
+        "pct_gerencia_equipe": pf.pct_gerencia_equipe,
+        "pct_base_remuneracao_ger": pf.pct_base_remuneracao_ger
+    }
+    
+    # NOVO: Premissas Simples Nacional / Carnê Leão
+    ps = motor.premissas_simples
+    dados["premissas_simples"] = {
+        "faturamento_pf_anual": ps.faturamento_pf_anual,
+        "aliquota_inss_pf": ps.aliquota_inss_pf,
+        "teto_inss_pf": ps.teto_inss_pf,
+        "limite_fator_r": ps.limite_fator_r
+    }
+    
+    # NOVO: Premissas Dividendos
+    pd = motor.premissas_dividendos
+    dados["premissas_dividendos"] = {
+        "distribuir": pd.distribuir,
+        "pct_reserva_legal": pd.pct_reserva_legal,
+        "pct_reserva_investimento": pd.pct_reserva_investimento,
+        "frequencia": pd.frequencia,
+        "pct_distribuir": pd.pct_distribuir,
+        "mostrar_no_dre": pd.mostrar_no_dre
+    }
+    
+    # Premissas FC
+    pfc = motor.premissas_fc
+    dados["premissas_fc"] = {
+        "caixa_inicial": pfc.caixa_inicial,
+        "cp_impostos": pfc.cp_impostos,
+        "cp_folha_colaboradores": pfc.cp_folha_colaboradores,
+        "cp_folha_fisioterapeutas": pfc.cp_folha_fisioterapeutas,
+        "cp_retirada_proprietarios": pfc.cp_retirada_proprietarios,
+        "cp_encargos_clt": pfc.cp_encargos_clt,
+        "cp_fornecedores": pfc.cp_fornecedores,
+        "usar_cp_folha_auto": pfc.usar_cp_folha_auto,
+        "receita_out_ano_anterior": pfc.receita_out_ano_anterior,
+        "receita_nov_ano_anterior": pfc.receita_nov_ano_anterior,
+        "receita_dez_ano_anterior": pfc.receita_dez_ano_anterior,
+        "usar_receita_auto": pfc.usar_receita_auto,
+        "recebimento_avista_no_mes": pfc.recebimento_avista_no_mes,
+        "saldo_minimo": pfc.saldo_minimo,
+        "pct_cartao_1x": pfc.pct_cartao_1x,
+        "pct_cartao_2x": pfc.pct_cartao_2x,
+        "pct_cartao_3x": pfc.pct_cartao_3x,
+        "pct_cartao_4x": pfc.pct_cartao_4x,
+        "pct_cartao_5x": pfc.pct_cartao_5x,
+        "pct_cartao_6x": pfc.pct_cartao_6x,
+    }
+    
+    # Aplicações Financeiras
+    aplic = motor.premissas_financeiras.aplicacoes
+    dados["aplicacoes"] = {
+        "saldo_inicial": aplic.saldo_inicial,
+        "taxa_selic_anual": aplic.taxa_selic_anual,
+        "pct_cdi": aplic.pct_cdi,
+    }
+    
+    # Investimentos (CAPEX)
+    dados["investimentos"] = []
+    for inv in motor.premissas_financeiras.investimentos:
+        dados["investimentos"].append({
+            "descricao": inv.descricao,
+            "categoria": inv.categoria,
+            "valor_total": inv.valor_total,
+            "mes_aquisicao": inv.mes_aquisicao,
+            "entrada": inv.entrada,
+            "taxa_mensal": inv.taxa_mensal,
+            "parcelas": inv.parcelas,
+            "beneficio_mensal": inv.beneficio_mensal,
+            "ativo": inv.ativo,
+        })
+    
+    # Financiamentos Existentes
+    dados["financiamentos"] = []
+    for fin in motor.premissas_financeiras.financiamentos:
+        dados["financiamentos"].append({
+            "descricao": fin.descricao,
+            "saldo_devedor": fin.saldo_devedor,
+            "taxa_mensal": fin.taxa_mensal,
+            "parcelas_total": fin.parcelas_total,
+            "parcelas_pagas": fin.parcelas_pagas,
+            "mes_inicio_2026": fin.mes_inicio_2026,
+            "valor_parcela": fin.valor_parcela,
+            "ativo": fin.ativo,
+        })
+    
+    return dados
 
 
-def dict_para_motor(dados: Dict):
-    """Converte dicionário para MotorCalculo"""
+def dict_para_motor(dados: Dict, motor):
+    """Carrega dados de dicionário para MotorCalculo"""
     try:
-        from motor_calculo import (
-            MotorCalculo, criar_motor_vazio, Servico, 
-            DespesaFixa, FuncionarioCLT, Fisioterapeuta,
-            Investimento, FinanciamentoExistente, Profissional
+        from .motor_calculo import Servico, Profissional, DespesaFixa, Sazonalidade, Fisioterapeuta, PremissasFisioterapeutas
+    except ImportError:
+        from motor_calculo import Servico, Profissional, DespesaFixa, Sazonalidade, Fisioterapeuta, PremissasFisioterapeutas
+    
+    # Limpa dados existentes
+    motor.servicos.clear()
+    motor.proprietarios.clear()
+    motor.profissionais.clear()
+    motor.despesas_fixas.clear()
+    motor.valores_proprietario.clear()
+    motor.valores_profissional.clear()
+    
+    # NOVO: Carrega Premissas Operacionais
+    if "operacional" in dados:
+        op = dados["operacional"]
+        motor.operacional.num_fisioterapeutas = op.get("num_fisioterapeutas", 0)
+        motor.operacional.num_salas = op.get("num_salas", 0)
+        motor.operacional.horas_atendimento_dia = op.get("horas_atendimento_dia", 0)
+        motor.operacional.dias_uteis_mes = op.get("dias_uteis_mes", 0)
+        motor.operacional.modelo_tributario = op.get("modelo_tributario", "PJ - Simples Nacional")
+        motor.operacional.modo_calculo_sessoes = op.get("modo_calculo_sessoes", "servico")
+        
+        # IMPORTANTE: Sincroniza regime tributário imediatamente
+        motor.premissas_folha.regime_tributario = motor.operacional.modelo_tributario
+    
+    # NOVO v1.79.0: Carrega Cadastro de Salas (TDABC)
+    if "cadastro_salas" in dados:
+        try:
+            from .motor_calculo import CadastroSalas
+        except ImportError:
+            from motor_calculo import CadastroSalas
+        motor.cadastro_salas = CadastroSalas.from_dict(dados["cadastro_salas"])
+        # IMPORTANTE: Sincronizar com operacional após carregar
+        motor.cadastro_salas.sincronizar_num_salas(motor.operacional.num_salas)
+        motor.cadastro_salas.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
+        motor.cadastro_salas.dias_uteis_mes = motor.operacional.dias_uteis_mes
+    else:
+        # Dados antigos: sincronizar com operacional
+        motor.cadastro_salas.sincronizar_num_salas(motor.operacional.num_salas)
+        motor.cadastro_salas.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
+        motor.cadastro_salas.dias_uteis_mes = motor.operacional.dias_uteis_mes
+    
+    # NOVO: Carrega Premissas Macro
+    if "macro" in dados:
+        mc = dados["macro"]
+        motor.macro.ipca = mc.get("ipca", 0.0)
+        motor.macro.igpm = mc.get("igpm", 0.0)
+        motor.macro.dissidio = mc.get("dissidio", 0.0)
+        motor.macro.reajuste_tarifas = mc.get("reajuste_tarifas", 0.0)
+        motor.macro.reajuste_contratos = mc.get("reajuste_contratos", 0.0)
+        motor.macro.taxa_cartao_credito = mc.get("taxa_cartao_credito", 0.0354)  # 3.54% padrão
+        motor.macro.taxa_cartao_debito = mc.get("taxa_cartao_debito", 0.0211)   # 2.11% padrão
+        motor.macro.taxa_antecipacao = mc.get("taxa_antecipacao", 0.05)          # 5% padrão
+    
+    # NOVO: Carrega Formas de Pagamento
+    if "pagamento" in dados:
+        pg = dados["pagamento"]
+        motor.pagamento.dinheiro_pix = pg.get("dinheiro_pix", 0.0)
+        motor.pagamento.cartao_credito = pg.get("cartao_credito", 0.0)
+        motor.pagamento.cartao_debito = pg.get("cartao_debito", 0.0)
+        motor.pagamento.outros = pg.get("outros", 0.0)
+        motor.pagamento.pct_antecipacao = pg.get("pct_antecipacao", 0.0)
+    
+    # Serviços
+    for nome, srv_data in dados.get("servicos", {}).items():
+        motor.servicos[nome] = Servico(
+            nome=srv_data["nome"],
+            duracao_minutos=srv_data.get("duracao_minutos", 50),
+            valor_2026=srv_data.get("valor_2026", 0),
+            sessoes_mes_base=srv_data.get("sessoes_mes_base", 0),
+            pct_reajuste=srv_data.get("pct_reajuste", 0.05),
+            mes_reajuste=srv_data.get("mes_reajuste", 3),
+            pct_crescimento=srv_data.get("pct_crescimento", 0.0),
+            usa_sala=srv_data.get("usa_sala", True)
         )
-        
-        motor = criar_motor_vazio()
-        
-        # Premissas operacionais
-        op = dados.get("operacional", {})
-        motor.num_fisioterapeutas = op.get("num_fisioterapeutas", 0)
-        motor.num_salas = op.get("num_salas", 0)
-        motor.horas_atendimento_dia = op.get("horas_atendimento_dia", 0)
-        motor.dias_uteis_mes = op.get("dias_uteis_mes", 22)
-        motor.modelo_tributario = op.get("modelo_tributario", "PJ - Simples Nacional")
-        motor.modo_calculo_sessoes = op.get("modo_calculo_sessoes", "servico")
-        
-        # Premissas macro
-        macro = dados.get("macro", {})
-        motor.ipca = macro.get("ipca", 0.045)
-        motor.igpm = macro.get("igpm", 0.05)
-        motor.dissidio = macro.get("dissidio", 0.06)
-        motor.reajuste_tarifas = macro.get("reajuste_tarifas", 0.08)
-        motor.reajuste_contratos = macro.get("reajuste_contratos", 0.05)
-        motor.taxa_cartao_credito = macro.get("taxa_cartao_credito", 0.0354)
-        motor.taxa_cartao_debito = macro.get("taxa_cartao_debito", 0.0211)
-        motor.taxa_antecipacao = macro.get("taxa_antecipacao", 0.05)
-        
-        # Pagamento
-        pag = dados.get("pagamento", {})
-        motor.dinheiro_pix = pag.get("dinheiro_pix", 0)
-        motor.cartao_credito = pag.get("cartao_credito", 0)
-        motor.cartao_debito = pag.get("cartao_debito", 0)
-        motor.outros = pag.get("outros", 0)
-        motor.pct_antecipacao = pag.get("pct_antecipacao", 0)
-        
-        # Outros
-        motor.custo_pessoal_mensal = dados.get("custo_pessoal_mensal", 0)
-        motor.mes_dissidio = dados.get("mes_dissidio", 5)
-        motor.sazonalidade = dados.get("sazonalidade", [1.0] * 12)
-        
-        # Premissas específicas
-        motor.premissas_folha = dados.get("premissas_folha", {})
-        motor.premissas_fisio = dados.get("premissas_fisio", {})
-        motor.cadastro_salas = dados.get("cadastro_salas", {})
-        motor.premissas_simples = dados.get("premissas_simples", {})
-        motor.premissas_dividendos = dados.get("premissas_dividendos", {})
-        motor.premissas_fc = dados.get("premissas_fc", {})
-        motor.aplicacoes = dados.get("aplicacoes", {})
-        
-        # Valores por tipo de profissional
-        motor.valores_proprietario = dados.get("valores_proprietario", {})
-        motor.valores_profissional = dados.get("valores_profissional", {})
-        
-        # Serviços
-        motor.servicos = {}
-        for nome, srv_data in dados.get("servicos", {}).items():
-            motor.servicos[nome] = Servico(
-                nome=srv_data.get("nome", nome),
-                duracao_minutos=srv_data.get("duracao_minutos", 60),
-                valor_2026=srv_data.get("valor_2026", 0),
-                sessoes_mes_base=srv_data.get("sessoes_mes_base", 0),
-                pct_reajuste=srv_data.get("pct_reajuste", 0),
-                mes_reajuste=srv_data.get("mes_reajuste", 1),
-                pct_crescimento=srv_data.get("pct_crescimento", 0),
-                usa_sala=srv_data.get("usa_sala", True)
-            )
-        
-        # Proprietários
-        motor.proprietarios = {}
-        for nome, prop_data in dados.get("proprietarios", {}).items():
-            motor.proprietarios[nome] = Profissional(
-                nome=prop_data.get("nome", nome),
-                tipo="proprietario",
-                ativo=prop_data.get("ativo", True),
-                sessoes_por_servico=prop_data.get("sessoes_por_servico", {}),
-                pct_crescimento_por_servico=prop_data.get("pct_crescimento_por_servico", {})
-            )
-        
-        # Profissionais
-        motor.profissionais = {}
-        for nome, prof_data in dados.get("profissionais", {}).items():
-            motor.profissionais[nome] = Profissional(
-                nome=prof_data.get("nome", nome),
-                tipo="profissional",
-                ativo=prof_data.get("ativo", True),
-                sessoes_por_servico=prof_data.get("sessoes_por_servico", {}),
-                pct_crescimento_por_servico=prof_data.get("pct_crescimento_por_servico", {})
-            )
-        
-        # Despesas
-        motor.despesas_fixas = {}
-        for nome, desp_data in dados.get("despesas", {}).items():
-            motor.despesas_fixas[nome] = DespesaFixa(
-                nome=desp_data.get("nome", nome),
-                categoria=desp_data.get("categoria", "Outros"),
-                valor_mensal=desp_data.get("valor_mensal", 0),
-                tipo_reajuste=desp_data.get("tipo_reajuste", "nenhum"),
-                mes_reajuste=desp_data.get("mes_reajuste", 1),
-                pct_adicional=desp_data.get("pct_adicional", 0),
-                aplicar_reajuste=desp_data.get("aplicar_reajuste", True),
-                tipo_sazonalidade=desp_data.get("tipo_sazonalidade", "uniforme"),
-                valores_2025=desp_data.get("valores_2025", []),
-                ativa=desp_data.get("ativa", True),
-                tipo_despesa=desp_data.get("tipo_despesa", "fixa"),
-                base_variavel=desp_data.get("base_variavel", "receita"),
-                pct_receita=desp_data.get("pct_receita", 0),
-                valor_por_sessao=desp_data.get("valor_por_sessao", 0)
-            )
-        
-        # Funcionários CLT
-        motor.funcionarios_clt = {}
-        for nome, func_data in dados.get("funcionarios_clt", {}).items():
+    
+    # Valores
+    motor.valores_proprietario = dados.get("valores_proprietario", {})
+    motor.valores_profissional = dados.get("valores_profissional", {})
+    
+    # Proprietários
+    for nome, prop_data in dados.get("proprietarios", {}).items():
+        motor.proprietarios[nome] = Profissional(
+            nome=prop_data["nome"],
+            tipo="proprietario",
+            ativo=prop_data.get("ativo", True),
+            sessoes_por_servico=prop_data.get("sessoes_por_servico", {}),
+            pct_crescimento_por_servico=prop_data.get("pct_crescimento_por_servico", {})
+        )
+    
+    # Profissionais
+    for nome, prof_data in dados.get("profissionais", {}).items():
+        motor.profissionais[nome] = Profissional(
+            nome=prof_data["nome"],
+            tipo="profissional",
+            ativo=prof_data.get("ativo", True),
+            sessoes_por_servico=prof_data.get("sessoes_por_servico", {}),
+            pct_crescimento_por_servico=prof_data.get("pct_crescimento_por_servico", {})
+        )
+    
+    # Despesas (é um dicionário)
+    for nome, desp_data in dados.get("despesas", {}).items():
+        motor.despesas_fixas[nome] = DespesaFixa(
+            nome=desp_data["nome"],
+            categoria=desp_data.get("categoria", "Outros"),
+            valor_mensal=desp_data.get("valor_mensal", 0),
+            tipo_reajuste=desp_data.get("tipo_reajuste", "ipca"),
+            mes_reajuste=desp_data.get("mes_reajuste", 1),
+            pct_adicional=desp_data.get("pct_adicional", 0),
+            aplicar_reajuste=desp_data.get("aplicar_reajuste", True),
+            tipo_sazonalidade=desp_data.get("tipo_sazonalidade", "uniforme"),
+            valores_2025=desp_data.get("valores_2025", [0.0] * 12),
+            ativa=desp_data.get("ativa", True),
+            # Campos de despesas variáveis
+            tipo_despesa=desp_data.get("tipo_despesa", "fixa"),
+            base_variavel=desp_data.get("base_variavel", "receita"),
+            pct_receita=desp_data.get("pct_receita", 0.0),
+            valor_por_sessao=desp_data.get("valor_por_sessao", 0.0)
+        )
+    
+    # Custo pessoal
+    motor.custo_pessoal_mensal = dados.get("custo_pessoal_mensal", 0)
+    motor.mes_dissidio = dados.get("mes_dissidio", 5)
+    
+    # Sazonalidade
+    fatores = dados.get("sazonalidade", [1.0] * 12)
+    motor.sazonalidade = Sazonalidade(fatores=fatores)
+    
+    # Premissas Folha
+    try:
+        from .motor_calculo import PremissasFolha, FuncionarioCLT, SocioProLabore
+    except ImportError:
+        from motor_calculo import PremissasFolha, FuncionarioCLT, SocioProLabore
+    
+    if "premissas_folha" in dados:
+        pf_data = dados["premissas_folha"]
+        motor.premissas_folha = PremissasFolha(
+            regime_tributario=pf_data.get("regime_tributario", "PJ - Simples Nacional"),
+            deducao_dependente_ir=pf_data.get("deducao_dependente_ir", 189.59),
+            aliquota_fgts=pf_data.get("aliquota_fgts", 0.08),
+            desconto_vt_pct=pf_data.get("desconto_vt_pct", 0.06),
+            dias_uteis_mes=pf_data.get("dias_uteis_mes", 22),
+            mes_dissidio=pf_data.get("mes_dissidio", 5),
+            pct_dissidio=pf_data.get("pct_dissidio", 0.06)
+        )
+        # IMPORTANTE: Sincroniza operacional.modelo_tributario com premissas_folha.regime_tributario
+        motor.operacional.modelo_tributario = motor.premissas_folha.regime_tributario
+    
+    # Funcionários CLT
+    if "funcionarios_clt" in dados:
+        motor.funcionarios_clt.clear()
+        for nome, func_data in dados["funcionarios_clt"].items():
             motor.funcionarios_clt[nome] = FuncionarioCLT(
-                nome=func_data.get("nome", nome),
+                nome=func_data["nome"],
                 cargo=func_data.get("cargo", ""),
                 salario_base=func_data.get("salario_base", 0),
-                vale_transporte=func_data.get("vale_transporte", 0),
-                vale_refeicao=func_data.get("vale_refeicao", 0),
-                plano_saude=func_data.get("plano_saude", 0),
-                outros_beneficios=func_data.get("outros_beneficios", 0),
+                tipo_vinculo=func_data.get("tipo_vinculo", "informal"),
                 dependentes_ir=func_data.get("dependentes_ir", 0),
-                data_admissao=func_data.get("data_admissao", ""),
-                mes_reajuste=func_data.get("mes_reajuste", 5),
-                pct_aumento=func_data.get("pct_aumento", 0),
+                vt_dia=func_data.get("vt_dia", 0),
+                vr_dia=func_data.get("vr_dia", 0),
+                plano_saude=func_data.get("plano_saude", 0),
+                plano_odonto=func_data.get("plano_odonto", 0),
+                mes_admissao=func_data.get("mes_admissao", 1),
+                mes_aumento=func_data.get("mes_aumento", 13),
+                pct_reajuste=func_data.get("pct_reajuste", 0),
                 ativo=func_data.get("ativo", True)
             )
-        
-        # Sócios pró-labore
-        motor.socios_prolabore = {}
-        for nome, socio_data in dados.get("socios_prolabore", {}).items():
-            from dataclasses import dataclass
-            @dataclass
-            class SocioProlabore:
-                nome: str
-                prolabore: float
-                dependentes_ir: int = 0
-                mes_reajuste: int = 5
-                pct_aumento: float = 0
-                ativo: bool = True
-            
-            motor.socios_prolabore[nome] = SocioProlabore(
-                nome=socio_data.get("nome", nome),
+    
+    # Sócios Pró-Labore
+    if "socios_prolabore" in dados:
+        motor.socios_prolabore.clear()
+        for nome, socio_data in dados["socios_prolabore"].items():
+            motor.socios_prolabore[nome] = SocioProLabore(
+                nome=socio_data["nome"],
                 prolabore=socio_data.get("prolabore", 0),
                 dependentes_ir=socio_data.get("dependentes_ir", 0),
                 mes_reajuste=socio_data.get("mes_reajuste", 5),
                 pct_aumento=socio_data.get("pct_aumento", 0),
                 ativo=socio_data.get("ativo", True)
             )
-        
-        # Fisioterapeutas
-        motor.fisioterapeutas = {}
-        for nome, fisio_data in dados.get("fisioterapeutas", {}).items():
+    
+    # Fisioterapeutas
+    if "fisioterapeutas" in dados:
+        motor.fisioterapeutas.clear()
+        for nome, fisio_data in dados["fisioterapeutas"].items():
+            # v1.79.0: Escala semanal zerada como padrão (forçar preenchimento)
+            escala_padrao = {
+                "segunda": 0.0, "terca": 0.0, "quarta": 0.0,
+                "quinta": 0.0, "sexta": 0.0, "sabado": 0.0
+            }
+            escala_salva = fisio_data.get("escala_semanal", escala_padrao)
+            
             motor.fisioterapeutas[nome] = Fisioterapeuta(
-                nome=fisio_data.get("nome", nome),
+                nome=fisio_data["nome"],
                 cargo=fisio_data.get("cargo", "Fisioterapeuta"),
-                nivel=fisio_data.get("nivel", 1),
-                filial=fisio_data.get("filial", ""),
+                nivel=fisio_data.get("nivel", 2),
+                filial=fisio_data.get("filial", "Copacabana"),
                 ativo=fisio_data.get("ativo", True),
                 sessoes_por_servico=fisio_data.get("sessoes_por_servico", {}),
                 pct_crescimento_por_servico=fisio_data.get("pct_crescimento_por_servico", {}),
                 tipo_remuneracao=fisio_data.get("tipo_remuneracao", "percentual"),
                 valores_fixos_por_servico=fisio_data.get("valores_fixos_por_servico", {}),
-                pct_customizado=fisio_data.get("pct_customizado", 0),
-                escala_semanal=fisio_data.get("escala_semanal", {})
+                pct_customizado=fisio_data.get("pct_customizado", 0.0),
+                escala_semanal=escala_salva
             )
-        
-        # Investimentos
-        motor.investimentos = []
-        for inv_data in dados.get("investimentos", []):
-            motor.investimentos.append(Investimento(
+    
+    # Premissas Fisioterapeutas
+    if "premissas_fisio" in dados:
+        pf_data = dados["premissas_fisio"]
+        motor.premissas_fisio = PremissasFisioterapeutas(
+            niveis_remuneracao=pf_data.get("niveis_remuneracao", {1: 0.35, 2: 0.30, 3: 0.25, 4: 0.20}),
+            pct_producao_propria=pf_data.get("pct_producao_propria", 0.60),
+            pct_faturamento_total=pf_data.get("pct_faturamento_total", 0.20),
+            pct_base_remuneracao_prop=pf_data.get("pct_base_remuneracao_prop", 0.75),
+            pct_gerencia_equipe=pf_data.get("pct_gerencia_equipe", 0.01),
+            pct_base_remuneracao_ger=pf_data.get("pct_base_remuneracao_ger", 0.75)
+        )
+    
+    # NOVO: Premissas Simples Nacional / Carnê Leão
+    if "premissas_simples" in dados:
+        ps_data = dados["premissas_simples"]
+        motor.premissas_simples.faturamento_pf_anual = ps_data.get("faturamento_pf_anual", 0.0)
+        motor.premissas_simples.aliquota_inss_pf = ps_data.get("aliquota_inss_pf", 0.11)
+        motor.premissas_simples.teto_inss_pf = ps_data.get("teto_inss_pf", 908.86)
+        motor.premissas_simples.limite_fator_r = ps_data.get("limite_fator_r", 0.28)
+    
+    # NOVO: Premissas Dividendos
+    if "premissas_dividendos" in dados:
+        pd_data = dados["premissas_dividendos"]
+        motor.premissas_dividendos.distribuir = pd_data.get("distribuir", True)
+        motor.premissas_dividendos.pct_reserva_legal = pd_data.get("pct_reserva_legal", 0.05)
+        motor.premissas_dividendos.pct_reserva_investimento = pd_data.get("pct_reserva_investimento", 0.20)
+        motor.premissas_dividendos.frequencia = pd_data.get("frequencia", "Trimestral")
+        motor.premissas_dividendos.pct_distribuir = pd_data.get("pct_distribuir", 0.30)
+        motor.premissas_dividendos.mostrar_no_dre = pd_data.get("mostrar_no_dre", True)
+    
+    # NOVO: Premissas FC (Fluxo de Caixa)
+    if "premissas_fc" in dados:
+        pfc_data = dados["premissas_fc"]
+        pfc = motor.premissas_fc
+        pfc.caixa_inicial = pfc_data.get("caixa_inicial", 0.0)
+        pfc.cp_impostos = pfc_data.get("cp_impostos", 0.0)
+        pfc.cp_folha_colaboradores = pfc_data.get("cp_folha_colaboradores", 0.0)
+        pfc.cp_folha_fisioterapeutas = pfc_data.get("cp_folha_fisioterapeutas", 0.0)
+        pfc.cp_retirada_proprietarios = pfc_data.get("cp_retirada_proprietarios", 0.0)
+        pfc.cp_encargos_clt = pfc_data.get("cp_encargos_clt", 0.0)
+        pfc.cp_fornecedores = pfc_data.get("cp_fornecedores", 0.0)
+        pfc.usar_cp_folha_auto = pfc_data.get("usar_cp_folha_auto", True)
+        pfc.receita_out_ano_anterior = pfc_data.get("receita_out_ano_anterior", 0.0)
+        pfc.receita_nov_ano_anterior = pfc_data.get("receita_nov_ano_anterior", 0.0)
+        pfc.receita_dez_ano_anterior = pfc_data.get("receita_dez_ano_anterior", 0.0)
+        pfc.usar_receita_auto = pfc_data.get("usar_receita_auto", True)
+        pfc.recebimento_avista_no_mes = pfc_data.get("recebimento_avista_no_mes", True)
+        pfc.saldo_minimo = pfc_data.get("saldo_minimo", 0.0)
+        pfc.pct_cartao_1x = pfc_data.get("pct_cartao_1x", 0.3333)
+        pfc.pct_cartao_2x = pfc_data.get("pct_cartao_2x", 0.3333)
+        pfc.pct_cartao_3x = pfc_data.get("pct_cartao_3x", 0.3334)
+        pfc.pct_cartao_4x = pfc_data.get("pct_cartao_4x", 0.0)
+        pfc.pct_cartao_5x = pfc_data.get("pct_cartao_5x", 0.0)
+        pfc.pct_cartao_6x = pfc_data.get("pct_cartao_6x", 0.0)
+    
+    # Aplicações Financeiras
+    if "aplicacoes" in dados:
+        aplic_data = dados["aplicacoes"]
+        aplic = motor.premissas_financeiras.aplicacoes
+        aplic.saldo_inicial = aplic_data.get("saldo_inicial", 0.0)
+        aplic.taxa_selic_anual = aplic_data.get("taxa_selic_anual", 0.1225)
+        aplic.pct_cdi = aplic_data.get("pct_cdi", 1.0)
+    
+    # Investimentos (CAPEX)
+    if "investimentos" in dados:
+        try:
+            from .motor_calculo import Investimento
+        except ImportError:
+            from motor_calculo import Investimento
+        motor.premissas_financeiras.investimentos.clear()
+        for inv_data in dados["investimentos"]:
+            inv = Investimento(
                 descricao=inv_data.get("descricao", ""),
-                valor=inv_data.get("valor", 0),
-                mes=inv_data.get("mes", 1),
-                tipo=inv_data.get("tipo", "equipamento"),
-                forma_pagamento=inv_data.get("forma_pagamento", "avista"),
-                num_parcelas=inv_data.get("num_parcelas", 1)
-            ))
-        
-        # Financiamentos
-        motor.financiamentos = []
-        for fin_data in dados.get("financiamentos", []):
-            motor.financiamentos.append(FinanciamentoExistente(
+                categoria=inv_data.get("categoria", "Equipamentos"),
+                valor_total=inv_data.get("valor_total", 0.0),
+                mes_aquisicao=inv_data.get("mes_aquisicao", 1),
+                entrada=inv_data.get("entrada", 0.0),
+                taxa_mensal=inv_data.get("taxa_mensal", 0.05),
+                parcelas=inv_data.get("parcelas", 12),
+                beneficio_mensal=inv_data.get("beneficio_mensal", 0.0),
+                ativo=inv_data.get("ativo", True),
+            )
+            motor.premissas_financeiras.investimentos.append(inv)
+    
+    # Financiamentos Existentes
+    if "financiamentos" in dados:
+        try:
+            from .motor_calculo import FinanciamentoExistente
+        except ImportError:
+            from motor_calculo import FinanciamentoExistente
+        motor.premissas_financeiras.financiamentos.clear()
+        for fin_data in dados["financiamentos"]:
+            fin = FinanciamentoExistente(
                 descricao=fin_data.get("descricao", ""),
-                saldo_devedor=fin_data.get("saldo_devedor", 0),
-                taxa_mensal=fin_data.get("taxa_mensal", 0),
-                parcelas_total=fin_data.get("parcelas_total", 0),
+                saldo_devedor=fin_data.get("saldo_devedor", 0.0),
+                taxa_mensal=fin_data.get("taxa_mensal", 0.03),
+                parcelas_total=fin_data.get("parcelas_total", 12),
                 parcelas_pagas=fin_data.get("parcelas_pagas", 0),
                 mes_inicio_2026=fin_data.get("mes_inicio_2026", 1),
-                valor_parcela=fin_data.get("valor_parcela", 0),
-                ativo=fin_data.get("ativo", True)
-            ))
-        
-        return motor
-        
+                valor_parcela=fin_data.get("valor_parcela", 0.0),
+                ativo=fin_data.get("ativo", True),
+            )
+            motor.premissas_financeiras.financiamentos.append(fin)
+    
+    # IMPORTANTE: Sincroniza proprietários -> sócios pró-labore
+    # Isso garante que fisioterapeutas com cargo="Proprietário" apareçam na folha
+    try:
+        motor.sincronizar_proprietarios()
     except Exception as e:
-        print(f"Erro ao converter dict para motor: {e}")
-        import traceback
-        traceback.print_exc()
-        from motor_calculo import criar_motor_vazio
-        return criar_motor_vazio()
+        pass  # Ignora erro se função não existir ou falhar
+    
+    return motor
+
+
+def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: str = "Cliente") -> 'MotorCalculo':
+    """
+    Consolida os dados de todas as filiais de um cliente em um único motor.
+    
+    Args:
+        manager: Instância do ClienteManager
+        cliente_id: ID do cliente
+        cliente_nome: Nome do cliente para exibição
+        
+    Returns:
+        MotorCalculo com dados consolidados de todas as filiais
+    """
+    from motor_calculo import criar_motor_vazio, Servico, Fisioterapeuta, FuncionarioCLT, DespesaFixa
+    
+    # Criar motor consolidado
+    motor_consolidado = criar_motor_vazio(
+        cliente_nome=cliente_nome,
+        filial_nome="Consolidado",
+        tipo_relatorio="Consolidado"
+    )
+    
+    # Listar filiais
+    filiais = manager.listar_filiais(cliente_id)
+    
+    if not filiais:
+        return motor_consolidado
+    
+    # Contadores para consolidação
+    servicos_consolidados = {}
+    fisioterapeutas_consolidados = {}
+    funcionarios_consolidados = {}
+    despesas_consolidadas = {}
+    
+    # Iterar sobre cada filial
+    for filial_info in filiais:
+        filial_id = filial_info["id"]
+        filial_nome = filial_info["nome"]
+        
+        # Carregar dados da filial
+        dados_filial = manager.carregar_filial(cliente_id, filial_id)
+        
+        if not dados_filial:
+            continue
+        
+        # Criar motor temporário para esta filial
+        motor_filial = criar_motor_vazio()
+        dict_para_motor(dados_filial, motor_filial)
+        
+        # ===== CONSOLIDAR SERVIÇOS =====
+        for nome_srv, srv in motor_filial.servicos.items():
+            if nome_srv not in servicos_consolidados:
+                servicos_consolidados[nome_srv] = {
+                    'nome': nome_srv,
+                    'duracao_minutos': srv.duracao_minutos,
+                    'pacientes_por_sessao': srv.pacientes_por_sessao,
+                    'valor_2025': srv.valor_2025,
+                    'valor_2026': srv.valor_2026,
+                    'usa_sala': srv.usa_sala,
+                }
+        
+        # ===== CONSOLIDAR FISIOTERAPEUTAS =====
+        for nome_fisio, fisio in motor_filial.fisioterapeutas.items():
+            # Prefixar com nome da filial para evitar colisão
+            nome_unico = f"{nome_fisio} ({filial_nome})"
+            
+            if nome_unico not in fisioterapeutas_consolidados:
+                fisioterapeutas_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'tipo': fisio.tipo,
+                    'regime': fisio.regime,
+                    'horas_mes': fisio.horas_mes,
+                    'salario': fisio.salario,
+                    'prolabore': fisio.prolabore,
+                    'ativo': fisio.ativo,
+                    'sessoes_por_servico': dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {},
+                    'pct_crescimento_por_servico': dict(fisio.pct_crescimento_por_servico) if fisio.pct_crescimento_por_servico else {},
+                    'escala_semanal': list(fisio.escala_semanal) if fisio.escala_semanal else [0]*7,
+                }
+        
+        # ===== CONSOLIDAR FUNCIONÁRIOS =====
+        for nome_func, func in motor_filial.funcionarios.items():
+            nome_unico = f"{nome_func} ({filial_nome})"
+            
+            if nome_unico not in funcionarios_consolidados:
+                funcionarios_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'cargo': getattr(func, 'cargo', ''),
+                    'salario_base': getattr(func, 'salario_base', 0),
+                    'tipo_vinculo': getattr(func, 'tipo_vinculo', 'informal'),
+                    'vt_dia': getattr(func, 'vt_dia', 0),
+                    'vr_dia': getattr(func, 'vr_dia', 0),
+                    'plano_saude': getattr(func, 'plano_saude', 0),
+                    'plano_odonto': getattr(func, 'plano_odonto', 0),
+                    'mes_admissao': getattr(func, 'mes_admissao', 1),
+                    'ativo': getattr(func, 'ativo', True),
+                }
+        
+        # ===== CONSOLIDAR DESPESAS FIXAS =====
+        for nome_desp, desp in motor_filial.despesas_fixas.items():
+            if nome_desp in despesas_consolidadas:
+                # Somar valores se despesa já existe
+                despesas_consolidadas[nome_desp]['valor_mensal'] += getattr(desp, 'valor_mensal', 0)
+            else:
+                despesas_consolidadas[nome_desp] = {
+                    'nome': nome_desp,
+                    'valor_mensal': getattr(desp, 'valor_mensal', 0),
+                    'categoria': getattr(desp, 'categoria', 'Administrativa'),
+                    'tipo_reajuste': getattr(desp, 'tipo_reajuste', 'ipca'),
+                    'ativa': getattr(desp, 'ativa', True),
+                    # Campos de despesas variáveis
+                    'tipo_despesa': getattr(desp, 'tipo_despesa', 'fixa'),
+                    'base_variavel': getattr(desp, 'base_variavel', 'receita'),
+                    'pct_receita': getattr(desp, 'pct_receita', 0.0),
+                    'valor_por_sessao': getattr(desp, 'valor_por_sessao', 0.0),
+                }
+        
+        # ===== COPIAR PREMISSAS (usa da primeira filial) =====
+        if not motor_consolidado.servicos:
+            motor_consolidado.premissas_macro = motor_filial.premissas_macro
+            motor_consolidado.forma_pagamento = motor_filial.forma_pagamento
+            motor_consolidado.premissas_operacionais = motor_filial.premissas_operacionais
+            motor_consolidado.simples_nacional = motor_filial.simples_nacional
+            motor_consolidado.premissas_financeiras = motor_filial.premissas_financeiras
+    
+    # ===== APLICAR DADOS CONSOLIDADOS AO MOTOR =====
+    
+    # Serviços
+    for nome, dados in servicos_consolidados.items():
+        motor_consolidado.servicos[nome] = Servico(
+            nome=dados['nome'],
+            duracao_minutos=dados['duracao_minutos'],
+            pacientes_por_sessao=dados['pacientes_por_sessao'],
+            valor_2025=dados['valor_2025'],
+            valor_2026=dados['valor_2026'],
+            usa_sala=dados['usa_sala'],
+        )
+    
+    # Fisioterapeutas
+    for nome, dados in fisioterapeutas_consolidados.items():
+        motor_consolidado.fisioterapeutas[nome] = Fisioterapeuta(
+            nome=dados['nome'],
+            tipo=dados['tipo'],
+            regime=dados['regime'],
+            horas_mes=dados['horas_mes'],
+            salario=dados['salario'],
+            prolabore=dados['prolabore'],
+            ativo=dados['ativo'],
+            sessoes_por_servico=dados['sessoes_por_servico'],
+            pct_crescimento_por_servico=dados['pct_crescimento_por_servico'],
+            escala_semanal=dados['escala_semanal'],
+        )
+    
+    # Funcionários
+    for nome, dados in funcionarios_consolidados.items():
+        motor_consolidado.funcionarios[nome] = FuncionarioCLT(
+            nome=dados['nome'],
+            cargo=dados['cargo'],
+            salario_base=dados['salario_base'],
+            tipo_vinculo=dados['tipo_vinculo'],
+            vt_dia=dados['vt_dia'],
+            vr_dia=dados['vr_dia'],
+            plano_saude=dados['plano_saude'],
+            plano_odonto=dados['plano_odonto'],
+            mes_admissao=dados['mes_admissao'],
+            ativo=dados['ativo'],
+        )
+    
+    # Despesas Fixas
+    for nome, dados in despesas_consolidadas.items():
+        motor_consolidado.despesas_fixas[nome] = DespesaFixa(
+            nome=dados['nome'],
+            valor_mensal=dados['valor_mensal'],
+            categoria=dados['categoria'],
+            tipo_reajuste=dados['tipo_reajuste'],
+            ativa=dados['ativa'],
+            # Campos de despesas variáveis
+            tipo_despesa=dados.get('tipo_despesa', 'fixa'),
+            base_variavel=dados.get('base_variavel', 'receita'),
+            pct_receita=dados.get('pct_receita', 0.0),
+            valor_por_sessao=dados.get('valor_por_sessao', 0.0),
+        )
+    
+    # Atualizar premissas operacionais com totais
+    total_salas = sum(
+        manager.carregar_filial(cliente_id, f["id"]).get("premissas_operacionais", {}).get("num_salas", 4)
+        for f in filiais
+        if manager.carregar_filial(cliente_id, f["id"])
+    )
+    motor_consolidado.premissas_operacionais.num_salas = max(total_salas, 1)
+    motor_consolidado.premissas_operacionais.num_fisioterapeutas = len(fisioterapeutas_consolidados)
+    
+    return motor_consolidado
