@@ -5,6 +5,8 @@ Aplicação principal Streamlit - Multi-Cliente/Multi-Filial
 
 import streamlit as st
 import pandas as pd
+import json
+import copy
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -16,8 +18,995 @@ from datetime import datetime
 from config import *
 # import database as db  # Substituído por cliente_manager
 from modules.excel_parser import BudgetExcelParser, importar_budget
-from modules.motor_calculo import MotorCalculo, criar_motor_padrao, criar_motor_vazio, Investimento, FinanciamentoExistente
+
+# ============================================
+# SISTEMA DE AUTENTICAÇÃO
+# ============================================
+try:
+    from auth import (
+        is_authenticated, 
+        login, 
+        logout, 
+        get_current_user,
+        show_login_form,
+        show_user_menu
+    )
+    from admin_users import pagina_admin
+    AUTH_ENABLED = True
+except ImportError:
+    AUTH_ENABLED = False
+    # Funções dummy se auth não estiver disponível
+    def is_authenticated(): return True
+    def get_current_user(): return None
+    def show_user_menu(): pass
+    def pagina_admin(): 
+        st.warning("Módulo de administração não disponível")
+from motor_calculo import MotorCalculo, criar_motor_padrao, criar_motor_vazio, Investimento, FinanciamentoExistente, Servico, Fisioterapeuta, FuncionarioCLT, DespesaFixa, Profissional
 from modules.cliente_manager import ClienteManager, motor_para_dict, dict_para_motor
+from realizado_manager import RealizadoManager, LancamentoMesRealizado, RealizadoAnual, AnaliseVariacao, criar_dre_comparativo
+import traceback
+import os
+
+# ============================================
+# SISTEMA DE LOG DE ERROS E CÓDIGOS
+# ============================================
+
+# Códigos de Erro Padronizados
+CODIGOS_ERRO = {
+    # Motor e Cálculos (BE-1XX)
+    "BE-100": "Motor não inicializado",
+    "BE-101": "Erro ao calcular DRE",
+    "BE-102": "Erro ao calcular indicadores",
+    "BE-103": "Erro ao calcular TDABC",
+    "BE-104": "Erro ao calcular ocupação",
+    "BE-105": "Erro ao calcular Simples Nacional",
+    "BE-106": "Erro ao calcular Carnê Leão",
+    "BE-107": "Erro ao calcular folha CLT",
+    "BE-108": "Erro ao calcular fluxo de caixa",
+    "BE-109": "Divisão por zero em cálculo",
+    
+    # Clientes e Filiais (BE-2XX)
+    "BE-200": "Cliente não encontrado",
+    "BE-201": "Filial não encontrada",
+    "BE-202": "Erro ao criar cliente",
+    "BE-203": "Erro ao criar filial",
+    "BE-204": "Erro ao editar cliente",
+    "BE-205": "Erro ao editar filial",
+    "BE-206": "Erro ao excluir cliente",
+    "BE-207": "Erro ao excluir filial",
+    "BE-208": "Erro ao carregar cliente",
+    "BE-209": "Erro ao carregar filial",
+    
+    # Persistência (BE-3XX)
+    "BE-300": "Erro ao salvar dados",
+    "BE-301": "Erro ao carregar dados",
+    "BE-302": "Arquivo não encontrado",
+    "BE-303": "JSON inválido",
+    "BE-304": "Erro de serialização",
+    "BE-305": "Erro de deserialização",
+    "BE-306": "Diretório não existe",
+    "BE-307": "Permissão negada",
+    
+    # Premissas (BE-4XX)
+    "BE-400": "Premissas macro não configuradas",
+    "BE-401": "Premissas operacionais não configuradas",
+    "BE-402": "Premissas de pagamento não configuradas",
+    "BE-403": "Premissas de folha não configuradas",
+    "BE-404": "Salas não configuradas",
+    "BE-405": "Serviços não cadastrados",
+    "BE-406": "Fisioterapeutas não cadastrados",
+    
+    # Interface (BE-5XX)
+    "BE-500": "Erro ao renderizar página",
+    "BE-501": "Componente não encontrado",
+    "BE-502": "Session state corrompido",
+    "BE-503": "Erro de validação de formulário",
+    
+    # Importação/Exportação (BE-6XX)
+    "BE-600": "Erro ao importar Excel",
+    "BE-601": "Erro ao exportar Excel",
+    "BE-602": "Formato de arquivo inválido",
+    "BE-603": "Dados incompletos no arquivo",
+}
+
+# Changelog do Sistema
+CHANGELOG = [
+    {
+        "versao": "1.86.1",
+        "data": "2024-12-26",
+        "tipo": "fix",
+        "descricao": "Correção da Sazonalidade nas Tabelas de Atendimentos",
+        "detalhes": [
+            "FIX: Sazonalidade agora é aplicada corretamente nas tabelas de Sessões por Mês",
+            "FIX: Sazonalidade aplicada no Faturamento por Mês (Proprietários e Profissionais)",
+            "FIX: Sazonalidade aplicada no Ticket Médio por Mês",
+            "FIX: Sazonalidade aplicada nos Gráficos de Evolução",
+            "FIX: Sazonalidade aplicada no Dashboard - Performance Profissionais",
+            "FIX: Sazonalidade aplicada na Visão Consolidada"
+        ]
+    },
+    {
+        "versao": "1.86.0",
+        "data": "2024-12-26",
+        "tipo": "feature",
+        "descricao": "Aprovação de Cenários e Consolidado Comparativo",
+        "detalhes": [
+            "NOVO: Botão 'Aprovar Cenário' com proteção por senha",
+            "NOVO: Badge visual indicando cenário aprovado em cada filial",
+            "NOVO: Consolidado mostra 3 colunas (Pessimista, Conservador, Otimista)",
+            "NOVO: Total Aprovado = soma dos cenários aprovados de cada filial",
+            "NOVO: Tabela detalhada por filial com destaque do aprovado",
+            "Cards de cenário agora destacam visualmente o aprovado"
+        ]
+    },
+    {
+        "versao": "1.85.3",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Correção Consolidação de Filiais",
+        "detalhes": [
+            "BUG FIX: Valores mudavam ao trocar de Filial para Consolidado",
+            "Campos de Serviços faltando: pct_reajuste, mes_reajuste, sessoes_mes_base",
+            "Campos de Despesas faltando: tipo_despesa, pct_receita (CRÍTICO para variáveis)",
+            "Premissas eram copiadas por referência (agora usa deepcopy)",
+            "Sazonalidade agora é copiada corretamente",
+            "PDF agora identifica se é Consolidado ou Filial na capa e cabeçalho",
+            "Ano do relatório corrigido de 2025 para 2026"
+        ]
+    },
+    {
+        "versao": "1.84.0",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Relatório PDF Executivo para Clientes",
+        "detalhes": [
+            "NOVO: Exportação de relatório PDF profissional",
+            "Capa personalizada com nome do cliente",
+            "Sumário executivo com KPIs principais",
+            "DRE resumido com análise automática",
+            "Gráficos de evolução mensal (Receita vs Custos)",
+            "Análise de composição de custos (pizza)",
+            "Ponto de Equilíbrio com margem de segurança",
+            "Projeção de Fluxo de Caixa resumida",
+            "Numeração de páginas e rodapé profissional",
+            "Dropdown unificado para escolher Excel ou PDF"
+        ]
+    },
+    {
+        "versao": "1.83.7",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Calculadora R$/Sessão - Mensal ou Anual",
+        "detalhes": [
+            "Calculadora agora permite escolher se valor é MENSAL ou ANUAL",
+            "Corrigido: Usuário informava aluguel mensal mas era tratado como anual",
+            "Adicionada verificação do custo mensal projetado",
+            "Melhorado feedback visual com cálculo detalhado",
+            "Calculadora de % Receita também suporta mensal/anual"
+        ]
+    },
+    {
+        "versao": "1.83.6",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "DRE Dinâmico - Despesas Fixas e Variáveis",
+        "detalhes": [
+            "Corrigido: Despesa aparecia duplicada (CV e CF) quando tipo alterado",
+            "DRE agora mostra despesas FIXAS dinamicamente",
+            "DRE agora mostra despesas VARIÁVEIS dinamicamente",
+            "Removida lista hardcoded de despesas operacionais",
+            "Despesa marcada como variável aparece APENAS em Custos Variáveis",
+            "Despesa marcada como fixa aparece APENAS em Despesas Operacionais"
+        ]
+    },
+    {
+        "versao": "1.83.5",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Remoção de Hardcode de Materiais 4%",
+        "detalhes": [
+            "Removido: Hardcode de 4% para 'Materiais' na DRE",
+            "Custos Variáveis agora vêm APENAS de despesas cadastradas pelo usuário",
+            "Se não há despesas variáveis, Total CV = R$ 0",
+            "DRE mostra dinamicamente todas as despesas variáveis cadastradas",
+            "TDABC e Fluxo de Caixa usam Total Custos Variáveis",
+            "Interface atualizada para custos variáveis dinâmicos"
+        ]
+    },
+    {
+        "versao": "1.83.4",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Despesas Variáveis na DRE",
+        "detalhes": [
+            "Corrigido: Despesas variáveis não sensibilizavam a DRE",
+            "calcular_custos_variaveis() agora inclui despesas tipo 'variavel'",
+            "Suporta % Receita e R$/Sessão conforme cadastro do usuário",
+            "calcular_despesas_fixas() agora EXCLUI variáveis (evita duplicação)",
+            "DRE mostra detalhamento de cada despesa variável",
+            "Serialização atualizada para salvar/carregar campos variáveis",
+            "Consolidação de filiais preserva configurações variáveis"
+        ]
+    },
+    {
+        "versao": "1.83.3",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Auditoria Profunda de Vínculos",
+        "detalhes": [
+            "Corrigido: Dashboard profissionais usava valor_2026 direto (linha 1912)",
+            "Corrigido: receita_preview não considerava reajuste (linha 8279)",
+            "Auditoria completa: 9 cadeias de cálculo verificadas",
+            "Verificados: DRE, TDABC, PE, Simples Nacional, Folha, Ticket Médio",
+            "Confirmado: 50+ locais de cálculo estão consistentes",
+            "Confirmado: Serialização valores_profissional/proprietario correta"
+        ]
+    },
+    {
+        "versao": "1.83.2",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Calculadora de Despesas Variáveis",
+        "detalhes": [
+            "Nova calculadora para descobrir R$/Sessão ou % Receita",
+            "R$/Sessão: Informe custo anual → divide por sessões cadastradas",
+            "% Receita: Informe custo + receita do ano anterior → calcula %",
+            "Mostra total de sessões cadastradas automaticamente",
+            "Exemplo: R$ 24.000 ÷ 8.000 sessões = R$ 3,00/sessão"
+        ]
+    },
+    {
+        "versao": "1.83.1",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Interface de Despesas Variáveis Melhorada",
+        "detalhes": [
+            "Campo de despesas variáveis agora mostra claramente a unidade",
+            "% Receita: mostra campo com '%' ao lado (ex: 2.50 %)",
+            "R$/Sessão: mostra campo com '/sessão' ao lado (ex: 5.00 /sessão)",
+            "Valores de % agora são inseridos como percentual (2.5 ao invés de 0.025)",
+            "Tooltips explicativos adicionados aos campos"
+        ]
+    },
+    {
+        "versao": "1.83.0",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Ticket Médio no Painel de Atendimentos",
+        "detalhes": [
+            "Nova tabela 'Ticket Médio por Mês' para Proprietários",
+            "Nova tabela 'Ticket Médio por Mês' para Profissionais",
+            "Mostra evolução do valor médio por sessão ao longo do ano",
+            "Evidencia impacto do reajuste no ticket médio",
+            "Linha de 'Média Ano' e 'Média Geral' para comparação"
+        ]
+    },
+    {
+        "versao": "1.82.9",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Tabela Sessões/Serviço - Valor Base e Após Reajuste",
+        "detalhes": [
+            "Tabela agora mostra: Valor Base | Valor Mês+ (após reajuste) | Valor Unit.",
+            "Ex: Valor Base R$ 322 | Valor Mar+ R$ 338,10 | Valor Unit. R$ 322 (Jan)",
+            "Coluna 'Valor Mês+' indica o mês do reajuste dinamicamente"
+        ]
+    },
+    {
+        "versao": "1.82.8",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Correção Lógica de Reajuste de Valores",
+        "detalhes": [
+            "CORRIGIDO: Valor cadastrado agora é o valor BASE (antes do reajuste)",
+            "ANTES (errado): Jan=322/1.05=306.67 | Mar+=322",
+            "AGORA (correto): Jan=322 | Mar+=322×1.05=338.10",
+            "Corrigido em: get_valor_servico() e calcular_valor_servico_mes()",
+            "Usuário cadastra R$ 322 → espera R$ 322 em Jan e R$ 338 em Mar"
+        ]
+    },
+    {
+        "versao": "1.82.7",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Tabela Sessões/Serviço - Valores com Reajuste",
+        "detalhes": [
+            "Tabela 'Sessões por Serviço' agora mostra valores com reajuste",
+            "Adicionado seletor de mês para visualizar valores",
+            "Usa calcular_valor_servico_mes() que considera reajuste",
+            "Jan/Fev: valor antes reajuste | Mar+: valor após reajuste"
+        ]
+    },
+    {
+        "versao": "1.82.6",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Auditoria Completa - Fórmulas de Crescimento",
+        "detalhes": [
+            "Corrigido: calcular_demanda_por_profissional_mes usava fórmula exponencial",
+            "Corrigido: Dashboard profissionais usava crescimento/100 (já era decimal)",
+            "Alinhado: Todas as fórmulas agora usam crescimento LINEAR da planilha",
+            "Fórmula correta: sessoes = base + (base*pct)/13.1 * (mes+0.944)",
+            "Verificadas 45+ funções com parâmetro 'mes'",
+            "420+ chamadas ao motor auditadas"
+        ]
+    },
+    {
+        "versao": "1.82.5",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Auditoria Profunda - Mais Correções Críticas",
+        "detalhes": [
+            "Corrigido: get_valor_servico agora usa mes_reajuste_idx = mes_reajuste - 1",
+            "Corrigido: calcular_folha_mes verificação de admissão (era mes+1, agora mes)",
+            "Auditoria de 30+ funções com parâmetro 'mes'",
+            "Verificado: calcular_simples_nacional_mes usa 1-12 ✓",
+            "Verificado: calcular_carne_leao_mes usa 1-12 ✓",
+            "Verificado: get_imposto_para_dre usa 1-12 ✓",
+            "Testes de integração completos passando"
+        ]
+    },
+    {
+        "versao": "1.82.4",
+        "data": "2024-12-24",
+        "tipo": "fix",
+        "descricao": "Correção Crítica: Consistência Cálculo Sessões",
+        "detalhes": [
+            "AUDITORIA PROFUNDA realizada em todas as funções",
+            "Corrigido: get_sessoes_servico_mes aceitava mes 1-12, agora 0-11",
+            "Corrigido: calcular_sessoes_mes agora usa fisioterapeutas primeiro",
+            "Corrigido: calcular_sessoes_mes_por_tipo respeita modo_calculo",
+            "Corrigido: calcular_folha_fisioterapeutas_mes converte mes 1-12 para 0-11",
+            "Alinhamento entre get_sessoes, calcular_sessoes e calcular_receita",
+            "Tabela 'Sessões por Serviço' agora usa valor do serviço (não repasse)"
+        ]
+    },
+    {
+        "versao": "1.82.3",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Crescimento por Profissional",
+        "detalhes": [
+            "Campo 'Cresc. %' por serviço em proprietários/profissionais",
+            "Só aparece quando modo='profissional' e sessões > 0",
+            "Permite definir meta de crescimento individual",
+            "Motor já usava pct_crescimento_por_servico, agora editável"
+        ]
+    },
+    {
+        "versao": "1.82.2",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Interface Adaptativa por Modo de Sessões",
+        "detalhes": [
+            "Novo serviço: campos iniciam em branco (zero)",
+            "Modo 'profissional': esconde sessões no cadastro de serviços",
+            "Aviso informativo sobre onde definir sessões",
+            "Campo de crescimento só aparece no modo correto"
+        ]
+    },
+    {
+        "versao": "1.82.1",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Validação Completa de Sessões",
+        "detalhes": [
+            "Nova função validar_sessoes() no motor",
+            "7 tipos de validação implementados",
+            "Resumo em Premissas → Operacionais",
+            "Testes no Diagnóstico (categoria Validação Sessões)",
+            "Alerta no Dashboard quando inconsistente",
+            "Comparativo: serviços vs fisios vs capacidade"
+        ]
+    },
+    {
+        "versao": "1.82.0",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Modo de Cálculo de Sessões",
+        "detalhes": [
+            "Novo flag: modo_calculo_sessoes (servico/profissional)",
+            "Modo 'servico': usa sessões do cadastro de serviços",
+            "Modo 'profissional': soma sessões dos fisioterapeutas",
+            "Toggle em Premissas → Operacionais",
+            "Crescimento anual aplicado em ambos os modos",
+            "Retrocompatível: padrão é 'servico'"
+        ]
+    },
+    {
+        "versao": "1.81.6",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Integração Completa de Log de Erros",
+        "detalhes": [
+            "registrar_erro() integrado em todos os módulos",
+            "Clientes: criar, editar, excluir (BE-2XX)",
+            "Filiais: criar, editar, excluir (BE-2XX)",
+            "Persistência: salvar, carregar (BE-3XX)",
+            "Premissas: salvar macro (BE-4XX)",
+            "Importação/Exportação: Excel (BE-6XX)",
+            "Interface: Consultor IA (BE-5XX)"
+        ]
+    },
+    {
+        "versao": "1.81.5",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Sistema de Log de Erros e Códigos",
+        "detalhes": [
+            "Códigos de erro padronizados (BE-XXX)",
+            "Log de erros em arquivo (data/logs/erros.log)",
+            "Changelog completo no diagnóstico",
+            "Visualização de erros recentes"
+        ]
+    },
+    {
+        "versao": "1.81.4",
+        "data": "2024-12-24",
+        "tipo": "bugfix",
+        "descricao": "Correção Editar/Excluir Filial",
+        "detalhes": [
+            "Editar filial salvava no lugar errado",
+            "Excluir filial tratava IDs como dicionários",
+            "Novo teste de arquivo de filial no diagnóstico"
+        ]
+    },
+    {
+        "versao": "1.81.3",
+        "data": "2024-12-24",
+        "tipo": "bugfix",
+        "descricao": "Correção de Imports",
+        "detalhes": [
+            "Imports de motor_calculo corrigidos",
+            "motor_calculo.py deve estar na raiz",
+            "modules/__init__.py atualizado"
+        ]
+    },
+    {
+        "versao": "1.81.2",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Diagnóstico de Clientes/Filiais",
+        "detalhes": [
+            "Nova categoria 12: Clientes/Filiais",
+            "Testes de ClienteManager",
+            "Testes de listar/carregar clientes e filiais"
+        ]
+    },
+    {
+        "versao": "1.81.1",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Editar e Excluir Filial",
+        "detalhes": [
+            "Botões de editar e excluir para cada filial",
+            "Confirmação antes de excluir",
+            "Formulário de renomear filial"
+        ]
+    },
+    {
+        "versao": "1.81.0",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Diagnóstico Completo com Sugestões",
+        "detalhes": [
+            "Seção 'Problemas Encontrados e Como Resolver'",
+            "Sugestões específicas por tipo de erro",
+            "Correção de testes Simples Nacional e sincronizar_num_salas"
+        ]
+    },
+    {
+        "versao": "1.80.9",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Varredura Completíssima",
+        "detalhes": [
+            "25 testes em 11 categorias",
+            "Barra de progresso",
+            "Resultados agrupados por categoria"
+        ]
+    },
+    {
+        "versao": "1.80.8",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Página de Diagnóstico Completa",
+        "detalhes": [
+            "6 tabs de diagnóstico",
+            "Tab de Testes Avançados",
+            "Testes de cálculo em tempo real"
+        ]
+    },
+    {
+        "versao": "1.80.7",
+        "data": "2024-12-24",
+        "tipo": "bugfix",
+        "descricao": "Correções de Varredura",
+        "detalhes": [
+            "ZeroDivisionError em max_lucro",
+            "ZeroDivisionError em meses_range",
+            "Função pagina_importar() criada"
+        ]
+    },
+    {
+        "versao": "1.80.6",
+        "data": "2024-12-24",
+        "tipo": "bugfix",
+        "descricao": "Correção Cadastro de Salas",
+        "detalhes": [
+            "Botão Resetar Salas",
+            "Correção de salas em branco",
+            "ZeroDivisionError em max_lucro"
+        ]
+    },
+    {
+        "versao": "1.80.0",
+        "data": "2024-12-24",
+        "tipo": "feature",
+        "descricao": "Módulo Realizado",
+        "detalhes": [
+            "Lançamento de valores realizados",
+            "Comparativo Orçado x Realizado",
+            "DRE Comparativo"
+        ]
+    },
+]
+
+def registrar_erro(codigo: str, detalhe: str = "", local: str = "") -> str:
+    """
+    Registra um erro no log e retorna a mensagem formatada.
+    
+    Args:
+        codigo: Código do erro (ex: BE-205)
+        detalhe: Detalhes adicionais do erro
+        local: Local onde o erro ocorreu (função/linha)
+    
+    Returns:
+        Mensagem formatada do erro
+    """
+    from datetime import datetime
+    
+    # Criar diretório de logs se não existir
+    log_dir = "data/logs"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    # Preparar dados do erro
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    descricao = CODIGOS_ERRO.get(codigo, "Erro desconhecido")
+    
+    # Formatar mensagem
+    mensagem = f"[{timestamp}] {codigo}: {descricao}"
+    if local:
+        mensagem += f" | Local: {local}"
+    if detalhe:
+        mensagem += f" | Detalhe: {detalhe}"
+    
+    # Salvar no arquivo de log
+    log_file = os.path.join(log_dir, "erros.log")
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(mensagem + "\n")
+    except Exception:
+        pass  # Silenciosamente ignora erro de escrita
+    
+    return f"{codigo}: {descricao}" + (f" - {detalhe}" if detalhe else "")
+
+def obter_log_erros(limite: int = 50) -> list:
+    """
+    Obtém os últimos erros do log.
+    
+    Args:
+        limite: Número máximo de erros a retornar
+    
+    Returns:
+        Lista de erros (mais recentes primeiro)
+    """
+    log_file = "data/logs/erros.log"
+    
+    if not os.path.exists(log_file):
+        return []
+    
+    try:
+        with open(log_file, "r", encoding="utf-8") as f:
+            linhas = f.readlines()
+        
+        # Retornar últimas linhas (mais recentes primeiro)
+        return [l.strip() for l in reversed(linhas[-limite:])]
+    except Exception:
+        return []
+
+def limpar_log_erros():
+    """Limpa o arquivo de log de erros."""
+    log_file = "data/logs/erros.log"
+    try:
+        if os.path.exists(log_file):
+            os.remove(log_file)
+        return True
+    except Exception:
+        return False
+
+
+# ============================================
+# FUNÇÃO DE CONSOLIDAÇÃO DE FILIAIS
+# ============================================
+
+def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: str = "Cliente") -> MotorCalculo:
+    """
+    Consolida os dados de todas as filiais de um cliente em um único motor.
+    Usa o cenário Conservador de cada filial para consolidação.
+    """
+    from modules.cliente_manager import carregar_motores_cenarios
+    
+    # Criar motor consolidado
+    motor_consolidado = criar_motor_vazio(
+        cliente_nome=cliente_nome,
+        filial_nome="Consolidado",
+        tipo_relatorio="Consolidado"
+    )
+    
+    # Listar filiais
+    filiais = manager.listar_filiais(cliente_id)
+    
+    if not filiais:
+        return motor_consolidado
+    
+    # Contadores para consolidação
+    servicos_consolidados = {}
+    proprietarios_consolidados = {}  # ESTRUTURA ANTIGA - NECESSÁRIA!
+    profissionais_consolidados = {}  # ESTRUTURA ANTIGA - NECESSÁRIA!
+    fisioterapeutas_consolidados = {}
+    funcionarios_consolidados = {}
+    despesas_consolidadas = {}
+    primeira_filial_processada = False
+    
+    # Iterar sobre cada filial
+    for filial_info in filiais:
+        filial_id = filial_info["id"]
+        filial_nome_atual = filial_info["nome"]
+        
+        # Carregar dados da filial usando o novo sistema de cenários
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            
+            # Usa cenário Conservador para consolidação (ou o que estiver disponível)
+            motor_filial = motores.get("Conservador") or motores.get("Pessimista") or motores.get("Otimista")
+            
+            if not motor_filial:
+                continue
+        except Exception as e:
+            # Fallback para formato antigo
+            dados_filial = manager.carregar_filial(cliente_id, filial_id)
+            if not dados_filial:
+                continue
+            motor_filial = criar_motor_vazio()
+            dict_para_motor(dados_filial, motor_filial)
+        
+        # ===== CONSOLIDAR SERVIÇOS =====
+        for nome_srv, srv in motor_filial.servicos.items():
+            if nome_srv not in servicos_consolidados:
+                servicos_consolidados[nome_srv] = {
+                    'nome': nome_srv,
+                    'duracao_minutos': getattr(srv, 'duracao_minutos', 50),
+                    'pacientes_por_sessao': getattr(srv, 'pacientes_por_sessao', 1),
+                    'valor_2025': getattr(srv, 'valor_2025', 0),
+                    'valor_2026': getattr(srv, 'valor_2026', 0),
+                    'usa_sala': getattr(srv, 'usa_sala', True),
+                    # NOVOS - Campos que faltavam:
+                    'pct_reajuste': getattr(srv, 'pct_reajuste', 0.0),
+                    'mes_reajuste': getattr(srv, 'mes_reajuste', 3),
+                    'sessoes_mes_base': getattr(srv, 'sessoes_mes_base', 0),
+                    'pct_crescimento': getattr(srv, 'pct_crescimento', 0.0),
+                }
+        
+        # ===== CONSOLIDAR PROPRIETÁRIOS (ESTRUTURA ANTIGA - CRÍTICO!) =====
+        for nome_prop, prop in motor_filial.proprietarios.items():
+            nome_unico = f"{nome_prop} ({filial_nome_atual})"
+            
+            if nome_unico not in proprietarios_consolidados:
+                proprietarios_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'tipo': getattr(prop, 'tipo', 'proprietario'),
+                    'ativo': getattr(prop, 'ativo', True),
+                    'sessoes_por_servico': dict(prop.sessoes_por_servico) if prop.sessoes_por_servico else {},
+                    'pct_crescimento_por_servico': dict(prop.pct_crescimento_por_servico) if prop.pct_crescimento_por_servico else {},
+                }
+        
+        # ===== CONSOLIDAR PROFISSIONAIS (ESTRUTURA ANTIGA - CRÍTICO!) =====
+        for nome_prof, prof in motor_filial.profissionais.items():
+            nome_unico = f"{nome_prof} ({filial_nome_atual})"
+            
+            if nome_unico not in profissionais_consolidados:
+                profissionais_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'tipo': getattr(prof, 'tipo', 'profissional'),
+                    'ativo': getattr(prof, 'ativo', True),
+                    'sessoes_por_servico': dict(prof.sessoes_por_servico) if prof.sessoes_por_servico else {},
+                    'pct_crescimento_por_servico': dict(prof.pct_crescimento_por_servico) if prof.pct_crescimento_por_servico else {},
+                }
+        
+        # ===== CONSOLIDAR FISIOTERAPEUTAS (ESTRUTURA NOVA) =====
+        for nome_fisio, fisio in motor_filial.fisioterapeutas.items():
+            nome_unico = f"{nome_fisio} ({filial_nome_atual})"
+            
+            if nome_unico not in fisioterapeutas_consolidados:
+                escala = getattr(fisio, 'escala_semanal', None)
+                if escala is None:
+                    escala = {"segunda": 0.0, "terca": 0.0, "quarta": 0.0, "quinta": 0.0, "sexta": 0.0, "sabado": 0.0}
+                elif isinstance(escala, dict):
+                    escala = dict(escala)
+                else:
+                    dias = ["segunda", "terca", "quarta", "quinta", "sexta", "sabado"]
+                    escala = {dias[i]: escala[i] if i < len(escala) else 0.0 for i in range(6)}
+                
+                fisioterapeutas_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'cargo': getattr(fisio, 'cargo', 'Fisioterapeuta'),
+                    'nivel': getattr(fisio, 'nivel', 2),
+                    'filial': filial_nome_atual,
+                    'ativo': getattr(fisio, 'ativo', True),
+                    'sessoes_por_servico': dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {},
+                    'pct_crescimento_por_servico': dict(fisio.pct_crescimento_por_servico) if fisio.pct_crescimento_por_servico else {},
+                    'tipo_remuneracao': getattr(fisio, 'tipo_remuneracao', 'percentual'),
+                    'valores_fixos_por_servico': dict(fisio.valores_fixos_por_servico) if getattr(fisio, 'valores_fixos_por_servico', None) else {},
+                    'pct_customizado': getattr(fisio, 'pct_customizado', 0.0),
+                    'escala_semanal': escala,
+                }
+        
+        # ===== CONSOLIDAR FUNCIONÁRIOS =====
+        for nome_func, func in motor_filial.funcionarios_clt.items():
+            nome_unico = f"{nome_func} ({filial_nome_atual})"
+            
+            if nome_unico not in funcionarios_consolidados:
+                funcionarios_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'cargo': getattr(func, 'cargo', ''),
+                    'salario_base': getattr(func, 'salario_base', 0),
+                    'tipo_vinculo': getattr(func, 'tipo_vinculo', 'informal'),
+                    'vt_dia': getattr(func, 'vt_dia', 0),
+                    'vr_dia': getattr(func, 'vr_dia', 0),
+                    'plano_saude': getattr(func, 'plano_saude', 0),
+                    'plano_odonto': getattr(func, 'plano_odonto', 0),
+                    'mes_admissao': getattr(func, 'mes_admissao', 1),
+                    'ativo': getattr(func, 'ativo', True),
+                }
+        
+        # ===== CONSOLIDAR DESPESAS FIXAS =====
+        for nome_desp, desp in motor_filial.despesas_fixas.items():
+            if nome_desp in despesas_consolidadas:
+                # Soma valores se já existe
+                despesas_consolidadas[nome_desp]['valor_mensal'] += getattr(desp, 'valor_mensal', 0)
+                # Para despesas variáveis, pct_receita deve ser mantido (não somado)
+            else:
+                despesas_consolidadas[nome_desp] = {
+                    'nome': nome_desp,
+                    'valor_mensal': getattr(desp, 'valor_mensal', 0),
+                    'categoria': getattr(desp, 'categoria', 'Administrativa'),
+                    'tipo_reajuste': getattr(desp, 'tipo_reajuste', 'ipca'),
+                    'ativa': getattr(desp, 'ativa', True),
+                    # NOVOS - Campos que faltavam (CRÍTICO!):
+                    'mes_reajuste': getattr(desp, 'mes_reajuste', 1),
+                    'pct_adicional': getattr(desp, 'pct_adicional', 0.0),
+                    'aplicar_reajuste': getattr(desp, 'aplicar_reajuste', True),
+                    'tipo_sazonalidade': getattr(desp, 'tipo_sazonalidade', 'uniforme'),
+                    'valores_2025': list(getattr(desp, 'valores_2025', [0.0] * 12)),
+                    # CRÍTICO para despesas variáveis:
+                    'tipo_despesa': getattr(desp, 'tipo_despesa', 'fixa'),
+                    'pct_receita': getattr(desp, 'pct_receita', 0.0),
+                    'valor_por_sessao': getattr(desp, 'valor_por_sessao', 0.0),
+                    'base_variavel': getattr(desp, 'base_variavel', 'receita'),
+                }
+        
+        # ===== COPIAR PREMISSAS (usa da primeira filial) =====
+        if not primeira_filial_processada:
+            # IMPORTANTE: Usar deepcopy para evitar referências compartilhadas!
+            motor_consolidado.macro = copy.deepcopy(motor_filial.macro)
+            motor_consolidado.pagamento = copy.deepcopy(motor_filial.pagamento)
+            motor_consolidado.operacional = copy.deepcopy(motor_filial.operacional)
+            motor_consolidado.premissas_simples = copy.deepcopy(motor_filial.premissas_simples)
+            motor_consolidado.premissas_financeiras = copy.deepcopy(motor_filial.premissas_financeiras)
+            motor_consolidado.premissas_fisio = copy.deepcopy(motor_filial.premissas_fisio)
+            motor_consolidado.premissas_folha = copy.deepcopy(motor_filial.premissas_folha)
+            motor_consolidado.premissas_dividendos = copy.deepcopy(motor_filial.premissas_dividendos)
+            motor_consolidado.premissas_fc = copy.deepcopy(motor_filial.premissas_fc)
+            motor_consolidado.sazonalidade = copy.deepcopy(motor_filial.sazonalidade)
+            primeira_filial_processada = True
+    
+    # ===== APLICAR DADOS CONSOLIDADOS AO MOTOR =====
+    
+    # Serviços
+    for nome, dados in servicos_consolidados.items():
+        motor_consolidado.servicos[nome] = Servico(
+            nome=dados['nome'],
+            duracao_minutos=dados['duracao_minutos'],
+            pacientes_por_sessao=dados['pacientes_por_sessao'],
+            valor_2025=dados['valor_2025'],
+            valor_2026=dados['valor_2026'],
+            usa_sala=dados['usa_sala'],
+            # Campos que faltavam:
+            pct_reajuste=dados['pct_reajuste'],
+            mes_reajuste=dados['mes_reajuste'],
+            sessoes_mes_base=dados['sessoes_mes_base'],
+            pct_crescimento=dados['pct_crescimento'],
+        )
+    
+    # PROPRIETÁRIOS (ESTRUTURA ANTIGA - CRÍTICO PARA CÁLCULO!)
+    for nome, dados in proprietarios_consolidados.items():
+        motor_consolidado.proprietarios[nome] = Profissional(
+            nome=dados['nome'],
+            tipo=dados['tipo'],
+            ativo=dados['ativo'],
+            sessoes_por_servico=dados['sessoes_por_servico'],
+            pct_crescimento_por_servico=dados['pct_crescimento_por_servico'],
+        )
+    
+    # PROFISSIONAIS (ESTRUTURA ANTIGA - CRÍTICO PARA CÁLCULO!)
+    for nome, dados in profissionais_consolidados.items():
+        motor_consolidado.profissionais[nome] = Profissional(
+            nome=dados['nome'],
+            tipo=dados['tipo'],
+            ativo=dados['ativo'],
+            sessoes_por_servico=dados['sessoes_por_servico'],
+            pct_crescimento_por_servico=dados['pct_crescimento_por_servico'],
+        )
+    
+    # Fisioterapeutas (estrutura nova - fallback)
+    for nome, dados in fisioterapeutas_consolidados.items():
+        motor_consolidado.fisioterapeutas[nome] = Fisioterapeuta(
+            nome=dados['nome'],
+            cargo=dados['cargo'],
+            nivel=dados['nivel'],
+            filial=dados['filial'],
+            ativo=dados['ativo'],
+            sessoes_por_servico=dados['sessoes_por_servico'],
+            pct_crescimento_por_servico=dados['pct_crescimento_por_servico'],
+            tipo_remuneracao=dados['tipo_remuneracao'],
+            valores_fixos_por_servico=dados['valores_fixos_por_servico'],
+            pct_customizado=dados['pct_customizado'],
+            escala_semanal=dados['escala_semanal'],
+        )
+    
+    # Funcionários
+    for nome, dados in funcionarios_consolidados.items():
+        motor_consolidado.funcionarios_clt[nome] = FuncionarioCLT(
+            nome=dados['nome'],
+            cargo=dados['cargo'],
+            salario_base=dados['salario_base'],
+            tipo_vinculo=dados['tipo_vinculo'],
+            vt_dia=dados['vt_dia'],
+            vr_dia=dados['vr_dia'],
+            plano_saude=dados['plano_saude'],
+            plano_odonto=dados['plano_odonto'],
+            mes_admissao=dados['mes_admissao'],
+            ativo=dados['ativo'],
+        )
+    
+    # Despesas Fixas
+    for nome, dados in despesas_consolidadas.items():
+        motor_consolidado.despesas_fixas[nome] = DespesaFixa(
+            nome=dados['nome'],
+            valor_mensal=dados['valor_mensal'],
+            categoria=dados['categoria'],
+            tipo_reajuste=dados['tipo_reajuste'],
+            ativa=dados['ativa'],
+            # Campos que faltavam:
+            mes_reajuste=dados['mes_reajuste'],
+            pct_adicional=dados['pct_adicional'],
+            aplicar_reajuste=dados['aplicar_reajuste'],
+            tipo_sazonalidade=dados['tipo_sazonalidade'],
+            valores_2025=dados['valores_2025'],
+            # CRÍTICO para despesas variáveis:
+            tipo_despesa=dados['tipo_despesa'],
+            pct_receita=dados['pct_receita'],
+            valor_por_sessao=dados['valor_por_sessao'],
+            base_variavel=dados['base_variavel'],
+        )
+    
+    # Atualizar premissas operacionais com totais
+    motor_consolidado.operacional.num_fisioterapeutas = len(fisioterapeutas_consolidados) + len(proprietarios_consolidados) + len(profissionais_consolidados)
+    
+    return motor_consolidado
+
+# ============================================
+# FUNÇÃO DE TELA DE LOGIN PERSONALIZADA
+# ============================================
+
+def mostrar_tela_login():
+    """Exibe tela de login personalizada do Budget Engine"""
+    
+    # Configuração mínima da página para login
+    st.set_page_config(
+        page_title="Budget Engine - Login",
+        page_icon="🔐",
+        layout="centered",
+        initial_sidebar_state="collapsed"
+    )
+    
+    # CSS para tela de login
+    st.markdown("""
+    <style>
+        /* Oculta sidebar no login */
+        [data-testid="stSidebar"] {display: none;}
+        
+        /* Estilo do container de login */
+        .login-box {
+            background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+            padding: 2rem;
+            border-radius: 16px;
+            color: white;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        
+        .login-box h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+        
+        .login-box p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+        
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Layout centralizado
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        # Header
+        st.markdown("""
+        <div class="login-box">
+            <h1>📊 Budget Engine</h1>
+            <p>Sistema de Orçamento para Clínicas de Fisioterapia</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Formulário de login
+        st.markdown("### 🔐 Acesse sua conta")
+        
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("👤 Login", placeholder="seu.usuario")
+            senha = st.text_input("🔒 Senha", type="password", placeholder="Sua senha")
+            
+            col_btn1, col_btn2 = st.columns([2, 1])
+            with col_btn1:
+                submitted = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+            with col_btn2:
+                st.form_submit_button("Esqueci", use_container_width=True, disabled=True)
+            
+            if submitted:
+                if not email or not senha:
+                    st.error("⚠️ Preencha login e senha!")
+                else:
+                    with st.spinner("Verificando credenciais..."):
+                        user = login(email, senha)
+                        
+                        if user:
+                            st.session_state["user"] = user
+                            st.session_state["authenticated"] = True
+                            st.session_state["company_id"] = user.get("company_id")
+                            st.session_state["user_id"] = user.get("id")
+                            st.success(f"✅ Bem-vindo, {user.get('name', 'Usuário')}!")
+                            st.rerun()
+                        else:
+                            st.error("❌ Login ou senha incorretos!")
+        
+        # Footer
+        st.markdown("---")
+        st.caption("Budget Engine © 2024 - Sistema de Consultoria Financeira")
+
+# ============================================
+# VERIFICAÇÃO DE AUTENTICAÇÃO
+# ============================================
+
+# Se autenticação está habilitada, verifica login
+if AUTH_ENABLED and not is_authenticated():
+    mostrar_tela_login()
+    st.stop()
 
 # ============================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -201,13 +1190,42 @@ st.markdown("""
 if 'cliente_manager' not in st.session_state:
     st.session_state.cliente_manager = ClienteManager()
 
-# Cliente e Filial selecionados
+# ============================================
+# FUNÇÕES DE PERSISTÊNCIA (ANTES DA INICIALIZAÇÃO)
+# ============================================
+
+ULTIMA_SELECAO_PATH = "data/ultima_selecao.json"
+
+def _carregar_ultima_selecao():
+    """Carrega a última seleção de cliente/filial"""
+    import os
+    if os.path.exists(ULTIMA_SELECAO_PATH):
+        try:
+            with open(ULTIMA_SELECAO_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return None
+
+# Cliente e Filial selecionados - COM RESTAURAÇÃO AUTOMÁTICA
 if 'cliente_id' not in st.session_state:
-    st.session_state.cliente_id = None
-if 'filial_id' not in st.session_state:
-    st.session_state.filial_id = None
-if 'cliente_atual' not in st.session_state:
-    st.session_state.cliente_atual = None
+    # Tenta restaurar última seleção
+    ultima = _carregar_ultima_selecao()
+    if ultima and ultima.get("cliente_id"):
+        st.session_state.cliente_id = ultima["cliente_id"]
+        st.session_state.filial_id = ultima.get("filial_id")
+        # Carrega dados do cliente
+        st.session_state.cliente_atual = st.session_state.cliente_manager.carregar_cliente(ultima["cliente_id"])
+    else:
+        st.session_state.cliente_id = None
+        st.session_state.filial_id = None
+        st.session_state.cliente_atual = None
+else:
+    # Já tem sessão, só garante que filial_id existe
+    if 'filial_id' not in st.session_state:
+        st.session_state.filial_id = None
+    if 'cliente_atual' not in st.session_state:
+        st.session_state.cliente_atual = None
 
 # Dados legados (manter compatibilidade)
 if 'cliente_selecionado' not in st.session_state:
@@ -218,21 +1236,151 @@ if 'dados_importados' not in st.session_state:
     st.session_state.dados_importados = None
 if 'pagina' not in st.session_state:
     st.session_state.pagina = "Dashboard"
+
+# Motor - CARREGA DADOS SE CLIENTE/FILIAL SELECIONADOS
+# Agora com suporte a 3 motores (um por cenário)
 if 'motor' not in st.session_state:
-    st.session_state.motor = criar_motor_vazio()
+    if st.session_state.cliente_id and st.session_state.filial_id and st.session_state.filial_id != "consolidado":
+        # Importa função de carregamento com cenários
+        from modules.cliente_manager import carregar_motores_cenarios
+        
+        # Carrega os 3 motores (com migração automática se necessário)
+        resultado = carregar_motores_cenarios(
+            st.session_state.cliente_manager,
+            st.session_state.cliente_id,
+            st.session_state.filial_id
+        )
+        
+        # Armazena os 3 motores
+        st.session_state.motores_cenarios = resultado["motores"]
+        st.session_state.usar_cenarios = resultado.get("usar_cenarios", True)
+        st.session_state.cenario_aprovado = resultado.get("cenario_aprovado", None)
+        
+        # Define cenário ativo (para visualização)
+        cenario_ativo = resultado.get("cenario_ativo", "Conservador")
+        if 'cenario_ativo' not in st.session_state:
+            st.session_state.cenario_ativo = cenario_ativo
+        
+        # Define cenário de edição (para Premissas)
+        if 'cenario_edicao' not in st.session_state:
+            st.session_state.cenario_edicao = "Conservador"
+        
+        # Motor ativo = motor do cenário ativo
+        st.session_state.motor = st.session_state.motores_cenarios[st.session_state.cenario_ativo]
+        
+        # Se foi migrado, salva no novo formato
+        if resultado.get("_migrado", False):
+            from modules.cliente_manager import salvar_motores_cenarios
+            salvar_motores_cenarios(
+                st.session_state.cliente_manager,
+                st.session_state.cliente_id,
+                st.session_state.filial_id,
+                st.session_state.motores_cenarios,
+                st.session_state.cenario_ativo,
+                st.session_state.usar_cenarios,
+                st.session_state.cenario_aprovado
+            )
+    else:
+        st.session_state.motor = criar_motor_vazio()
+        st.session_state.motores_cenarios = {
+            "Conservador": st.session_state.motor,
+            "Pessimista": criar_motor_vazio(),
+            "Otimista": criar_motor_vazio()
+        }
+        st.session_state.cenario_ativo = "Conservador"
+        st.session_state.cenario_edicao = "Conservador"
+        st.session_state.usar_cenarios = True
+        st.session_state.cenario_aprovado = None
+
+# Garante que motores_cenarios existe
+if 'motores_cenarios' not in st.session_state:
+    st.session_state.motores_cenarios = {
+        "Conservador": st.session_state.motor,
+        "Pessimista": criar_motor_vazio(),
+        "Otimista": criar_motor_vazio()
+    }
+if 'cenario_edicao' not in st.session_state:
+    st.session_state.cenario_edicao = "Conservador"
 
 # ============================================
-# FUNÇÕES DE PERSISTÊNCIA
+# FUNÇÕES DE PERSISTÊNCIA (COMPLETAS)
 # ============================================
+
+def salvar_ultima_selecao():
+    """Salva a última seleção de cliente/filial para restaurar ao reabrir"""
+    import os
+    os.makedirs(os.path.dirname(ULTIMA_SELECAO_PATH), exist_ok=True)
+    dados = {
+        "cliente_id": st.session_state.cliente_id,
+        "filial_id": st.session_state.filial_id
+    }
+    try:
+        with open(ULTIMA_SELECAO_PATH, 'w', encoding='utf-8') as f:
+            json.dump(dados, f)
+    except Exception as e:
+        registrar_erro("BE-300", str(e), "salvar_ultima_selecao")  # Log silencioso
+
+def carregar_ultima_selecao():
+    """Carrega a última seleção de cliente/filial"""
+    import os
+    if os.path.exists(ULTIMA_SELECAO_PATH):
+        try:
+            with open(ULTIMA_SELECAO_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            pass
+    return None
 
 def salvar_filial_atual():
-    """Salva os dados da filial atual no banco de dados"""
-    if st.session_state.cliente_id and st.session_state.filial_id and st.session_state.filial_id != "consolidado":
+    """Salva os dados da filial atual no banco de dados (3 motores)"""
+    cliente_id = st.session_state.get('cliente_id')
+    filial_id = st.session_state.get('filial_id')
+    
+    # Debug: verificar condições
+    if not cliente_id:
+        st.warning("⚠️ Debug: cliente_id não definido")
+        return False
+    if not filial_id:
+        st.warning("⚠️ Debug: filial_id não definido")
+        return False
+    if filial_id == "consolidado":
+        st.info("ℹ️ Modo Consolidado não permite salvamento")
+        return False
+    
+    try:
+        from modules.cliente_manager import salvar_motores_cenarios
+        
         manager = st.session_state.cliente_manager
-        dados = motor_para_dict(st.session_state.motor)
-        manager.salvar_filial(st.session_state.cliente_id, st.session_state.filial_id, dados)
+        
+        # Garante que o motor ativo está sincronizado
+        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+        st.session_state.motores_cenarios[cenario_ativo] = st.session_state.motor
+        
+        # Pega usar_cenarios do motor ativo
+        usar_cenarios = getattr(st.session_state.motor, 'usar_cenarios', True)
+        cenario_aprovado = st.session_state.get('cenario_aprovado', None)
+        
+        # Salva os 3 motores no novo formato
+        salvar_motores_cenarios(
+            manager,
+            cliente_id,
+            filial_id,
+            st.session_state.motores_cenarios,
+            cenario_ativo,
+            usar_cenarios,
+            cenario_aprovado
+        )
+        
+        # Também salva qual cliente/filial está selecionado
+        salvar_ultima_selecao()
+        
         return True
-    return False
+    except Exception as e:
+        erro_msg = registrar_erro("BE-300", str(e), "salvar_filial_atual")
+        st.error(f"❌ {erro_msg}")
+        import traceback
+        st.code(traceback.format_exc())
+        return False
 
 # ============================================
 # SIDEBAR E NAVEGAÇÃO (DEVE VIR PRIMEIRO!)
@@ -247,31 +1395,75 @@ with st.sidebar:
     st.title(APP_NAME)
     st.caption(f"v{APP_VERSION}")
     
+    # ========== USUÁRIO LOGADO ==========
+    if AUTH_ENABLED and is_authenticated():
+        user = get_current_user()
+        if user:
+            st.markdown("---")
+            st.markdown(f"👤 **{user.get('name', 'Usuário')}**")
+            company = user.get("companies", {})
+            if company:
+                st.caption(f"🏢 {company.get('name', 'Empresa')}")
+            
+            if st.button("🚪 Sair", use_container_width=True):
+                logout()
+                st.rerun()
+    # ====================================
+    
     st.markdown("---")
     
     # Menu de navegação com ícones
+    # Verifica se cenários está habilitado para esta filial
+    motor = st.session_state.get('motor')
+    usar_cenarios = getattr(motor, 'usar_cenarios', True) if motor else True
+    
+    # Define opções base
+    opcoes_menu = []
+    
+    # Só adiciona Cenários se estiver habilitado
+    if usar_cenarios:
+        opcoes_menu.append("🎯 Cenários")
+    
+    opcoes_menu.extend([
+        "🏠 Dashboard",
+        "🤖 Consultor IA",
+        "⚙️ Premissas", 
+        "📈 Atendimentos", 
+        "👔 Folha Funcionários", 
+        "🏥 Folha Fisioterapeutas", 
+        "💼 Simples Nacional", 
+        "💰 Financeiro", 
+        "📊 Dividendos",
+        "📋 DRE Simulado", 
+        "🏦 FC Simulado", 
+        "📊 Taxa Ocupação",
+        "⚖️ Ponto Equilíbrio",
+        "🎯 Custeio ABC",
+        "───────────────",  # Separador visual
+        "✅ Lançar Realizado",
+        "📊 Orçado x Realizado",
+        "📋 DRE Comparativo",
+        "───────────────",  # Separador visual
+        "👥 Clientes", 
+        "📥 Importar Dados", 
+        "📄 DRE (Excel)", 
+        "📄 FC (Excel)",
+    ])
+    
+    # Adiciona opções de Admin apenas para administradores
+    user_logado = get_current_user() if AUTH_ENABLED else None
+    is_admin_user = user_logado and user_logado.get("role") == "admin" if user_logado else True
+    
+    if is_admin_user:
+        opcoes_menu.extend([
+            "───────────────",  # Separador visual
+            "🔧 Admin",
+            "🛠️ Diagnóstico Dev"
+        ])
+    
     pagina = st.radio(
         "Navegação",
-        [
-            "🏠 Dashboard", 
-            "🤖 Consultor IA",
-            "⚙️ Premissas", 
-            "📈 Atendimentos", 
-            "👔 Folha Funcionários", 
-            "🏥 Folha Fisioterapeutas", 
-            "💼 Simples Nacional", 
-            "💰 Financeiro", 
-            "📊 Dividendos",
-            "📋 DRE Simulado", 
-            "🏦 FC Simulado", 
-            "📊 Taxa Ocupação",
-            "⚖️ Ponto Equilíbrio",
-            "🎯 Custeio ABC",
-            "👥 Clientes", 
-            "📥 Importar Dados", 
-            "📄 DRE (Excel)", 
-            "📄 FC (Excel)"
-        ],
+        opcoes_menu,
         label_visibility="collapsed"
     )
     
@@ -300,13 +1492,18 @@ with st.sidebar:
         
         st.markdown("---")
         
-        # Botão de salvar
+        # Botão de salvar com feedback melhorado
         if st.session_state.filial_id and st.session_state.filial_id != "consolidado":
-            if st.button("💾 Salvar Agora", use_container_width=True, key="btn_salvar_sidebar", type="primary"):
-                salvar_filial_atual()
-                st.success("✅ Dados salvos!")
-                st.balloons()
-            st.caption("🔄 Auto-save ao trocar de página/filial")
+            if st.button("💾 SALVAR DADOS", use_container_width=True, key="btn_salvar_sidebar", type="primary"):
+                try:
+                    salvar_filial_atual()
+                    st.success("✅ Dados salvos com sucesso!")
+                    st.balloons()
+                except Exception as e:
+                    erro_msg = registrar_erro("BE-300", str(e), "sidebar/btn_salvar")
+                    st.error(f"❌ {erro_msg}")
+            st.caption("⚠️ Clique SALVAR antes de fechar!")
+            st.caption("🔄 Auto-save ao trocar página/filial")
         elif st.session_state.cliente_id:
             st.warning("⚠️ Selecione uma filial para salvar")
         else:
@@ -343,6 +1540,87 @@ def render_header():
             <p>{APP_SUBTITLE} • v{APP_VERSION}</p>
         </div>
     """, unsafe_allow_html=True)
+    
+    # Só mostra o cenário se estiver habilitado para esta filial
+    if hasattr(st.session_state, 'motor') and st.session_state.motor is not None:
+        motor = st.session_state.motor
+        usar_cenarios = getattr(motor, 'usar_cenarios', True)
+        
+        # Só mostra badge se cenários estiver habilitado
+        if usar_cenarios:
+            cenario_oficial = getattr(motor, 'cenario_oficial', 'Conservador')
+            
+            # Inicializa cenario_ativo se não existir
+            if 'cenario_ativo' not in st.session_state:
+                st.session_state.cenario_ativo = cenario_oficial
+            
+            cenario_nome = st.session_state.cenario_ativo
+            
+            # Cores e ícones por cenário
+            config_cenario = {
+                "Conservador": {"cor": "#ffc107", "icone": "⚠️", "bg": "#ffc10722"},
+                "Pessimista": {"cor": "#dc3545", "icone": "📉", "bg": "#dc354522"},
+                "Otimista": {"cor": "#28a745", "icone": "🚀", "bg": "#28a74522"}
+            }
+            
+            cfg = config_cenario.get(cenario_nome, config_cenario["Conservador"])
+            marca_oficial = " ⭐" if cenario_nome == cenario_oficial else ""
+            
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, {cfg['bg']}, transparent);
+                border-left: 4px solid {cfg['cor']};
+                padding: 10px 15px;
+                border-radius: 4px;
+                margin: 10px 0;
+            ">
+                <span style="font-size: 20px; margin-right: 10px;">{cfg['icone']}</span>
+                <span style="font-size: 16px; font-weight: bold; color: {cfg['cor']};">
+                    CENÁRIO: {cenario_nome.upper()}{marca_oficial}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Aplica o cenário ao motor (garante sincronização)
+            motor.aplicar_cenario(cenario_nome)
+
+
+def render_cenario_badge():
+    """Renderiza o badge do cenário ativo - chamar APÓS seletor de cenário"""
+    if hasattr(st.session_state, 'motor') and st.session_state.motor is not None:
+        motor = st.session_state.motor
+        cenario_nome = motor.cenario.nome if hasattr(motor, 'cenario') else "Conservador"
+        cenario_oficial = getattr(motor, 'cenario_oficial', 'Conservador')
+        
+        # Cores e ícones por cenário
+        config_cenario = {
+            "Conservador": {"cor": "#ffc107", "icone": "⚠️", "bg": "#ffc10722"},
+            "Pessimista": {"cor": "#dc3545", "icone": "📉", "bg": "#dc354522"},
+            "Otimista": {"cor": "#28a745", "icone": "🚀", "bg": "#28a74522"}
+        }
+        
+        cfg = config_cenario.get(cenario_nome, config_cenario["Conservador"])
+        
+        # Marca se é o oficial
+        marca_oficial = " ⭐" if cenario_nome == cenario_oficial else ""
+        
+        st.markdown(f"""
+        <div style="
+            background: linear-gradient(90deg, {cfg['bg']}, transparent);
+            border-left: 4px solid {cfg['cor']};
+            padding: 8px 15px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        ">
+            <span style="font-size: 18px;">{cfg['icone']}</span>
+            <span style="font-weight: bold; color: {cfg['cor']};">
+                Cenário: {cenario_nome}{marca_oficial}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def render_seletor_cliente_filial():
@@ -353,8 +1631,33 @@ def render_seletor_cliente_filial():
     with st.container():
         col1, col2, col3, col4 = st.columns([3, 3, 1, 1])
         
-        # Lista de clientes
-        clientes = manager.listar_clientes()
+        # Lista de clientes - FILTRA POR EMPRESA DO USUÁRIO
+        todos_clientes = manager.listar_clientes()
+        
+        # Verificar se deve filtrar
+        user = get_current_user() if AUTH_ENABLED else None
+        is_admin = user and user.get("role") == "admin" if user else True
+        
+        if is_admin:
+            # Admin vê todos os clientes
+            clientes = todos_clientes
+        else:
+            # Usuário comum vê apenas clientes da sua empresa
+            empresa_nome = user.get("companies", {}).get("name", "") if user else ""
+            
+            # CORREÇÃO: Busca mais flexível
+            clientes = []
+            for c in todos_clientes:
+                nome_cliente = c["nome"].lower().replace(" ", "").replace("_", "")
+                nome_empresa = empresa_nome.lower().replace(" ", "").replace("_", "")
+                if nome_cliente == nome_empresa or nome_empresa in nome_cliente or nome_cliente in nome_empresa:
+                    clientes.append(c)
+            
+            # AUTO-SELEÇÃO: Se só tem 1 cliente, seleciona automaticamente
+            if len(clientes) == 1 and not st.session_state.cliente_id:
+                st.session_state.cliente_id = clientes[0]["id"]
+                st.session_state.cliente_atual = manager.carregar_cliente(clientes[0]["id"])
+        
         opcoes_clientes = ["Selecione um cliente..."] + [c["nome"] for c in clientes]
         ids_clientes = [None] + [c["id"] for c in clientes]
         
@@ -445,35 +1748,54 @@ def render_seletor_cliente_filial():
                     # Pegar nome do cliente (é um dataclass, não dict)
                     cliente_nome_atual = st.session_state.cliente_atual.nome if st.session_state.cliente_atual else 'Cliente'
                     
-                    # Carrega motor da filial ou reset para consolidado
+                    # Carrega motor da filial ou consolida para modo consolidado
                     if novo_filial_id == "consolidado":
-                        # Para consolidado sem filiais preenchidas, usa motor vazio
-                        # TODO: Implementar consolidação real (soma das filiais)
-                        st.session_state.motor = criar_motor_vazio(
-                            cliente_nome=cliente_nome_atual,
-                            filial_nome="Consolidado",
-                            tipo_relatorio="Consolidado"
+                        # Consolida dados de TODAS as filiais
+                        st.session_state.motor = consolidar_filiais(
+                            manager=manager,
+                            cliente_id=st.session_state.cliente_id,
+                            cliente_nome=cliente_nome_atual
                         )
+                        # Para consolidado, não usa cenários
+                        st.session_state.motores_cenarios = {
+                            "Conservador": st.session_state.motor,
+                            "Pessimista": st.session_state.motor,
+                            "Otimista": st.session_state.motor
+                        }
                     else:
-                        dados_filial = manager.carregar_filial(
-                            st.session_state.cliente_id, 
+                        # Usa novo sistema de carregamento com 3 cenários
+                        from modules.cliente_manager import carregar_motores_cenarios
+                        
+                        resultado = carregar_motores_cenarios(
+                            manager,
+                            st.session_state.cliente_id,
                             novo_filial_id
                         )
-                        if dados_filial and dados_filial.get("servicos"):
-                            # Filial tem dados salvos - carrega em motor VAZIO
-                            # para não misturar com dados de teste
-                            st.session_state.motor = criar_motor_vazio(
-                                cliente_nome=cliente_nome_atual,
-                                filial_nome=filial_nome,
-                                tipo_relatorio="Filial"
-                            )
-                            dict_para_motor(dados_filial, st.session_state.motor)
-                        else:
-                            # Filial nova, usa motor vazio
-                            st.session_state.motor = criar_motor_vazio(
-                                cliente_nome=cliente_nome_atual,
-                                filial_nome=filial_nome,
-                                tipo_relatorio="Filial"
+                        
+                        # Armazena os 3 motores
+                        st.session_state.motores_cenarios = resultado["motores"]
+                        st.session_state.usar_cenarios = resultado.get("usar_cenarios", True)
+                        
+                        # Define cenário ativo
+                        cenario_ativo = resultado.get("cenario_ativo", "Conservador")
+                        st.session_state.cenario_ativo = cenario_ativo
+                        st.session_state.cenario_edicao = "Conservador"
+                        
+                        # Motor ativo = motor do cenário ativo
+                        st.session_state.motor = st.session_state.motores_cenarios[cenario_ativo]
+                        st.session_state.cenario_aprovado = resultado.get("cenario_aprovado", None)
+                        
+                        # Se foi migrado, salva no novo formato
+                        if resultado.get("_migrado", False):
+                            from modules.cliente_manager import salvar_motores_cenarios
+                            salvar_motores_cenarios(
+                                manager,
+                                st.session_state.cliente_id,
+                                novo_filial_id,
+                                st.session_state.motores_cenarios,
+                                cenario_ativo,
+                                st.session_state.usar_cenarios,
+                                st.session_state.cenario_aprovado
                             )
                     
                     st.rerun()
@@ -685,6 +2007,25 @@ def pagina_dashboard():
     meses_nomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     
     # ========================================================================
+    # ALERTA DE VALIDAÇÃO DE SESSÕES
+    # ========================================================================
+    try:
+        validacao = motor.validar_sessoes()
+        if not validacao["ok"]:
+            with st.expander("⚠️ **Atenção: Inconsistências detectadas nas sessões**", expanded=False):
+                modo = validacao["detalhes"]["modo"]
+                st.caption(f"Modo atual: **{modo.upper()}** (configurado em Premissas → Operacionais)")
+                
+                for erro in validacao["erros"]:
+                    st.error(f"❌ {erro}")
+                for alerta in validacao["alertas"]:
+                    st.warning(f"⚠️ {alerta}")
+                
+                st.markdown("**💡 Dica:** Vá em **⚙️ Premissas → Operacionais** para ver detalhes e ajustar.")
+    except:
+        pass  # Silencioso se falhar
+    
+    # ========================================================================
     # CONTROLES GLOBAIS
     # ========================================================================
     col_ctrl1, col_ctrl2, col_ctrl3, col_ctrl4 = st.columns([2, 2, 3, 3])
@@ -712,34 +2053,82 @@ def pagina_dashboard():
         else:
             meses_range = list(range(12))
     
+    with col_ctrl3:
+        # Verifica se cenários está habilitado
+        usar_cenarios = getattr(motor, 'usar_cenarios', True)
+        
+        if usar_cenarios:
+            # Lista de cenários disponíveis
+            cenarios_opcoes = ["Conservador", "Pessimista", "Otimista"]
+            
+            cenario_oficial = getattr(motor, 'cenario_oficial', 'Conservador')
+            
+            # Usar session_state como fonte de verdade
+            cenario_atual = st.session_state.get('cenario_ativo', cenario_oficial)
+        
+            # Validar que está na lista
+            if cenario_atual not in cenarios_opcoes:
+                cenario_atual = cenario_oficial
+            
+            idx_cenario = cenarios_opcoes.index(cenario_atual)
+            
+            cenario_selecionado = st.selectbox(
+                "🎯 Cenário",
+                cenarios_opcoes,
+                index=idx_cenario,
+                key="dash_cenario",
+                format_func=lambda x: f"⭐ {x}" if x == cenario_oficial else x,
+                help=f"⭐ = Cenário oficial ({cenario_oficial}). Configure em Premissas → Cenários"
+            )
+            
+            # Se mudou o cenário, troca o motor ativo
+            if cenario_selecionado != cenario_atual:
+                # Salva motor atual antes de trocar
+                st.session_state.motores_cenarios[cenario_atual] = st.session_state.motor
+                
+                # Troca para o motor do novo cenário
+                st.session_state.cenario_ativo = cenario_selecionado
+                st.session_state.motor = st.session_state.motores_cenarios[cenario_selecionado]
+                motor = st.session_state.motor
+            else:
+                st.session_state.cenario_ativo = cenario_selecionado
+        else:
+            # Cenários desabilitado - não mostra seletor
+            st.session_state.cenario_ativo = "Conservador"
+    
     with col_ctrl4:
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("📥 Exportar Budget Excel", type="primary", use_container_width=True):
+        
+        # Pegar nomes do cliente e filial (usado em ambas exportações)
+        if st.session_state.cliente_atual:
+            cliente_nome = st.session_state.cliente_atual.nome
+        else:
+            cliente_nome = 'Cliente'
+        
+        if st.session_state.cliente_id and st.session_state.filial_id:
+            if st.session_state.filial_id == "consolidado":
+                filial_nome = "Consolidado"
+            else:
+                filiais = st.session_state.cliente_manager.listar_filiais(st.session_state.cliente_id)
+                filial_nome = next(
+                    (f["nome"] for f in filiais if f["id"] == st.session_state.filial_id),
+                    "Filial"
+                )
+        else:
+            filial_nome = 'Filial'
+        
+        # Dropdown de exportação
+        opcao_export = st.selectbox(
+            "📥 Exportar",
+            ["Selecione...", "📊 Excel (Completo)", "📄 PDF (Executivo)"],
+            key="select_export_dashboard",
+            label_visibility="collapsed"
+        )
+        
+        if opcao_export == "📊 Excel (Completo)":
             try:
                 from modules.excel_export import exportar_budget_cliente
-                import tempfile
-                import os
                 
-                # Pegar nome do cliente (é um dataclass, não dict)
-                if st.session_state.cliente_atual:
-                    cliente_nome = st.session_state.cliente_atual.nome
-                else:
-                    cliente_nome = 'Cliente'
-                
-                # Pegar nome da filial
-                if st.session_state.cliente_id and st.session_state.filial_id:
-                    if st.session_state.filial_id == "consolidado":
-                        filial_nome = "Consolidado"
-                    else:
-                        filiais = st.session_state.cliente_manager.listar_filiais(st.session_state.cliente_id)
-                        filial_nome = next(
-                            (f["nome"] for f in filiais if f["id"] == st.session_state.filial_id),
-                            "Filial"
-                        )
-                else:
-                    filial_nome = 'Filial'
-                
-                # Atualizar motor com os nomes corretos
                 motor.cliente_nome = cliente_nome
                 motor.filial_nome = filial_nome
                 motor.tipo_relatorio = "Consolidado" if st.session_state.filial_id == "consolidado" else "Filial"
@@ -747,7 +2136,6 @@ def pagina_dashboard():
                 filepath = f"/tmp/Budget_{cliente_nome}_{filial_nome}_2026.xlsx"
                 exportar_budget_cliente(motor, filepath)
                 
-                # Disponibilizar download
                 with open(filepath, 'rb') as f:
                     st.download_button(
                         label="⬇️ Baixar Excel",
@@ -756,11 +2144,76 @@ def pagina_dashboard():
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         use_container_width=True
                     )
-                st.success("✅ Relatório gerado com sucesso!")
             except Exception as e:
-                st.error(f"Erro ao gerar relatório: {str(e)}")
+                erro_msg = registrar_erro("BE-601", str(e), "pagina_dashboard/exportar_excel")
+                st.error(f"Erro ao gerar relatório: {erro_msg}")
+        
+        elif opcao_export == "📄 PDF (Executivo)":
+            # Expander com opções de personalização
+            with st.expander("⚙️ Personalizar Relatório PDF", expanded=True):
+                col_pdf1, col_pdf2 = st.columns(2)
+                
+                with col_pdf1:
+                    nome_relatorio = st.text_input(
+                        "Nome da Empresa/Cliente",
+                        value=f"{cliente_nome} - {filial_nome}" if filial_nome != "Cliente" else cliente_nome,
+                        key="pdf_nome_cliente",
+                        help="Nome que aparecerá na capa e cabeçalho do relatório"
+                    )
+                
+                with col_pdf2:
+                    st.markdown("**Conteúdo do Relatório:**")
+                    st.caption("""
+                    ✓ Visão Geral e KPIs  
+                    ✓ Receitas por Serviço  
+                    ✓ Custeio ABC (custo/sessão)  
+                    ✓ Ponto de Equilíbrio  
+                    ✓ Taxa de Ocupação  
+                    ✓ Fluxo de Caixa  
+                    """)
+                
+                obs_relatorio = st.text_area(
+                    "Observações Adicionais (opcional)",
+                    value="",
+                    height=100,
+                    key="pdf_observacoes",
+                    help="Texto que aparecerá na seção de Conclusões do relatório",
+                    placeholder="Ex: Próximos passos, considerações especiais, notas para o cliente..."
+                )
+                
+                if st.button("📄 Gerar Relatório PDF", use_container_width=True, type="primary"):
+                    try:
+                        from modules.pdf_report import gerar_relatorio_do_motor
+                        
+                        # Determinar tipo de relatório
+                        tipo_rel = "Consolidado" if st.session_state.filial_id == "consolidado" else "Filial"
+                        
+                        with st.spinner("Gerando relatório... Isso pode levar alguns segundos."):
+                            pdf_buffer = gerar_relatorio_do_motor(
+                                motor=motor,
+                                nome_cliente=nome_relatorio,
+                                observacoes=obs_relatorio,
+                                tipo_relatorio=tipo_rel
+                            )
+                        
+                        st.success("✅ Relatório gerado com sucesso!")
+                        
+                        st.download_button(
+                            label="⬇️ Baixar PDF",
+                            data=pdf_buffer.getvalue(),
+                            file_name=f"Planejamento_Orcamentario_2026_{cliente_nome.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                        
+                    except Exception as e:
+                        erro_msg = registrar_erro("BE-602", str(e), "pagina_dashboard/exportar_pdf")
+                        st.error(f"Erro ao gerar PDF: {erro_msg}")
     
     st.markdown("---")
+    
+    # Badge do cenário ativo (após seleção)
+    # Badge no header
     
     # ========================================================================
     # CALCULAR DADOS DO PERÍODO
@@ -785,8 +2238,9 @@ def pagina_dashboard():
     lucro_sessao = ebitda_periodo / sessoes_periodo if sessoes_periodo > 0 else 0
     
     # Ocupação média do período
-    taxa_prof_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_profissional for m in meses_range) / len(meses_range)
-    taxa_sala_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_sala for m in meses_range) / len(meses_range)
+    num_meses = len(meses_range) if meses_range else 1
+    taxa_prof_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_profissional for m in meses_range) / num_meses
+    taxa_sala_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_sala for m in meses_range) / num_meses
     gargalo = "Sala" if taxa_sala_media > taxa_prof_media else "Profissional"
     
     # ========================================================================
@@ -953,6 +2407,7 @@ def pagina_dashboard():
     
     with col1:
         # Treemap de Mix de Receita
+        import pandas as pd  # Import local para garantir
         servicos_data = []
         for servico in motor.servicos.keys():
             receita_srv = sum(get_rateio_attr(tdabc_anual.meses[m], servico, 'receita', 0) for m in meses_range)
@@ -1049,18 +2504,32 @@ def pagina_dashboard():
     prof_data = []
     for nome, fisio in motor.fisioterapeutas.items():
         if fisio.ativo:
-            sessoes_prof = sum(
-                sum(fisio.sessoes_por_servico.get(srv, 0) * (1 + fisio.pct_crescimento_por_servico.get(srv, 0)/100 * m/12)
-                    for srv in fisio.sessoes_por_servico.keys())
-                for m in meses_range
-            )
+            sessoes_prof = 0
+            receita_prof = 0
             
-            receita_prof = sum(
-                sum(fisio.sessoes_por_servico.get(srv, 0) * (1 + fisio.pct_crescimento_por_servico.get(srv, 0)/100 * m/12) *
-                    motor.servicos[srv].valor_2026
-                    for srv in fisio.sessoes_por_servico.keys() if srv in motor.servicos)
-                for m in meses_range
-            )
+            for m in meses_range:
+                for srv in fisio.sessoes_por_servico.keys():
+                    qtd_base = fisio.sessoes_por_servico.get(srv, 0)
+                    if qtd_base > 0:
+                        # Usar mesma fórmula de crescimento linear do motor
+                        crescimento = fisio.pct_crescimento_por_servico.get(srv, 0)
+                        if crescimento > 0:
+                            crescimento_qtd = qtd_base * crescimento
+                            cresc_mensal = crescimento_qtd / 13.1
+                            sessoes_mes = qtd_base + cresc_mensal * (m + 0.944)
+                        else:
+                            sessoes_mes = qtd_base
+                        
+                        # APLICA SAZONALIDADE
+                        fator_saz = motor.sazonalidade.fatores[m] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes_mes = sessoes_mes * fator_saz
+                        
+                        sessoes_prof += sessoes_mes
+                        
+                        if srv in motor.servicos:
+                            # Usar calcular_valor_servico_mes para considerar reajuste
+                            valor_srv = motor.calcular_valor_servico_mes(srv, m, "profissional")
+                            receita_prof += sessoes_mes * valor_srv
             
             horas_mes = fisio.horas_mes * len(meses_range)
             ocupacao = sessoes_prof / (horas_mes / 0.83) if horas_mes > 0 else 0  # Assumindo 50min por sessão
@@ -1965,7 +3434,607 @@ def pagina_dashboard():
     st.caption("📊 Dashboard atualizado em tempo real com dados do motor de cálculo")
 
 
+def _pagina_cenarios_consolidado():
+    """Mostra comparativo de cenários para visão Consolidada (todas as filiais)"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+    
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+    
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+    
+    st.info("📊 **Visão Consolidada** - Soma de todas as filiais por cenário")
+    
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {"Pessimista": 0, "Conservador": 0, "Otimista": 0, "Aprovado": 0}
+    
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+        
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            cenario_aprovado = resultado.get("cenario_aprovado", None)
+            
+            # Calcula receita de cada cenário
+            receitas = {}
+            for cenario_nome, motor in motores.items():
+                if motor:
+                    receita = sum(
+                        sum(motor.calcular_receita_servico_mes(s, m) for s in motor.servicos)
+                        for m in range(12)
+                    )
+                    receitas[cenario_nome] = receita
+                    totais[cenario_nome] += receita
+            
+            # Soma o cenário aprovado
+            if cenario_aprovado and cenario_aprovado in receitas:
+                totais["Aprovado"] += receitas[cenario_aprovado]
+            
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "📉 Pessimista": f"R$ {receitas.get('Pessimista', 0)/1000:,.0f}k",
+                "⚠️ Conservador": f"R$ {receitas.get('Conservador', 0)/1000:,.0f}k",
+                "🚀 Otimista": f"R$ {receitas.get('Otimista', 0)/1000:,.0f}k",
+                "✅ Aprovado": cenario_aprovado or "-"
+            })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "📉 Pessimista": "R$ 0k",
+                "⚠️ Conservador": "R$ 0k",
+                "🚀 Otimista": "R$ 0k",
+                "✅ Aprovado": "-"
+            })
+    
+    # ===== CARDS DE TOTAIS (Componentes Nativos) =====
+    st.subheader("📊 Totais Consolidados")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📉 Pessimista", f"R$ {totais['Pessimista']/1000:,.0f}k")
+    
+    with col2:
+        st.metric("⚠️ Conservador", f"R$ {totais['Conservador']/1000:,.0f}k")
+    
+    with col3:
+        st.metric("🚀 Otimista", f"R$ {totais['Otimista']/1000:,.0f}k")
+    
+    with col4:
+        st.metric("✅ Total Aprovado", f"R$ {totais['Aprovado']/1000:,.0f}k")
+    
+    st.divider()
+    
+    # ===== TABELA POR FILIAL (DataFrame nativo) =====
+    st.subheader("🏢 Detalhamento por Filial")
+    
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    
+    # Linha de totais
+    st.divider()
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.write("**TOTAL**")
+    with col2:
+        st.write(f"**R$ {totais['Pessimista']/1000:,.0f}k**")
+    with col3:
+        st.write(f"**R$ {totais['Conservador']/1000:,.0f}k**")
+    with col4:
+        st.write(f"**R$ {totais['Otimista']/1000:,.0f}k**")
+    
+    st.success(f"✅ **TOTAL APROVADO: R$ {totais['Aprovado']/1000:,.0f}k**")
+    
+    st.divider()
+    st.caption("💡 Para aprovar um cenário, selecione a filial específica e clique em '🔒 Aprovar Cenário'")
 
+
+def pagina_cenarios():
+    """Página de Comparativo de Cenários - Usa 3 motores independentes"""
+    render_header()
+    
+    st.markdown("## 🎯 Arena dos Cenários")
+    st.caption("Compare Pessimista, Conservador e Otimista lado a lado")
+    
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_cenarios_consolidado()
+        return
+    
+    # Pega os 3 motores
+    motores = st.session_state.get('motores_cenarios', {})
+    
+    if not motores or len(motores) < 3:
+        st.warning("⚠️ Motores de cenários não carregados. Selecione uma filial.")
+        return
+    
+    motor_cons = motores.get("Conservador")
+    motor_pess = motores.get("Pessimista")
+    motor_otim = motores.get("Otimista")
+    
+    if not motor_cons or not motor_pess or not motor_otim:
+        st.error("❌ Erro ao carregar motores de cenário")
+        return
+    
+    meses_nomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    
+    # ===== CONSERVADOR (Base) - Motor próprio =====
+    receitas_cons = [sum(motor_cons.calcular_receita_servico_mes(s, m) for s in motor_cons.servicos) for m in range(12)]
+    total_cons = sum(receitas_cons)
+    despesas_cons = motor_cons.calcular_despesas_fixas()
+    total_desp_cons = sum(despesas_cons.get("Total Despesas Fixas", [0]*12))
+    lucro_cons = total_cons - total_desp_cons
+    
+    # ===== PESSIMISTA - Motor próprio =====
+    receitas_pess = [sum(motor_pess.calcular_receita_servico_mes(s, m) for s in motor_pess.servicos) for m in range(12)]
+    total_pess = sum(receitas_pess)
+    despesas_pess = motor_pess.calcular_despesas_fixas()
+    total_desp_pess = sum(despesas_pess.get("Total Despesas Fixas", [0]*12))
+    lucro_pess = total_pess - total_desp_pess
+    
+    # ===== OTIMISTA - Motor próprio =====
+    receitas_otim = [sum(motor_otim.calcular_receita_servico_mes(s, m) for s in motor_otim.servicos) for m in range(12)]
+    total_otim = sum(receitas_otim)
+    despesas_otim = motor_otim.calcular_despesas_fixas()
+    total_desp_otim = sum(despesas_otim.get("Total Despesas Fixas", [0]*12))
+    lucro_otim = total_otim - total_desp_otim
+    
+    # Variações em relação ao Conservador
+    var_pess = ((total_pess / total_cons) - 1) * 100 if total_cons > 0 else 0
+    var_otim = ((total_otim / total_cons) - 1) * 100 if total_cons > 0 else 0
+    
+    # ===== CENÁRIO APROVADO =====
+    cenario_aprovado = st.session_state.get('cenario_aprovado', None)
+    
+    col_info, col_aprovacao = st.columns([3, 1])
+    
+    with col_info:
+        if cenario_aprovado:
+            emoji_aprovado = {"Pessimista": "📉", "Conservador": "⚠️", "Otimista": "🚀"}.get(cenario_aprovado, "✅")
+            st.success(f"✅ **CENÁRIO APROVADO:** {emoji_aprovado} {cenario_aprovado}")
+        else:
+            st.info("💡 **Dica:** Para alterar as premissas de cada cenário, vá em **⚙️ Premissas** e selecione o cenário no dropdown \"Editando cenário\"")
+    
+    with col_aprovacao:
+        if st.button("🔒 Aprovar Cenário", use_container_width=True, type="primary"):
+            st.session_state.show_modal_aprovacao = True
+    
+    # ===== MODAL DE APROVAÇÃO =====
+    if st.session_state.get('show_modal_aprovacao', False):
+        with st.container():
+            st.markdown("---")
+            st.markdown("### 🔐 Aprovar Cenário")
+            st.caption("Selecione o cenário a ser aprovado e confirme com a senha de administrador")
+            
+            col_a, col_b = st.columns(2)
+            with col_a:
+                opcoes_cenario = ["Nenhum (remover aprovação)", "Pessimista", "Conservador", "Otimista"]
+                idx_atual = 0
+                if cenario_aprovado in opcoes_cenario:
+                    idx_atual = opcoes_cenario.index(cenario_aprovado)
+                cenario_selecionado = st.selectbox(
+                    "Cenário para aprovar",
+                    opcoes_cenario,
+                    index=idx_atual,
+                    key="select_aprovacao_cenario"
+                )
+            with col_b:
+                senha_aprovacao = st.text_input("Senha de Admin", type="password", key="senha_aprovacao")
+            
+            col_confirmar, col_cancelar = st.columns(2)
+            with col_confirmar:
+                if st.button("✅ Confirmar", use_container_width=True, type="primary"):
+                    # Verifica senha usando o sistema de autenticação
+                    from auth import verify_password, get_supabase_client
+                    
+                    senha_valida = False
+                    try:
+                        supabase = get_supabase_client()
+                        if supabase:
+                            # Busca usuários admin
+                            response = supabase.table("users").select("password_hash, role").eq("role", "admin").execute()
+                            if response.data:
+                                # Verifica se a senha corresponde a algum admin
+                                for admin in response.data:
+                                    if verify_password(senha_aprovacao, admin["password_hash"]):
+                                        senha_valida = True
+                                        break
+                    except Exception as e:
+                        # Fallback para senha padrão se der erro
+                        senha_valida = (senha_aprovacao == "admin123")
+                    
+                    if senha_valida:
+                        novo_aprovado = None if cenario_selecionado == "Nenhum (remover aprovação)" else cenario_selecionado
+                        st.session_state.cenario_aprovado = novo_aprovado
+                        
+                        # Salva imediatamente
+                        from modules.cliente_manager import salvar_motores_cenarios
+                        salvar_motores_cenarios(
+                            st.session_state.cliente_manager,
+                            st.session_state.cliente_id,
+                            st.session_state.filial_id,
+                            st.session_state.motores_cenarios,
+                            st.session_state.get('cenario_ativo', 'Conservador'),
+                            st.session_state.get('usar_cenarios', True),
+                            novo_aprovado
+                        )
+                        
+                        st.session_state.show_modal_aprovacao = False
+                        if novo_aprovado:
+                            st.success(f"✅ Cenário '{novo_aprovado}' aprovado com sucesso!")
+                        else:
+                            st.info("Aprovação removida")
+                        st.rerun()
+                    else:
+                        st.error("❌ Senha incorreta!")
+            with col_cancelar:
+                if st.button("❌ Cancelar", use_container_width=True):
+                    st.session_state.show_modal_aprovacao = False
+                    st.rerun()
+            st.markdown("---")
+    
+    # ========== 3 CARDS GRANDES (Componentes Nativos) ==========
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        with st.container(border=True):
+            if cenario_aprovado == 'Pessimista':
+                st.success("✅ APROVADO")
+            st.markdown("### 📉 PESSIMISTA")
+            st.caption("Cenário de Crise")
+            st.divider()
+            st.metric("Receita Anual", f"R$ {total_pess/1000:,.0f}k", f"{var_pess:+.1f}% vs Base")
+            st.divider()
+            delta_color = "inverse" if lucro_pess < 0 else "normal"
+            st.metric("Resultado", f"R$ {lucro_pess/1000:,.0f}k", delta_color=delta_color)
+    
+    with col2:
+        with st.container(border=True):
+            if cenario_aprovado == 'Conservador':
+                st.success("✅ APROVADO")
+            st.markdown("### ⚠️ CONSERVADOR")
+            st.caption("⭐ Base de Referência")
+            st.divider()
+            st.metric("Receita Anual", f"R$ {total_cons/1000:,.0f}k", "Base")
+            st.divider()
+            delta_color = "inverse" if lucro_cons < 0 else "normal"
+            st.metric("Resultado", f"R$ {lucro_cons/1000:,.0f}k", delta_color=delta_color)
+    
+    with col3:
+        with st.container(border=True):
+            if cenario_aprovado == 'Otimista':
+                st.success("✅ APROVADO")
+            st.markdown("### 🚀 OTIMISTA")
+            st.caption("Cenário Favorável")
+            st.divider()
+            st.metric("Receita Anual", f"R$ {total_otim/1000:,.0f}k", f"{var_otim:+.1f}% vs Base")
+            st.divider()
+            delta_color = "inverse" if lucro_otim < 0 else "normal"
+            st.metric("Resultado", f"R$ {lucro_otim/1000:,.0f}k", delta_color=delta_color)
+    
+    st.write("")
+    
+    # ========== ABAS COM GRÁFICOS ==========
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Comparativo Visual", "📈 Evolução Mensal", "🔍 Detalhes por Cenário", "📅 vs Ano Anterior"])
+    
+    with tab1:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Gráfico de barras - Receita
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=['📉 Pessimista', '⚠️ Conservador', '🚀 Otimista'],
+                y=[total_pess, total_cons, total_otim],
+                marker_color=['#dc3545', '#ffc107', '#28a745'],
+                text=[f'R$ {total_pess/1000:,.0f}k', f'R$ {total_cons/1000:,.0f}k', f'R$ {total_otim/1000:,.0f}k'],
+                textposition='outside'
+            ))
+            fig.update_layout(
+                title="💰 Receita Anual por Cenário",
+                height=350,
+                showlegend=False,
+                yaxis_title="Receita (R$)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # Gráfico de barras - Resultado
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=['📉 Pessimista', '⚠️ Conservador', '🚀 Otimista'],
+                y=[lucro_pess, lucro_cons, lucro_otim],
+                marker_color=['#dc3545' if lucro_pess < 0 else '#28a745', 
+                              '#dc3545' if lucro_cons < 0 else '#28a745',
+                              '#dc3545' if lucro_otim < 0 else '#28a745'],
+                text=[f'R$ {lucro_pess/1000:,.0f}k', f'R$ {lucro_cons/1000:,.0f}k', f'R$ {lucro_otim/1000:,.0f}k'],
+                textposition='outside'
+            ))
+            fig.update_layout(
+                title="📊 Resultado Anual por Cenário",
+                height=350,
+                showlegend=False,
+                yaxis_title="Resultado (R$)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Tabela resumo
+        st.markdown("### 📋 Resumo Comparativo")
+        
+        import pandas as pd
+        df_resumo = pd.DataFrame({
+            "Métrica": ["Receita Anual", "Despesas Anuais", "Resultado", "Margem %", "Ticket Médio/Mês"],
+            "📉 Pessimista": [
+                f"R$ {total_pess:,.0f}",
+                f"R$ {total_desp_pess:,.0f}",
+                f"R$ {lucro_pess:,.0f}",
+                f"{(lucro_pess/total_pess*100) if total_pess > 0 else 0:.1f}%",
+                f"R$ {total_pess/12:,.0f}"
+            ],
+            "⚠️ Conservador": [
+                f"R$ {total_cons:,.0f}",
+                f"R$ {total_desp_cons:,.0f}",
+                f"R$ {lucro_cons:,.0f}",
+                f"{(lucro_cons/total_cons*100) if total_cons > 0 else 0:.1f}%",
+                f"R$ {total_cons/12:,.0f}"
+            ],
+            "🚀 Otimista": [
+                f"R$ {total_otim:,.0f}",
+                f"R$ {total_desp_otim:,.0f}",
+                f"R$ {lucro_otim:,.0f}",
+                f"{(lucro_otim/total_otim*100) if total_otim > 0 else 0:.1f}%",
+                f"R$ {total_otim/12:,.0f}"
+            ]
+        })
+        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+    
+    with tab2:
+        # Gráfico de evolução mensal
+        fig = go.Figure()
+        
+        # Área Otimista
+        fig.add_trace(go.Scatter(
+            x=meses_nomes, y=receitas_otim,
+            fill='tozeroy', name='🚀 Otimista',
+            fillcolor='rgba(40, 167, 69, 0.2)',
+            line=dict(color='#28a745', width=3)
+        ))
+        
+        # Área Conservador
+        fig.add_trace(go.Scatter(
+            x=meses_nomes, y=receitas_cons,
+            fill='tozeroy', name='⚠️ Conservador',
+            fillcolor='rgba(255, 193, 7, 0.3)',
+            line=dict(color='#ffc107', width=3)
+        ))
+        
+        # Linha Pessimista
+        fig.add_trace(go.Scatter(
+            x=meses_nomes, y=receitas_pess,
+            name='📉 Pessimista',
+            line=dict(color='#dc3545', width=3, dash='dash')
+        ))
+        
+        fig.update_layout(
+            title="📈 Evolução Mensal da Receita por Cenário",
+            height=450,
+            yaxis_title="Receita (R$)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            hovermode='x unified'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Tabela mês a mês
+        with st.expander("📋 Ver tabela mês a mês"):
+            dados_mes = []
+            for m in range(12):
+                dados_mes.append({
+                    "Mês": meses_nomes[m],
+                    "📉 Pessimista": f"R$ {receitas_pess[m]:,.0f}",
+                    "⚠️ Conservador": f"R$ {receitas_cons[m]:,.0f}",
+                    "🚀 Otimista": f"R$ {receitas_otim[m]:,.0f}"
+                })
+            df_mes = pd.DataFrame(dados_mes)
+            st.dataframe(df_mes, use_container_width=True, hide_index=True)
+    
+    with tab3:
+        # Nova aba: Detalhes por cenário - mostra diferenças nas premissas
+        st.markdown("### 🔍 Diferenças nas Premissas")
+        st.caption("Compare as principais premissas entre os 3 cenários")
+        
+        # Comparar premissas macro
+        st.markdown("#### 📊 Premissas Macroeconômicas")
+        df_macro = pd.DataFrame({
+            "Premissa": ["IPCA", "IGP-M", "Dissídio", "Reaj. Tarifas", "Reaj. Contratos"],
+            "📉 Pessimista": [
+                f"{motor_pess.macro.ipca*100:.1f}%",
+                f"{motor_pess.macro.igpm*100:.1f}%",
+                f"{motor_pess.macro.dissidio*100:.1f}%",
+                f"{motor_pess.macro.reajuste_tarifas*100:.1f}%",
+                f"{motor_pess.macro.reajuste_contratos*100:.1f}%"
+            ],
+            "⚠️ Conservador": [
+                f"{motor_cons.macro.ipca*100:.1f}%",
+                f"{motor_cons.macro.igpm*100:.1f}%",
+                f"{motor_cons.macro.dissidio*100:.1f}%",
+                f"{motor_cons.macro.reajuste_tarifas*100:.1f}%",
+                f"{motor_cons.macro.reajuste_contratos*100:.1f}%"
+            ],
+            "🚀 Otimista": [
+                f"{motor_otim.macro.ipca*100:.1f}%",
+                f"{motor_otim.macro.igpm*100:.1f}%",
+                f"{motor_otim.macro.dissidio*100:.1f}%",
+                f"{motor_otim.macro.reajuste_tarifas*100:.1f}%",
+                f"{motor_otim.macro.reajuste_contratos*100:.1f}%"
+            ]
+        })
+        st.dataframe(df_macro, use_container_width=True, hide_index=True)
+        
+        # Comparar serviços (sessões)
+        st.markdown("#### 🩺 Sessões por Serviço (Base Mensal)")
+        dados_servicos = []
+        for nome_srv in motor_cons.servicos.keys():
+            srv_cons = motor_cons.servicos.get(nome_srv)
+            srv_pess = motor_pess.servicos.get(nome_srv)
+            srv_otim = motor_otim.servicos.get(nome_srv)
+            
+            if srv_cons:
+                dados_servicos.append({
+                    "Serviço": nome_srv,
+                    "📉 Pessimista": f"{srv_pess.sessoes_mes_base if srv_pess else 0:,.0f}",
+                    "⚠️ Conservador": f"{srv_cons.sessoes_mes_base:,.0f}",
+                    "🚀 Otimista": f"{srv_otim.sessoes_mes_base if srv_otim else 0:,.0f}"
+                })
+        
+        if dados_servicos:
+            df_servicos = pd.DataFrame(dados_servicos)
+            st.dataframe(df_servicos, use_container_width=True, hide_index=True)
+        
+        # Comparar despesas principais
+        st.markdown("#### 💰 Despesas Principais (Mensal Base)")
+        dados_despesas = []
+        despesas_principais = list(motor_cons.despesas_fixas.keys())[:5]  # Top 5
+        for nome_desp in despesas_principais:
+            desp_cons = motor_cons.despesas_fixas.get(nome_desp)
+            desp_pess = motor_pess.despesas_fixas.get(nome_desp)
+            desp_otim = motor_otim.despesas_fixas.get(nome_desp)
+            
+            if desp_cons:
+                dados_despesas.append({
+                    "Despesa": nome_desp,
+                    "📉 Pessimista": f"R$ {desp_pess.valor_mensal if desp_pess else 0:,.0f}",
+                    "⚠️ Conservador": f"R$ {desp_cons.valor_mensal:,.0f}",
+                    "🚀 Otimista": f"R$ {desp_otim.valor_mensal if desp_otim else 0:,.0f}"
+                })
+        
+        if dados_despesas:
+            df_despesas = pd.DataFrame(dados_despesas)
+            st.dataframe(df_despesas, use_container_width=True, hide_index=True)
+    
+    with tab4:
+        # Comparativo com ano anterior
+        usar_comp = getattr(motor_cons, 'usar_comparativo_anterior', False)
+        ano_ant = getattr(motor_cons, 'ano_anterior', 2025)
+        fat_anterior = getattr(motor_cons, 'faturamento_anterior', [0.0] * 12)
+        total_anterior = sum(fat_anterior) if fat_anterior else 0
+        
+        if usar_comp and total_anterior > 0:
+            var_ant_pess = ((total_pess / total_anterior) - 1) * 100
+            var_ant_cons = ((total_cons / total_anterior) - 1) * 100
+            var_ant_otim = ((total_otim / total_anterior) - 1) * 100
+            
+            st.markdown(f"### 📅 Crescimento vs {ano_ant}")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 15px; text-align: center;">
+                    <div style="font-size: 14px; color: #666;">📅 Real {ano_ant}</div>
+                    <div style="font-size: 26px; font-weight: bold;">R$ {total_anterior/1000:,.0f}k</div>
+                    <div style="font-size: 12px; color: #999;">Base</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                cor = "#28a745" if var_ant_pess > 0 else "#dc3545"
+                emoji = "📈" if var_ant_pess > 0 else "📉"
+                st.markdown(f"""
+                <div style="background: #ffebee; padding: 20px; border-radius: 15px; text-align: center; border-left: 4px solid #dc3545;">
+                    <div style="font-size: 14px; color: #666;">📉 Pessimista</div>
+                    <div style="font-size: 26px; font-weight: bold; color: {cor};">{emoji} {var_ant_pess:+.1f}%</div>
+                    <div style="font-size: 12px; color: #999;">R$ {total_pess - total_anterior:+,.0f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                cor = "#28a745" if var_ant_cons > 0 else "#dc3545"
+                emoji = "📈" if var_ant_cons > 0 else "📉"
+                st.markdown(f"""
+                <div style="background: #fff8e1; padding: 20px; border-radius: 15px; text-align: center; border-left: 4px solid #ffc107;">
+                    <div style="font-size: 14px; color: #666;">⚠️ Conservador</div>
+                    <div style="font-size: 26px; font-weight: bold; color: {cor};">{emoji} {var_ant_cons:+.1f}%</div>
+                    <div style="font-size: 12px; color: #999;">R$ {total_cons - total_anterior:+,.0f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                cor = "#28a745" if var_ant_otim > 0 else "#dc3545"
+                emoji = "📈" if var_ant_otim > 0 else "📉"
+                st.markdown(f"""
+                <div style="background: #e8f5e9; padding: 20px; border-radius: 15px; text-align: center; border-left: 4px solid #28a745;">
+                    <div style="font-size: 14px; color: #666;">🚀 Otimista</div>
+                    <div style="font-size: 26px; font-weight: bold; color: {cor};">{emoji} {var_ant_otim:+.1f}%</div>
+                    <div style="font-size: 12px; color: #999;">R$ {total_otim - total_anterior:+,.0f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Gráfico comparativo
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=meses_nomes, y=fat_anterior,
+                name=f'📅 Real {ano_ant}',
+                line=dict(color='#6c757d', width=4, dash='dot'),
+                mode='lines+markers'
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=meses_nomes, y=receitas_pess,
+                name='📉 Pessimista 2026',
+                line=dict(color='#dc3545', width=2)
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=meses_nomes, y=receitas_cons,
+                name='⚠️ Conservador 2026',
+                line=dict(color='#ffc107', width=2)
+            ))
+            
+            fig.add_trace(go.Scatter(
+                x=meses_nomes, y=receitas_otim,
+                name='🚀 Otimista 2026',
+                line=dict(color='#28a745', width=2)
+            ))
+            
+            fig.update_layout(
+                title=f"📈 {ano_ant} (Real) vs 2026 (Projetado)",
+                height=450,
+                yaxis_title="Receita (R$)",
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        elif usar_comp and total_anterior == 0:
+            st.warning(f"⚠️ Preencha o faturamento de {ano_ant} em **Premissas → Cenários** e clique em **Salvar**")
+        
+        else:
+            st.info("💡 Habilite o comparativo com ano anterior em **Premissas → Cenários**")
+            
+            st.markdown("""
+            ### Como habilitar:
+            1. Vá em **⚙️ Premissas**
+            2. Clique na aba **🎯 Cenários**
+            3. Marque **[✓] Usar comparativo**
+            4. Preencha o faturamento mês a mês
+            5. Clique **💾 Salvar Faturamento Anterior**
+            """)
+    
+    st.markdown("---")
+    st.caption("🎯 Edite cada cenário em **Premissas** → Selecione o cenário no dropdown")
 
 
 def pagina_taxa_ocupacao():
@@ -3634,7 +5703,13 @@ def pagina_custeio_abc():
     # IMPORTANTE: Sincronizar cadastro_salas com premissas operacionais ANTES de qualquer cálculo
     motor.cadastro_salas.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
     motor.cadastro_salas.dias_uteis_mes = motor.operacional.dias_uteis_mes
-    motor.cadastro_salas.sincronizar_num_salas(motor.operacional.num_salas)
+    
+    # CORREÇÃO: Verificar se num_salas está configurado
+    if motor.operacional.num_salas > 0:
+        motor.cadastro_salas.sincronizar_num_salas(motor.operacional.num_salas)
+    else:
+        # Se num_salas = 0, mostrar aviso
+        st.warning("⚠️ **Nº de Salas não configurado!** Vá em **⚙️ Premissas → 🏥 Operacionais** e configure o número de salas.")
     
     # Tabs
     tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
@@ -4301,12 +6376,18 @@ def pagina_custeio_abc():
         # Sincronizar com premissas operacionais
         cadastro.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
         cadastro.dias_uteis_mes = motor.operacional.dias_uteis_mes
-        cadastro.sincronizar_num_salas(motor.operacional.num_salas)
+        
+        # CORREÇÃO: Verificar se num_salas está configurado
+        if motor.operacional.num_salas > 0:
+            cadastro.sincronizar_num_salas(motor.operacional.num_salas)
+        else:
+            st.error("❌ **Nº de Salas = 0!** Configure em **⚙️ Premissas → 🏥 Operacionais** antes de configurar as salas.")
+            st.stop()
         
         # Resumo
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Salas Ativas", f"{cadastro.num_salas_ativas}")
+            st.metric("Nº Salas (Premissas)", f"{motor.operacional.num_salas}")
         with col2:
             st.metric("m² Total Ativo", f"{cadastro.m2_ativo:.0f} m²")
         with col3:
@@ -4314,7 +6395,7 @@ def pagina_custeio_abc():
         with col4:
             st.metric("Horas/Dia", f"{motor.operacional.horas_atendimento_dia}h")
         
-        st.info(f"ℹ️ **Parâmetros operacionais:** {motor.operacional.num_salas} salas × {motor.operacional.horas_atendimento_dia}h/dia × {motor.operacional.dias_uteis_mes} dias/mês. Edite em **⚙️ Premissas → Operacionais**.")
+        st.info(f"ℹ️ Mostrando **{motor.operacional.num_salas} salas** (configurado em **⚙️ Premissas → 🏥 Operacionais**).")
         
         st.markdown("---")
         
@@ -4332,83 +6413,82 @@ def pagina_custeio_abc():
                 del st.session_state[k]
             st.session_state.abc_salas_estado = estado_atual
         
-        for sala in cadastro.salas:
-            if sala.ativa:  # Mostrar apenas salas ativas (definidas em operacional)
-                # Keys para session_state
-                key_m2 = f"abc_sala_{sala.numero}_m2"
-                key_tipo = f"abc_sala_{sala.numero}_tipo"
-                key_servicos = f"abc_sala_{sala.numero}_servicos"
+        # Usar salas_ativas para garantir que apenas as salas definidas em Premissas apareçam
+        for sala in cadastro.salas_ativas:
+            # Keys para session_state
+            key_m2 = f"abc_sala_{sala.numero}_m2"
+            key_tipo = f"abc_sala_{sala.numero}_tipo"
+            key_servicos = f"abc_sala_{sala.numero}_servicos"
+            
+            # Inicializar session_state com valores do objeto (apenas se não existir)
+            if key_m2 not in st.session_state:
+                st.session_state[key_m2] = float(sala.metros_quadrados)
+            if key_tipo not in st.session_state:
+                st.session_state[key_tipo] = sala.tipo if sala.tipo in ["Individual", "Compartilhado"] else "Individual"
+            if key_servicos not in st.session_state:
+                servicos_validos = [s for s in (sala.servicos_atendidos or []) if s in servicos_disponiveis]
+                st.session_state[key_servicos] = servicos_validos
+            
+            # Título do expander (usa valor do session_state)
+            m2_atual = st.session_state[key_m2]
+            tipo_atual = st.session_state[key_tipo]
+            if m2_atual > 0:
+                titulo_sala = f"✅ Sala {sala.numero} - {tipo_atual} ({m2_atual:.0f}m²)"
+            else:
+                titulo_sala = f"⚠️ Sala {sala.numero} - Não configurada"
+            
+            with st.expander(titulo_sala, expanded=(m2_atual == 0)):
+                col1, col2 = st.columns([1, 2])
                 
-                # Inicializar session_state com valores do objeto (apenas se não existir)
-                if key_m2 not in st.session_state:
-                    st.session_state[key_m2] = float(sala.metros_quadrados)
-                if key_tipo not in st.session_state:
-                    st.session_state[key_tipo] = sala.tipo if sala.tipo in ["Individual", "Compartilhado"] else "Individual"
-                if key_servicos not in st.session_state:
-                    servicos_validos = [s for s in (sala.servicos_atendidos or []) if s in servicos_disponiveis]
-                    st.session_state[key_servicos] = servicos_validos
-                
-                # Título do expander (usa valor do session_state)
-                m2_atual = st.session_state[key_m2]
-                tipo_atual = st.session_state[key_tipo]
-                if m2_atual > 0:
-                    titulo_sala = f"✅ Sala {sala.numero} - {tipo_atual} ({m2_atual:.0f}m²)"
-                else:
-                    titulo_sala = f"⚠️ Sala {sala.numero} - Não configurada"
-                
-                with st.expander(titulo_sala, expanded=(m2_atual == 0)):
-                    col1, col2 = st.columns([1, 2])
-                    
-                    with col1:
-                        st.number_input(
-                            "m²",
-                            min_value=0.0,
-                            max_value=200.0,
-                            step=1.0,
-                            key=key_m2
-                        )
-                    
-                    with col2:
-                        st.selectbox(
-                            "Tipo",
-                            options=["Individual", "Compartilhado"],
-                            key=key_tipo
-                        )
-                    
-                    # Aviso se sala não configurada
-                    if st.session_state[key_m2] == 0:
-                        st.warning("⚠️ Configure o tamanho (m²) desta sala")
-                    
-                    st.markdown("**Serviços atendidos nesta sala:**")
-                    
-                    st.multiselect(
-                        "Selecione os serviços",
-                        options=servicos_disponiveis,
-                        key=key_servicos,
-                        label_visibility="collapsed"
+                with col1:
+                    st.number_input(
+                        "m²",
+                        min_value=0.0,
+                        max_value=200.0,
+                        step=1.0,
+                        key=key_m2
                     )
-                    
-                    if st.session_state[key_servicos] and st.session_state[key_m2] > 0:
-                        num_servicos = len(st.session_state[key_servicos])
-                        m2_por_srv = st.session_state[key_m2] / num_servicos if num_servicos > 0 else 0
-                        st.caption(f"m²/serviço: {m2_por_srv:.2f} m²")
+                
+                with col2:
+                    st.selectbox(
+                        "Tipo",
+                        options=["Individual", "Compartilhado"],
+                        key=key_tipo
+                    )
+                
+                # Aviso se sala não configurada
+                if st.session_state[key_m2] == 0:
+                    st.warning("⚠️ Configure o tamanho (m²) desta sala")
+                
+                st.markdown("**Serviços atendidos nesta sala:**")
+                
+                st.multiselect(
+                    "Selecione os serviços",
+                    options=servicos_disponiveis,
+                    key=key_servicos,
+                    label_visibility="collapsed"
+                )
+                
+                if st.session_state[key_servicos] and st.session_state[key_m2] > 0:
+                    num_servicos = len(st.session_state[key_servicos])
+                    m2_por_srv = st.session_state[key_m2] / num_servicos if num_servicos > 0 else 0
+                    st.caption(f"m²/serviço: {m2_por_srv:.2f} m²")
         
         st.markdown("---")
         
         # Função para aplicar valores do session_state ao objeto
         def aplicar_valores_salas():
-            for sala in cadastro.salas:
-                if sala.ativa:
-                    key_m2 = f"abc_sala_{sala.numero}_m2"
-                    key_tipo = f"abc_sala_{sala.numero}_tipo"
-                    key_servicos = f"abc_sala_{sala.numero}_servicos"
-                    
-                    if key_m2 in st.session_state:
-                        sala.metros_quadrados = float(st.session_state[key_m2])
-                    if key_tipo in st.session_state:
-                        sala.tipo = st.session_state[key_tipo]
-                    if key_servicos in st.session_state:
-                        sala.servicos_atendidos = list(st.session_state[key_servicos])
+            for sala in cadastro.salas_ativas:
+                key_m2 = f"abc_sala_{sala.numero}_m2"
+                key_tipo = f"abc_sala_{sala.numero}_tipo"
+                key_servicos = f"abc_sala_{sala.numero}_servicos"
+                
+                if key_m2 in st.session_state:
+                    sala.metros_quadrados = float(st.session_state[key_m2])
+                if key_tipo in st.session_state:
+                    sala.tipo = st.session_state[key_tipo]
+                if key_servicos in st.session_state:
+                    sala.servicos_atendidos = list(st.session_state[key_servicos])
         
         # Aplicar valores antes de mostrar o mix
         aplicar_valores_salas()
@@ -4437,9 +6517,28 @@ def pagina_custeio_abc():
             if servicos_sem_sala:
                 st.info(f"ℹ️ Serviços sem uso de sala: **{', '.join(servicos_sem_sala)}** (atendimento externo)")
         
-        # Botão de salvar
+        # Botões de ação
         st.markdown("---")
-        col1, col2, col3 = st.columns([1, 2, 1])
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            if st.button("🗑️ Resetar Salas", use_container_width=True, key="btn_resetar_salas"):
+                # Limpar todas as salas para valores em branco
+                for sala in cadastro.salas:
+                    sala.metros_quadrados = 0.0
+                    sala.tipo = "Individual"
+                    sala.servicos_atendidos = []
+                
+                # Limpar cache do session_state
+                keys_para_limpar = [k for k in st.session_state.keys() if k.startswith('abc_sala_')]
+                for k in keys_para_limpar:
+                    del st.session_state[k]
+                
+                # Salvar imediatamente
+                if salvar_filial_atual():
+                    st.success("✅ Salas resetadas! Todas em branco.")
+                    st.rerun()
+        
         with col2:
             if st.button("💾 Salvar Configuração das Salas", type="primary", use_container_width=True, key="btn_salvar_salas"):
                 # Aplicar valores do session_state ao objeto ANTES de salvar
@@ -5209,13 +7308,13 @@ def pagina_custeio_abc():
             with tab_g3:
                 # Scatter plot - Receita vs Margem
                 fig_matriz = go.Figure()
-                max_lucro = max(lucros) if lucros else 1
+                max_lucro = max(lucros) if lucros and max(lucros) > 0 else 1  # Evita divisão por zero
                 fig_matriz.add_trace(go.Scatter(
                     x=receitas,
                     y=margens,
                     mode='markers+text',
                     marker=dict(
-                        size=[l/max_lucro*50 + 10 for l in lucros],
+                        size=[l/max_lucro*50 + 10 if max_lucro > 0 else 10 for l in lucros],
                         color=margens,
                         colorscale='RdYlGn',
                         showscale=True,
@@ -5426,6 +7525,117 @@ def pagina_custeio_abc():
                 st.dataframe(df_mes, use_container_width=True, hide_index=True)
 
 
+def pagina_importar():
+    """Página de importação de dados de planilha Excel"""
+    render_header()
+    
+    st.markdown('<div class="section-header"><h3>📥 Importar Dados de Planilha</h3></div>', unsafe_allow_html=True)
+    
+    st.info("""
+    **Importação de dados de planilha Excel**
+    
+    Esta funcionalidade permite importar dados de uma planilha Budget padrão.
+    O sistema irá extrair automaticamente:
+    - Serviços e valores
+    - Fisioterapeutas e suas sessões
+    - Despesas fixas
+    - Premissas operacionais
+    """)
+    
+    # Verificar se há cliente selecionado
+    if not st.session_state.cliente_id:
+        st.warning("⚠️ Selecione um cliente antes de importar dados.")
+        return
+    
+    if not st.session_state.filial_id or st.session_state.filial_id == "consolidado":
+        st.warning("⚠️ Selecione uma filial (não consolidado) antes de importar dados.")
+        return
+    
+    st.markdown("---")
+    
+    # Upload de arquivo
+    uploaded_file = st.file_uploader(
+        "Selecione a planilha Excel (.xlsx)",
+        type=['xlsx', 'xls'],
+        help="Faça upload da planilha Budget no formato padrão"
+    )
+    
+    if uploaded_file:
+        st.success(f"✅ Arquivo carregado: {uploaded_file.name}")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            importar_servicos = st.checkbox("Importar Serviços", value=True)
+            importar_fisios = st.checkbox("Importar Fisioterapeutas", value=True)
+        
+        with col2:
+            importar_despesas = st.checkbox("Importar Despesas Fixas", value=True)
+            importar_premissas = st.checkbox("Importar Premissas", value=True)
+        
+        st.markdown("---")
+        
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🚀 Iniciar Importação", type="primary", use_container_width=True):
+                with st.spinner("Processando planilha..."):
+                    try:
+                        from modules.excel_parser import BudgetExcelParser, importar_budget
+                        
+                        # Salvar arquivo temporário
+                        import tempfile
+                        import os
+                        
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                            tmp.write(uploaded_file.getvalue())
+                            tmp_path = tmp.name
+                        
+                        try:
+                            # Tentar importar
+                            motor = st.session_state.motor
+                            
+                            # Usar o parser
+                            parser = BudgetExcelParser(tmp_path)
+                            dados = parser.extrair_dados()
+                            
+                            if dados:
+                                # Aplicar dados ao motor
+                                if importar_servicos and 'servicos' in dados:
+                                    for nome, srv in dados['servicos'].items():
+                                        motor.servicos[nome] = srv
+                                    st.success(f"✅ {len(dados.get('servicos', {}))} serviços importados")
+                                
+                                if importar_fisios and 'fisioterapeutas' in dados:
+                                    for nome, fisio in dados['fisioterapeutas'].items():
+                                        motor.fisioterapeutas[nome] = fisio
+                                    st.success(f"✅ {len(dados.get('fisioterapeutas', {}))} fisioterapeutas importados")
+                                
+                                if importar_despesas and 'despesas' in dados:
+                                    for nome, desp in dados['despesas'].items():
+                                        motor.despesas_fixas[nome] = desp
+                                    st.success(f"✅ {len(dados.get('despesas', {}))} despesas importadas")
+                                
+                                # Salvar alterações
+                                if salvar_filial_atual():
+                                    st.success("✅ Importação concluída! Dados salvos.")
+                                    st.balloons()
+                            else:
+                                st.error("❌ Não foi possível extrair dados da planilha.")
+                        
+                        finally:
+                            # Limpar arquivo temporário
+                            os.unlink(tmp_path)
+                    
+                    except ImportError:
+                        registrar_erro("BE-600", "Módulo excel_parser não encontrado", "pagina_clientes/importar")
+                        st.error("❌ Módulo de importação não disponível (excel_parser).")
+                    except Exception as e:
+                        erro_msg = registrar_erro("BE-600", str(e), "pagina_clientes/importar")
+                        st.error(f"❌ Erro na importação: {erro_msg}")
+    else:
+        st.caption("Arraste ou clique para selecionar um arquivo Excel.")
+
+
 def pagina_clientes():
     """Página de gestão de clientes e projetos - usa cliente_manager"""
     render_header()
@@ -5434,15 +7644,35 @@ def pagina_clientes():
     
     manager = st.session_state.cliente_manager
     
-    # Lista de clientes
-    clientes = manager.listar_clientes()
+    # Lista de clientes - FILTRA POR EMPRESA DO USUÁRIO
+    todos_clientes = manager.listar_clientes()
+    
+    # Verificar se deve filtrar
+    user = get_current_user() if AUTH_ENABLED else None
+    is_admin = user and user.get("role") == "admin" if user else True
+    
+    if is_admin:
+        # Admin vê todos os clientes
+        clientes = todos_clientes
+    else:
+        # Usuário comum vê apenas clientes da sua empresa
+        empresa_nome = user.get("companies", {}).get("name", "") if user else ""
+        clientes = [c for c in todos_clientes if c["nome"].lower() == empresa_nome.lower()]
+        
+        # Se não encontrar cliente com nome exato, tenta busca parcial
+        if not clientes and empresa_nome:
+            clientes = [c for c in todos_clientes if empresa_nome.lower() in c["nome"].lower() or c["nome"].lower() in empresa_nome.lower()]
     
     col_header1, col_header2 = st.columns([3, 1])
     with col_header1:
         st.markdown(f"**{len(clientes)} cliente(s) cadastrado(s)**")
     with col_header2:
-        if st.button("➕ Novo Cliente", use_container_width=True):
-            st.session_state.show_novo_cliente = True
+        # Só admin pode criar novos clientes
+        if is_admin:
+            if st.button("➕ Novo Cliente", use_container_width=True):
+                st.session_state.show_novo_cliente = True
+        else:
+            st.caption("Somente admin pode criar clientes")
     
     # Formulário de novo cliente
     if st.session_state.get('show_novo_cliente', False):
@@ -5477,7 +7707,8 @@ def pagina_clientes():
                             st.session_state.show_novo_cliente = False
                             st.rerun()
                         except ValueError as e:
-                            st.error(f"Erro: {e}")
+                            erro_msg = registrar_erro("BE-202", str(e), "pagina_clientes/criar_cliente")
+                            st.error(f"Erro: {erro_msg}")
                     else:
                         st.error("Nome é obrigatório!")
                 
@@ -5513,7 +7744,19 @@ def pagina_clientes():
                     
                     if filiais:
                         for filial in filiais:
-                            st.markdown(f"• {filial.get('nome', filial.get('id', '-'))}")
+                            filial_id = filial.get('id', '')
+                            filial_nome = filial.get('nome', filial_id)
+                            
+                            # Linha com nome da filial e botões
+                            col_f1, col_f2, col_f3 = st.columns([3, 1, 1])
+                            with col_f1:
+                                st.markdown(f"• **{filial_nome}**")
+                            with col_f2:
+                                if st.button("✏️", key=f"edit_filial_{cliente_id}_{filial_id}", help="Editar filial"):
+                                    st.session_state[f'show_edit_filial_{cliente_id}_{filial_id}'] = True
+                            with col_f3:
+                                if st.button("🗑️", key=f"del_filial_{cliente_id}_{filial_id}", help="Excluir filial"):
+                                    st.session_state[f'confirm_del_filial_{cliente_id}_{filial_id}'] = True
                     else:
                         st.caption("Nenhuma filial cadastrada")
                     
@@ -5562,7 +7805,8 @@ def pagina_clientes():
                                     st.session_state.cliente_atual = None
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Erro: {e}")
+                                erro_msg = registrar_erro("BE-206", str(e), "pagina_clientes/excluir_cliente")
+                                st.error(f"Erro: {erro_msg}")
                     with col_del2:
                         if st.button("❌ Cancelar", key=f"confirm_no_{cliente_id}", use_container_width=True):
                             st.session_state[f'confirm_del_{cliente_id}'] = False
@@ -5600,7 +7844,8 @@ def pagina_clientes():
                                         st.session_state[f'show_edit_{cliente_id}'] = False
                                         st.rerun()
                                 except Exception as e:
-                                    st.error(f"Erro: {e}")
+                                    erro_msg = registrar_erro("BE-204", str(e), "pagina_clientes/editar_cliente")
+                                    st.error(f"Erro: {erro_msg}")
                         with col_eb2:
                             if st.form_submit_button("❌ Cancelar", use_container_width=True):
                                 st.session_state[f'show_edit_{cliente_id}'] = False
@@ -5628,7 +7873,91 @@ def pagina_clientes():
                                     st.session_state[f'show_nova_filial_{cliente_id}'] = False
                                     st.rerun()
                                 except Exception as e:
-                                    st.error(f"Erro: {e}")
+                                    erro_msg = registrar_erro("BE-203", str(e), "pagina_clientes/criar_filial")
+                                    st.error(f"Erro: {erro_msg}")
+                
+                # Formulários de edição e exclusão de filiais
+                for filial in filiais:
+                    filial_id = filial.get('id', '')
+                    filial_nome = filial.get('nome', filial_id)
+                    
+                    # Formulário de edição de filial
+                    if st.session_state.get(f'show_edit_filial_{cliente_id}_{filial_id}', False):
+                        st.markdown("---")
+                        st.markdown(f"**✏️ Editar Filial: {filial_nome}**")
+                        
+                        with st.form(f"form_edit_filial_{cliente_id}_{filial_id}"):
+                            novo_nome_filial = st.text_input(
+                                "Nome da Filial",
+                                value=filial_nome,
+                                key=f"edit_nome_filial_{cliente_id}_{filial_id}"
+                            )
+                            
+                            col_efb1, col_efb2 = st.columns(2)
+                            with col_efb1:
+                                if st.form_submit_button("💾 Salvar", use_container_width=True):
+                                    try:
+                                        # Renomear a filial no arquivo da filial
+                                        import os
+                                        filial_path = f"data/clientes/{cliente_id}/{filial_id}.json"
+                                        if os.path.exists(filial_path):
+                                            with open(filial_path, 'r', encoding='utf-8') as f:
+                                                filial_data = json.load(f)
+                                            filial_data['nome'] = novo_nome_filial
+                                            with open(filial_path, 'w', encoding='utf-8') as f:
+                                                json.dump(filial_data, f, ensure_ascii=False, indent=2)
+                                            st.success(f"✅ Filial renomeada para '{novo_nome_filial}'!")
+                                            st.session_state[f'show_edit_filial_{cliente_id}_{filial_id}'] = False
+                                            st.rerun()
+                                        else:
+                                            erro_msg = registrar_erro("BE-302", f"filial_path={filial_path}", "pagina_clientes/editar_filial")
+                                            st.error(f"Arquivo não encontrado: {filial_path}")
+                                    except Exception as e:
+                                        erro_msg = registrar_erro("BE-205", str(e), "pagina_clientes/editar_filial")
+                                        st.error(f"Erro: {erro_msg}")
+                            with col_efb2:
+                                if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                                    st.session_state[f'show_edit_filial_{cliente_id}_{filial_id}'] = False
+                                    st.rerun()
+                    
+                    # Confirmação de exclusão de filial
+                    if st.session_state.get(f'confirm_del_filial_{cliente_id}_{filial_id}', False):
+                        st.markdown("---")
+                        st.warning(f"⚠️ Confirma exclusão da filial **{filial_nome}**? Esta ação não pode ser desfeita!")
+                        col_df1, col_df2 = st.columns(2)
+                        with col_df1:
+                            if st.button("✅ Sim, Excluir", key=f"confirm_yes_filial_{cliente_id}_{filial_id}", use_container_width=True):
+                                try:
+                                    if hasattr(manager, 'excluir_filial'):
+                                        manager.excluir_filial(cliente_id, filial_id)
+                                    else:
+                                        # Alternativa: excluir diretamente
+                                        import os
+                                        filial_json = f"data/clientes/{cliente_id}/{filial_id}.json"
+                                        if os.path.exists(filial_json):
+                                            os.remove(filial_json)
+                                        # Atualizar config - filiais é lista de strings (IDs)
+                                        config_path = f"data/clientes/{cliente_id}/config.json"
+                                        if os.path.exists(config_path):
+                                            with open(config_path, 'r', encoding='utf-8') as f:
+                                                config = json.load(f)
+                                            # Filtra removendo o ID da filial (é string, não dict)
+                                            config['filiais'] = [f_id for f_id in config.get('filiais', []) if f_id != filial_id]
+                                            with open(config_path, 'w', encoding='utf-8') as f:
+                                                json.dump(config, f, ensure_ascii=False, indent=2)
+                                    st.success("✅ Filial excluída!")
+                                    st.session_state[f'confirm_del_filial_{cliente_id}_{filial_id}'] = False
+                                    # Limpa filial atual se for a excluída
+                                    if st.session_state.get('filial_id') == filial_id:
+                                        st.session_state.filial_id = None
+                                    st.rerun()
+                                except Exception as e:
+                                    erro_msg = registrar_erro("BE-207", str(e), "pagina_clientes/excluir_filial")
+                                    st.error(f"Erro: {erro_msg}")
+                        with col_df2:
+                            if st.button("❌ Cancelar", key=f"confirm_no_filial_{cliente_id}_{filial_id}", use_container_width=True):
+                                st.session_state[f'confirm_del_filial_{cliente_id}_{filial_id}'] = False
+                                st.rerun()
     
     # Resumo no rodapé
     st.markdown("---")
@@ -6235,8 +8564,8 @@ def pagina_fc_simulado():
                 motor.calcular_despesas_fixas()
                 motor.calcular_dre()
                 despesas_dez = sum(v[11] for k, v in motor.despesas.items() if "Total" not in k)
-                materiais_dez = abs(motor.dre.get("(-) Materiais", [0]*12)[11])
-                cp_forn_sugerido = despesas_dez + materiais_dez
+                cv_dez = abs(motor.dre.get("Total Custos Variáveis", [0]*12)[11])
+                cp_forn_sugerido = despesas_dez + cv_dez
                 
                 pfc.cp_fornecedores = st.number_input(
                     "CP Fornecedores",
@@ -6358,11 +8687,11 @@ def pagina_fc_simulado():
             else:
                 imposto_dez = abs(motor.dre.get("(-) Simples Nacional", [0]*12)[11])
             
-            # Despesas + Materiais de Dezembro (CP Fornecedores)
+            # Despesas + Custos Variáveis de Dezembro (CP Fornecedores)
             motor.calcular_despesas_fixas()
             despesas_dez = sum(v[11] for k, v in motor.despesas.items() if "Total" not in k)
-            materiais_dez = abs(motor.dre.get("(-) Materiais", [0]*12)[11])
-            cp_forn_dez = despesas_dez + materiais_dez
+            cv_dez = abs(motor.dre.get("Total Custos Variáveis", [0]*12)[11])
+            cp_forn_dez = despesas_dez + cv_dez
             
             pfc.usar_cp_folha_auto = st.checkbox(
                 "📊 Calcular CP automaticamente (baseado em Dezembro)",
@@ -6617,13 +8946,97 @@ def pagina_premissas():
     
     st.markdown('<div class="section-header"><h3>⚙️ Premissas do Budget - Simulador</h3></div>', unsafe_allow_html=True)
     
+    # ========================================================================
+    # SELETOR DE CENÁRIO PARA EDIÇÃO (se habilitado)
+    # ========================================================================
+    usar_cenarios = getattr(st.session_state.motor, 'usar_cenarios', True)
+    
+    if usar_cenarios:
+        st.markdown("---")
+        
+        col_ed1, col_ed2, col_ed3 = st.columns([2, 2, 4])
+        
+        with col_ed1:
+            cenarios_opcoes = ["Conservador", "Pessimista", "Otimista"]
+            cenario_edicao_atual = st.session_state.get('cenario_edicao', 'Conservador')
+            
+            if cenario_edicao_atual not in cenarios_opcoes:
+                cenario_edicao_atual = "Conservador"
+            
+            idx_edicao = cenarios_opcoes.index(cenario_edicao_atual)
+            
+            # Cores para o seletor
+            cores_cenario = {
+                "Conservador": "#ffc107",
+                "Pessimista": "#dc3545",
+                "Otimista": "#28a745"
+            }
+            
+            cenario_selecionado = st.selectbox(
+                "📝 Editando cenário:",
+                cenarios_opcoes,
+                index=idx_edicao,
+                key="select_cenario_edicao",
+                help="Selecione qual cenário deseja editar. Cada cenário tem suas próprias premissas."
+            )
+            
+            # Se mudou o cenário de edição
+            if cenario_selecionado != cenario_edicao_atual:
+                # Salva o motor atual antes de trocar
+                st.session_state.motores_cenarios[cenario_edicao_atual] = st.session_state.motor
+                
+                # Troca para o novo cenário
+                st.session_state.cenario_edicao = cenario_selecionado
+                st.session_state.motor = st.session_state.motores_cenarios[cenario_selecionado]
+                st.rerun()
+        
+        with col_ed2:
+            # Botão para copiar do Conservador
+            if cenario_selecionado != "Conservador":
+                if st.button(f"📋 Copiar do Conservador", key="btn_copiar_conservador", 
+                            help="Copia todas as premissas do Conservador para este cenário"):
+                    from modules.cliente_manager import copiar_cenario
+                    copiar_cenario(
+                        st.session_state.motores_cenarios["Conservador"],
+                        st.session_state.motores_cenarios[cenario_selecionado]
+                    )
+                    st.session_state.motor = st.session_state.motores_cenarios[cenario_selecionado]
+                    st.success(f"✅ Premissas copiadas do Conservador para {cenario_selecionado}!")
+                    st.rerun()
+        
+        with col_ed3:
+            # Indicador visual do cenário sendo editado
+            cor = cores_cenario.get(cenario_selecionado, "#6c757d")
+            icones = {"Conservador": "⚠️", "Pessimista": "📉", "Otimista": "🚀"}
+            icone = icones.get(cenario_selecionado, "📊")
+            
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(90deg, {cor}22, transparent);
+                border-left: 4px solid {cor};
+                padding: 10px 15px;
+                border-radius: 4px;
+                margin-top: 25px;
+            ">
+                <span style="font-size: 16px;">{icone}</span>
+                <span style="font-weight: bold; color: {cor};">
+                    Editando: {cenario_selecionado.upper()}
+                </span>
+                <span style="font-size: 12px; color: #666; margin-left: 10px;">
+                    As alterações serão salvas apenas neste cenário
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+    
     motor = st.session_state.motor
     
     # Sincroniza proprietários entre todas as estruturas
     motor.sincronizar_proprietarios()
     
     # Abas de premissas
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
         "📊 Macroeconômicas", 
         "🏥 Operacionais", 
         "💳 Pagamentos",
@@ -6633,7 +9046,8 @@ def pagina_premissas():
         "💰 Despesas",
         "👔 Folha e Pró-Labore",
         "🏥 Folha Fisioterapeutas",
-        "🏢 Salas (TDABC)"
+        "🏢 Salas (TDABC)",
+        "🎯 Cenários"
     ])
     
     # ========== ABA MACROECONÔMICAS ==========
@@ -6712,6 +9126,16 @@ def pagina_premissas():
                 value=float(motor.macro.taxa_antecipacao * 100), 
                 step=0.1
             ) / 100
+        
+        # Botão de salvar ao final da aba
+        st.markdown("---")
+        if st.button("💾 Salvar Premissas Macro", key="btn_salvar_macro", use_container_width=True, type="primary"):
+            try:
+                salvar_filial_atual()
+                st.success("✅ Premissas macroeconômicas salvas!")
+            except Exception as e:
+                erro_msg = registrar_erro("BE-400", str(e), "pagina_premissas/macro")
+                st.error(f"❌ {erro_msg}")
     
     # ========== ABA OPERACIONAIS ==========
     with tab2:
@@ -6755,6 +9179,11 @@ def pagina_premissas():
         col_btn1, col_btn2 = st.columns([2, 1])
         with col_btn1:
             if st.button("💾 Salvar Parâmetros Operacionais", use_container_width=True, type="primary"):
+                # IMPORTANTE: Sincronizar cadastro_salas com novo número de salas
+                motor.cadastro_salas.sincronizar_num_salas(motor.operacional.num_salas)
+                motor.cadastro_salas.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
+                motor.cadastro_salas.dias_uteis_mes = motor.operacional.dias_uteis_mes
+                
                 salvar_filial_atual()
                 st.success("✅ Parâmetros salvos! Alterações refletirão em todas as páginas.")
                 st.rerun()
@@ -6794,6 +9223,97 @@ def pagina_premissas():
         
         # Sincroniza com premissas_folha para manter compatibilidade
         motor.premissas_folha.regime_tributario = motor.operacional.modelo_tributario
+        
+        # Modo de cálculo de sessões
+        st.markdown("---")
+        st.markdown("#### 📊 Modo de Cálculo de Atendimentos")
+        
+        opcoes_modo = {
+            "servico": "📋 Por Serviço (define qtd no cadastro de serviços)",
+            "profissional": "👥 Por Profissional (soma sessões de cada fisioterapeuta)"
+        }
+        
+        modo_atual = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+        if modo_atual not in opcoes_modo:
+            modo_atual = 'servico'
+        
+        modo_selecionado = st.radio(
+            "Como calcular a quantidade de atendimentos?",
+            options=list(opcoes_modo.keys()),
+            format_func=lambda x: opcoes_modo[x],
+            index=0 if modo_atual == "servico" else 1,
+            key="modo_calculo_sessoes",
+            horizontal=True
+        )
+        
+        motor.operacional.modo_calculo_sessoes = modo_selecionado
+        
+        # Explicação do modo selecionado
+        if modo_selecionado == "servico":
+            st.info("""
+            **📋 Modo Por Serviço:**
+            - Defina a quantidade de sessões em **📈 Atendimentos → Serviços**
+            - O crescimento anual também é definido por serviço
+            - ✅ Mais simples para clínicas com equipe estável
+            """)
+        else:
+            st.info("""
+            **👥 Modo Por Profissional:**
+            - Defina sessões por serviço em **👨‍⚕️ Folha Fisioterapeutas**
+            - Cada profissional tem sua própria meta de atendimentos
+            - ✅ Ideal para controle individual de produtividade
+            """)
+        
+        # ========================================
+        # VALIDAÇÃO DE CONSISTÊNCIA DE SESSÕES
+        # ========================================
+        st.markdown("---")
+        st.markdown("#### 🔍 Validação de Consistência")
+        
+        try:
+            validacao = motor.validar_sessoes()
+            
+            # Mostrar totais
+            totais = validacao["detalhes"]["totais"]
+            col_v1, col_v2, col_v3 = st.columns(3)
+            with col_v1:
+                st.metric("📋 Sessões (Serviços)", f"{totais['servicos']}")
+            with col_v2:
+                st.metric("👥 Sessões (Fisios)", f"{totais['fisioterapeutas']}")
+            with col_v3:
+                st.metric("🏢 Capacidade Salas", f"{totais['capacidade_salas']}")
+            
+            # Mostrar alertas e erros
+            if validacao["ok"]:
+                st.success("✅ Sessões consistentes!")
+            else:
+                if validacao["erros"]:
+                    for erro in validacao["erros"]:
+                        st.error(f"❌ {erro}")
+                if validacao["alertas"]:
+                    for alerta in validacao["alertas"]:
+                        st.warning(f"⚠️ {alerta}")
+            
+            # Detalhes por serviço (expansível)
+            with st.expander("📊 Detalhes por Serviço", expanded=False):
+                dados_srv = []
+                for srv_nome, info in validacao["detalhes"]["por_servico"].items():
+                    diferenca = info["servico"] - info["fisios"]
+                    status = "✅" if abs(diferenca) <= 5 else "⚠️"
+                    dados_srv.append({
+                        "Serviço": srv_nome,
+                        "Serviço (qtd)": info["servico"],
+                        "Fisios (soma)": info["fisios"],
+                        "Diferença": diferenca,
+                        "Status": status
+                    })
+                if dados_srv:
+                    df_srv = pd.DataFrame(dados_srv)
+                    st.dataframe(df_srv, use_container_width=True, hide_index=True)
+                else:
+                    st.info("Nenhum serviço cadastrado")
+        except Exception as e:
+            st.warning(f"Não foi possível validar: {e}")
     
     # ========== ABA PAGAMENTOS ==========
     with tab3:
@@ -6884,6 +9404,9 @@ def pagina_premissas():
         st.markdown("### Configuração dos Serviços")
         st.caption("Valores, sessões e reajustes por tipo de serviço")
         
+        # Pegar modo de cálculo
+        modo_sessoes = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+        
         # ===== ADICIONAR NOVO SERVIÇO =====
         with st.expander("➕ ADICIONAR NOVO SERVIÇO", expanded=False):
             st.markdown("##### Cadastrar Novo Serviço")
@@ -6900,7 +9423,7 @@ def pagina_premissas():
                 novo_valor = st.number_input(
                     "Valor da Sessão (R$)",
                     min_value=0.0, max_value=2000.0,
-                    value=150.0,
+                    value=0.0,
                     step=10.0,
                     key="novo_servico_valor"
                 )
@@ -6914,18 +9437,23 @@ def pagina_premissas():
                 )
             
             with col2:
-                novas_sessoes = st.number_input(
-                    "Sessões/Mês (base)",
-                    min_value=0, max_value=1000,
-                    value=50,
-                    step=5,
-                    key="novo_servico_sessoes"
-                )
+                # Só mostra sessões se modo for "servico"
+                if modo_sessoes == "servico":
+                    novas_sessoes = st.number_input(
+                        "Sessões/Mês (base)",
+                        min_value=0, max_value=1000,
+                        value=0,
+                        step=5,
+                        key="novo_servico_sessoes"
+                    )
+                else:
+                    novas_sessoes = 0
+                    st.info("ℹ️ Sessões definidas por profissional (veja Folha Fisioterapeutas)")
                 
                 novo_reajuste = st.slider(
-                    "Reajuste Anual (%)",
+                    "Reajuste Valor (%)",
                     min_value=0, max_value=20,
-                    value=5,
+                    value=0,
                     step=1,
                     key="novo_servico_reajuste"
                 )
@@ -6938,9 +9466,21 @@ def pagina_premissas():
                     key="novo_servico_mes"
                 )
             
+            # Crescimento anual só se modo="servico"
+            if modo_sessoes == "servico":
+                novo_crescimento = st.slider(
+                    "Crescimento Anual Sessões (%)",
+                    min_value=-20, max_value=50,
+                    value=0,
+                    step=1,
+                    key="novo_servico_crescimento"
+                )
+            else:
+                novo_crescimento = 0
+            
             if st.button("✅ CADASTRAR SERVIÇO", type="primary", key="btn_add_servico"):
                 if novo_nome and novo_nome.strip():
-                    from modules.motor_calculo import Servico
+                    from motor_calculo import Servico
                     
                     # Verifica se já existe
                     if novo_nome in motor.servicos:
@@ -6953,6 +9493,7 @@ def pagina_premissas():
                             valor_2026=novo_valor,
                             sessoes_mes_base=novas_sessoes,
                             pct_reajuste=novo_reajuste / 100,
+                            pct_crescimento=novo_crescimento / 100,
                             mes_reajuste=novo_mes_reajuste
                         )
                         st.success(f"✅ Serviço '{novo_nome}' cadastrado com sucesso!")
@@ -6964,6 +9505,10 @@ def pagina_premissas():
         
         # ===== LISTA DE SERVIÇOS EXISTENTES =====
         st.markdown("### 📋 Serviços Cadastrados")
+        
+        # Mostrar aviso do modo atual
+        if modo_sessoes == "profissional":
+            st.info("ℹ️ **Modo Profissional ativo**: Sessões e crescimento são definidos por fisioterapeuta em **👨‍⚕️ Folha Fisioterapeutas**")
         
         # Lista de serviços para remover
         servicos_para_remover = []
@@ -6990,22 +9535,28 @@ def pagina_premissas():
                     )
                 
                 with col2:
-                    servico.sessoes_mes_base = st.number_input(
-                        "Sessões/Mês (base)",
-                        min_value=0, max_value=1000,
-                        value=servico.sessoes_mes_base,
-                        step=5,
-                        key=f"sess_{servico_nome}",
-                        help="Quantidade média de sessões por mês"
-                    )
-                    
-                    servico.pct_crescimento = st.slider(
-                        "Crescimento Anual (%)",
-                        min_value=-20, max_value=50,
-                        value=int(servico.pct_crescimento * 100),
-                        step=1,
-                        key=f"cresc_{servico_nome}"
-                    ) / 100
+                    # Só mostra sessões se modo for "servico"
+                    if modo_sessoes == "servico":
+                        servico.sessoes_mes_base = st.number_input(
+                            "Sessões/Mês (base)",
+                            min_value=0, max_value=1000,
+                            value=servico.sessoes_mes_base,
+                            step=5,
+                            key=f"sess_{servico_nome}",
+                            help="Quantidade média de sessões por mês"
+                        )
+                        
+                        servico.pct_crescimento = st.slider(
+                            "Crescimento Anual (%)",
+                            min_value=-20, max_value=50,
+                            value=int(servico.pct_crescimento * 100),
+                            step=1,
+                            key=f"cresc_{servico_nome}"
+                        ) / 100
+                    else:
+                        # Modo profissional - mostra valores mas não permite editar
+                        st.metric("Sessões/Mês (base)", f"{servico.sessoes_mes_base}", help="Edite em Folha Fisioterapeutas")
+                        st.caption("_Definido por profissional_")
                 
                 with col3:
                     servico.pct_reajuste = st.slider(
@@ -7033,9 +9584,16 @@ def pagina_premissas():
                 
                 # Se não tem profissionais cadastrados, usa preview baseado no serviço
                 if receita_anual == 0 and servico.sessoes_mes_base > 0 and servico.valor_2026 > 0:
-                    # Calcula preview simples: sessões × valor × 12 meses × (1 + crescimento/2)
+                    # Calcula preview considerando reajuste
                     fator_crescimento = 1 + (servico.pct_crescimento / 2)  # Média do crescimento
-                    receita_preview = servico.sessoes_mes_base * servico.valor_2026 * 12 * fator_crescimento
+                    # Meses antes do reajuste usam valor base, depois usam valor reajustado
+                    meses_antes = max(0, servico.mes_reajuste - 1)
+                    meses_depois = 12 - meses_antes
+                    valor_antes = servico.valor_2026
+                    valor_depois = servico.valor_2026 * (1 + servico.pct_reajuste) if servico.pct_reajuste > 0 else servico.valor_2026
+                    receita_preview = servico.sessoes_mes_base * (
+                        (meses_antes * valor_antes) + (meses_depois * valor_depois)
+                    ) * fator_crescimento
                     
                     col1, col2 = st.columns([3, 1])
                     with col1:
@@ -7081,7 +9639,7 @@ def pagina_premissas():
                         if novo_prop_nome in motor.proprietarios:
                             st.error(f"❌ '{novo_prop_nome}' já existe!")
                         else:
-                            from modules.motor_calculo import Profissional
+                            from motor_calculo import Profissional
                             motor.proprietarios[novo_prop_nome] = Profissional(
                                 nome=novo_prop_nome,
                                 tipo="proprietario",
@@ -7098,14 +9656,18 @@ def pagina_premissas():
             # Lista de proprietários
             props_para_remover = []
             
+            # Verificar modo de cálculo
+            modo_sessoes = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+            
             for prop_nome, prop in motor.proprietarios.items():
                 with st.expander(f"👔 {prop_nome}", expanded=True):
                     st.markdown("**Sessões por Serviço (por mês):**")
                     
                     # Grid de serviços
-                    cols = st.columns(3)
-                    for i, servico in enumerate(motor.servicos.keys()):
-                        with cols[i % 3]:
+                    for servico in motor.servicos.keys():
+                        col_srv, col_cresc = st.columns([2, 1])
+                        
+                        with col_srv:
                             sessoes_atual = prop.sessoes_por_servico.get(servico, 0)
                             novas_sessoes = st.number_input(
                                 servico,
@@ -7118,6 +9680,20 @@ def pagina_premissas():
                                 prop.sessoes_por_servico[servico] = novas_sessoes
                             elif servico in prop.sessoes_por_servico:
                                 del prop.sessoes_por_servico[servico]
+                        
+                        # Crescimento só aparece se modo="profissional" e tem sessões
+                        with col_cresc:
+                            if modo_sessoes == "profissional" and novas_sessoes > 0:
+                                cresc_atual = prop.pct_crescimento_por_servico.get(servico, 0)
+                                novo_cresc = st.number_input(
+                                    "Cresc. %",
+                                    min_value=-20, max_value=50,
+                                    value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
+                                    step=1,
+                                    key=f"prop_cresc_{prop_nome}_{servico}",
+                                    help="Crescimento anual das sessões"
+                                )
+                                prop.pct_crescimento_por_servico[servico] = novo_cresc / 100
                     
                     # Resumo e botão remover
                     total_sessoes = sum(prop.sessoes_por_servico.values())
@@ -7153,7 +9729,7 @@ def pagina_premissas():
                         if novo_prof_nome in motor.profissionais:
                             st.error(f"❌ '{novo_prof_nome}' já existe!")
                         else:
-                            from modules.motor_calculo import Profissional
+                            from motor_calculo import Profissional
                             motor.profissionais[novo_prof_nome] = Profissional(
                                 nome=novo_prof_nome,
                                 tipo="profissional",
@@ -7175,9 +9751,10 @@ def pagina_premissas():
                     st.markdown("**Sessões por Serviço (por mês):**")
                     
                     # Grid de serviços
-                    cols = st.columns(3)
-                    for i, servico in enumerate(motor.servicos.keys()):
-                        with cols[i % 3]:
+                    for servico in motor.servicos.keys():
+                        col_srv, col_cresc = st.columns([2, 1])
+                        
+                        with col_srv:
                             sessoes_atual = prof.sessoes_por_servico.get(servico, 0)
                             novas_sessoes = st.number_input(
                                 servico,
@@ -7190,6 +9767,20 @@ def pagina_premissas():
                                 prof.sessoes_por_servico[servico] = novas_sessoes
                             elif servico in prof.sessoes_por_servico:
                                 del prof.sessoes_por_servico[servico]
+                        
+                        # Crescimento só aparece se modo="profissional" e tem sessões
+                        with col_cresc:
+                            if modo_sessoes == "profissional" and novas_sessoes > 0:
+                                cresc_atual = prof.pct_crescimento_por_servico.get(servico, 0)
+                                novo_cresc = st.number_input(
+                                    "Cresc. %",
+                                    min_value=-20, max_value=50,
+                                    value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
+                                    step=1,
+                                    key=f"prof_cresc_{prof_nome}_{servico}",
+                                    help="Crescimento anual das sessões"
+                                )
+                                prof.pct_crescimento_por_servico[servico] = novo_cresc / 100
                     
                     # Resumo e botão remover
                     total_sessoes = sum(prof.sessoes_por_servico.values())
@@ -7230,27 +9821,44 @@ def pagina_premissas():
         # Tabela resumo por serviço
         st.markdown("#### Sessões por Serviço")
         
+        # Seletor de mês para visualizar valores com reajuste
+        mes_visualizar = st.selectbox(
+            "📅 Visualizar valores do mês:",
+            range(12),
+            format_func=lambda x: MESES[x],
+            index=0,
+            key="mes_sessoes_servico"
+        )
+        
         dados_resumo = []
         for servico in motor.servicos.keys():
+            srv = motor.servicos[servico]
             sessoes_prop = sum(p.sessoes_por_servico.get(servico, 0) for p in motor.proprietarios.values())
             sessoes_prof = sum(p.sessoes_por_servico.get(servico, 0) for p in motor.profissionais.values())
+            total_sessoes = sessoes_prop + sessoes_prof
             
-            # Pega valor (agora é dicionário com antes/depois)
-            val_prop = motor.valores_proprietario.get(servico, {})
-            val_prof = motor.valores_profissional.get(servico, {})
+            # Usa valor do serviço considerando reajuste do mês selecionado
+            valor_servico = motor.calcular_valor_servico_mes(servico, mes_visualizar, "profissional")
             
-            valor_prop = val_prop.get("depois", 0) if isinstance(val_prop, dict) else val_prop
-            valor_prof = val_prof.get("depois", 0) if isinstance(val_prof, dict) else val_prof
+            # Se valor profissional é 0, usa valor proprietário (ex: Osteopatia)
+            if valor_servico == 0:
+                valor_servico = motor.calcular_valor_servico_mes(servico, mes_visualizar, "proprietario")
             
-            receita_prop = sessoes_prop * valor_prop
-            receita_prof = sessoes_prof * valor_prof
+            # Valor base (cadastrado) e valor após reajuste
+            valor_base = srv.valor_2026
+            valor_apos_reajuste = valor_base * (1 + srv.pct_reajuste) if srv.pct_reajuste > 0 else valor_base
+            
+            receita_mes = total_sessoes * valor_servico
             
             dados_resumo.append({
                 "Serviço": servico,
                 "Sessões Prop.": sessoes_prop,
                 "Sessões Prof.": sessoes_prof,
-                "Total Sessões": sessoes_prop + sessoes_prof,
-                "Receita/Mês": format_currency(receita_prop + receita_prof)
+                "Total Sessões": total_sessoes,
+                "Valor Base": format_currency(valor_base),
+                f"Valor {MESES[srv.mes_reajuste - 1]}+": format_currency(valor_apos_reajuste),
+                "Valor Unit.": format_currency(valor_servico),
+                "Receita/Mês": format_currency(receita_mes)
             })
         
         if dados_resumo:
@@ -7295,6 +9903,127 @@ def pagina_premissas():
             cols[5].markdown("**Valor/Base**")
             cols[6].markdown("**Sazonalidade**")
             cols[7].markdown("**🗑️**")
+            
+            st.markdown("---")
+            
+            # ===== CALCULADORA DE DESPESAS VARIÁVEIS =====
+            with st.expander("🧮 **CALCULADORA** - Descobrir R$/Sessão ou % Receita", expanded=False):
+                st.caption("Use para calcular o valor por sessão ou percentual baseado nos custos do ano anterior")
+                
+                # Calcula total de sessões cadastradas
+                total_sessoes_ano = 0
+                for fisio in motor.fisioterapeutas.values():
+                    if fisio.ativo:
+                        for servico, qtd in fisio.sessoes_por_servico.items():
+                            # Considera crescimento médio (média do ano)
+                            pct_cresc = fisio.pct_crescimento_por_servico.get(servico, 0)
+                            sessoes_media = qtd * (1 + pct_cresc / 2)  # Média aproximada
+                            total_sessoes_ano += sessoes_media * 12
+                
+                # Se não tem fisioterapeutas, usa proprietários + profissionais
+                if total_sessoes_ano == 0:
+                    for prop in motor.proprietarios.values():
+                        for servico, qtd in prop.sessoes_por_servico.items():
+                            pct_cresc = prop.pct_crescimento_por_servico.get(servico, 0.105)
+                            sessoes_media = qtd * (1 + pct_cresc / 2)
+                            total_sessoes_ano += sessoes_media * 12
+                    for prof in motor.profissionais.values():
+                        for servico, qtd in prof.sessoes_por_servico.items():
+                            pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.05)
+                            sessoes_media = qtd * (1 + pct_cresc / 2)
+                            total_sessoes_ano += sessoes_media * 12
+                
+                # Sessões por mês (média)
+                sessoes_mes = total_sessoes_ano / 12 if total_sessoes_ano > 0 else 0
+                
+                col_calc1, col_calc2 = st.columns(2)
+                
+                with col_calc1:
+                    st.markdown("##### 💰 Calcular R$/Sessão")
+                    
+                    # Opção de período
+                    periodo_sessao = st.radio(
+                        "O valor informado é:",
+                        ["Mensal", "Anual"],
+                        horizontal=True,
+                        key="calc_periodo_sessao",
+                        help="Escolha se o custo é mensal ou anual"
+                    )
+                    
+                    custo_informado = st.number_input(
+                        f"Custo {periodo_sessao.lower()} (R$)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=500.0 if periodo_sessao == "Mensal" else 1000.0,
+                        key="calc_custo_sessao",
+                        help=f"Ex: Aluguel custa R$ {'8.000/mês' if periodo_sessao == 'Mensal' else '96.000/ano'}"
+                    )
+                    
+                    # Converte para anual se necessário
+                    custo_ano_sessao = custo_informado * 12 if periodo_sessao == "Mensal" else custo_informado
+                    
+                    st.caption(f"📊 Sessões: **{sessoes_mes:,.0f}**/mês | **{total_sessoes_ano:,.0f}**/ano")
+                    
+                    if custo_informado > 0 and total_sessoes_ano > 0:
+                        valor_por_sessao = custo_ano_sessao / total_sessoes_ano
+                        st.success(f"**R$/Sessão = R$ {valor_por_sessao:.2f}**")
+                        
+                        if periodo_sessao == "Mensal":
+                            st.caption(f"Cálculo: R$ {custo_informado:,.2f}/mês × 12 = R$ {custo_ano_sessao:,.2f}/ano")
+                            st.caption(f"R$ {custo_ano_sessao:,.2f} ÷ {total_sessoes_ano:,.0f} sessões = R$ {valor_por_sessao:.2f}")
+                        else:
+                            st.caption(f"Cálculo: R$ {custo_ano_sessao:,.0f} ÷ {total_sessoes_ano:,.0f} sessões")
+                        
+                        # Mostrar verificação
+                        custo_mes_calculado = valor_por_sessao * sessoes_mes
+                        st.info(f"📋 Verificação: {sessoes_mes:,.0f} sessões × R$ {valor_por_sessao:.2f} = **R$ {custo_mes_calculado:,.2f}/mês**")
+                    elif custo_informado > 0:
+                        st.warning("⚠️ Cadastre sessões nos profissionais primeiro")
+                
+                with col_calc2:
+                    st.markdown("##### 📈 Calcular % Receita")
+                    
+                    # Opção de período
+                    periodo_receita = st.radio(
+                        "O valor informado é:",
+                        ["Mensal", "Anual"],
+                        horizontal=True,
+                        key="calc_periodo_receita",
+                        help="Escolha se os valores são mensais ou anuais"
+                    )
+                    
+                    custo_informado_rec = st.number_input(
+                        f"Custo {periodo_receita.lower()} (R$)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=500.0 if periodo_receita == "Mensal" else 1000.0,
+                        key="calc_custo_receita",
+                        help=f"Ex: Materiais custam R$ {'1.500/mês' if periodo_receita == 'Mensal' else '18.000/ano'}"
+                    )
+                    receita_informada = st.number_input(
+                        f"Receita {periodo_receita.lower()} (R$)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=5000.0 if periodo_receita == "Mensal" else 10000.0,
+                        key="calc_receita_anterior",
+                        help=f"Ex: Receita bruta é R$ {'100.000/mês' if periodo_receita == 'Mensal' else '1.200.000/ano'}"
+                    )
+                    
+                    if custo_informado_rec > 0 and receita_informada > 0:
+                        pct_receita = (custo_informado_rec / receita_informada) * 100
+                        st.success(f"**% Receita = {pct_receita:.2f}%**")
+                        st.caption(f"Cálculo: R$ {custo_informado_rec:,.2f} ÷ R$ {receita_informada:,.2f} × 100")
+                        
+                        # Mostrar verificação com receita projetada
+                        if motor.receita_bruta:
+                            receita_proj_mes = sum(motor.receita_bruta.get("Total", [0]*12)) / 12
+                            custo_proj_mes = receita_proj_mes * (pct_receita / 100)
+                            st.info(f"📋 Com receita projetada de R$ {receita_proj_mes:,.2f}/mês → **R$ {custo_proj_mes:,.2f}/mês**")
+                    elif custo_informado_rec > 0:
+                        st.info("💡 Informe a receita")
+                
+                st.markdown("---")
+                st.caption("💡 **Dica:** Copie o valor calculado e cole no campo da despesa correspondente")
             
             st.markdown("---")
             
@@ -7414,25 +10143,37 @@ def pagina_premissas():
                         )
                     else:
                         if desp.base_variavel == "receita":
-                            desp.pct_receita = st.number_input(
-                                "%",
-                                min_value=0.0, max_value=1.0,
-                                value=float(desp.pct_receita),
-                                step=0.005,
-                                format="%.3f",
-                                key=f"pct_rec_{nome}",
-                                label_visibility="collapsed",
-                                help=f"{desp.pct_receita*100:.1f}%"
-                            )
+                            # Campo para % sobre receita
+                            col_pct, col_label = st.columns([2, 1])
+                            with col_pct:
+                                desp.pct_receita = st.number_input(
+                                    "% Receita",
+                                    min_value=0.0, max_value=100.0,
+                                    value=float(desp.pct_receita * 100),  # Mostra como %
+                                    step=0.5,
+                                    format="%.2f",
+                                    key=f"pct_rec_{nome}",
+                                    label_visibility="collapsed",
+                                    help="Percentual sobre a receita bruta"
+                                ) / 100  # Converte de volta para decimal
+                            with col_label:
+                                st.caption("**%**")
                         else:
-                            desp.valor_por_sessao = st.number_input(
-                                "R$/sessão",
-                                min_value=0.0, max_value=1000.0,
-                                value=float(desp.valor_por_sessao),
-                                step=1.0,
-                                key=f"vlr_ses_{nome}",
-                                label_visibility="collapsed"
-                            )
+                            # Campo para R$/sessão
+                            col_val, col_label = st.columns([2, 1])
+                            with col_val:
+                                desp.valor_por_sessao = st.number_input(
+                                    "R$/sessão",
+                                    min_value=0.0, max_value=1000.0,
+                                    value=float(desp.valor_por_sessao),
+                                    step=0.50,
+                                    format="%.2f",
+                                    key=f"vlr_ses_{nome}",
+                                    label_visibility="collapsed",
+                                    help="Valor cobrado por sessão realizada"
+                                )
+                            with col_label:
+                                st.caption("**/sessão**")
                 
                 # Sazonalidade (só para fixas)
                 with cols[6]:
@@ -7467,7 +10208,7 @@ def pagina_premissas():
             # Adicionar nova despesa
             with st.expander("➕ ADICIONAR DESPESA", expanded=False):
                 # Importa função de verificação
-                from modules.motor_calculo import verificar_tipo_despesa
+                from motor_calculo import verificar_tipo_despesa
                 
                 col1, col2, col3 = st.columns(3)
                 
@@ -7540,7 +10281,7 @@ def pagina_premissas():
                         if nova_desp_nome in motor.despesas_fixas:
                             st.error(f"❌ '{nova_desp_nome}' já existe!")
                         else:
-                            from modules.motor_calculo import DespesaFixa
+                            from motor_calculo import DespesaFixa
                             motor.despesas_fixas[nova_desp_nome] = DespesaFixa(
                                 nome=nova_desp_nome,
                                 categoria=nova_desp_categoria,
@@ -7564,11 +10305,39 @@ def pagina_premissas():
             total_fixas = sum(d.valor_mensal for d in motor.despesas_fixas.values() if d.ativa and d.tipo_despesa == "fixa")
             qtd_variaveis = len([d for d in motor.despesas_fixas.values() if d.ativa and d.tipo_despesa == "variavel"])
             
+            # Calcula estimativa de variáveis (média mensal)
+            if qtd_variaveis > 0:
+                # Calcula receita e sessões para estimar variáveis
+                motor.calcular_receita_bruta_total()
+                receita_media_mes = sum(motor.receita_bruta.get("Total", [0]*12)) / 12
+                
+                # Calcula sessões médias por mês
+                sessoes_media_mes = 0
+                for fisio in motor.fisioterapeutas.values():
+                    if fisio.ativo:
+                        for srv, qtd in fisio.sessoes_por_servico.items():
+                            pct = fisio.pct_crescimento_por_servico.get(srv, 0)
+                            sessoes_media_mes += qtd * (1 + pct / 2)  # Média do ano
+                
+                # Soma das variáveis estimadas
+                total_variaveis_estimado = 0
+                for d in motor.despesas_fixas.values():
+                    if d.ativa and d.tipo_despesa == "variavel":
+                        if d.base_variavel == "receita":
+                            total_variaveis_estimado += receita_media_mes * d.pct_receita
+                        else:  # sessao
+                            total_variaveis_estimado += sessoes_media_mes * d.valor_por_sessao
+            else:
+                total_variaveis_estimado = 0
+            
             col1, col2 = st.columns(2)
             with col1:
-                st.metric("🔒 Total Despesas Fixas (Média 2025)", format_currency(total_fixas))
+                st.metric("🔒 Despesas Fixas", format_currency(total_fixas), "média mensal")
             with col2:
-                st.metric("📊 Despesas Variáveis Cadastradas", f"{qtd_variaveis} itens")
+                if qtd_variaveis > 0:
+                    st.metric("📊 Despesas Variáveis", format_currency(total_variaveis_estimado), f"{qtd_variaveis} {'item' if qtd_variaveis == 1 else 'itens'} · média mensal")
+                else:
+                    st.metric("📊 Despesas Variáveis", "Nenhuma", "cadastre para acompanhar custos")
         
         # ===== PROJEÇÃO 2026 =====
         with subtab_desp2:
@@ -8113,7 +10882,7 @@ def pagina_premissas():
             
             with col1:
                 st.markdown("##### Novo Sócio (Pró-Labore)")
-                from modules.motor_calculo import SocioProLabore
+                from motor_calculo import SocioProLabore
                 
                 novo_socio_nome = st.text_input("Nome do Sócio", key="novo_socio_nome")
                 novo_socio_pl = st.number_input("Pró-Labore (R$)", min_value=0.0, value=1500.0, key="novo_socio_pl")
@@ -8135,7 +10904,7 @@ def pagina_premissas():
             
             with col2:
                 st.markdown("##### Novo Funcionário")
-                from modules.motor_calculo import FuncionarioCLT
+                from motor_calculo import FuncionarioCLT
                 
                 novo_func_nome = st.text_input("Nome do Funcionário", key="novo_func_nome")
                 novo_func_cargo = st.text_input("Cargo", key="novo_func_cargo")
@@ -8619,12 +11388,18 @@ def pagina_premissas():
         # Sincronizar com premissas operacionais
         cadastro.horas_funcionamento_dia = motor.operacional.horas_atendimento_dia
         cadastro.dias_uteis_mes = motor.operacional.dias_uteis_mes
-        cadastro.sincronizar_num_salas(motor.operacional.num_salas)
         
-        # Resumo
+        # CORREÇÃO: Verificar se num_salas está configurado
+        if motor.operacional.num_salas > 0:
+            cadastro.sincronizar_num_salas(motor.operacional.num_salas)
+        else:
+            st.error("❌ **Nº de Salas = 0!** Configure na aba **🏥 Operacionais** antes de configurar as salas.")
+            st.stop()
+        
+        # Resumo - MOSTRA O VALOR DE PREMISSAS
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Salas Ativas", f"{cadastro.num_salas_ativas}")
+            st.metric("Nº Salas (Premissas)", f"{motor.operacional.num_salas}")
         with col2:
             st.metric("m² Total Ativo", f"{cadastro.m2_ativo:.0f} m²")
         with col3:
@@ -8632,7 +11407,7 @@ def pagina_premissas():
         with col4:
             st.metric("Horas/Dia", f"{motor.operacional.horas_atendimento_dia}h")
         
-        st.info(f"ℹ️ **Nº de salas ({motor.operacional.num_salas})** definido na aba **🏥 Operacionais**. Aqui você configura os detalhes de cada sala (m², tipo, serviços).")
+        st.info(f"ℹ️ Mostrando **{motor.operacional.num_salas} salas** (configurado na aba **🏥 Operacionais**).")
         
         st.markdown("---")
         
@@ -8641,56 +11416,89 @@ def pagina_premissas():
         
         servicos_disponiveis = list(motor.servicos.keys())
         
-        for sala in cadastro.salas:
-            if sala.ativa:  # Mostrar apenas salas ativas (definidas em operacional)
-                # Título do expander
-                if sala.metros_quadrados > 0:
-                    titulo_sala = f"✅ Sala {sala.numero} - {sala.tipo} ({sala.metros_quadrados:.0f}m²)"
-                else:
-                    titulo_sala = f"⚠️ Sala {sala.numero} - Não configurada"
+        # Usar salas_ativas para garantir que apenas as salas definidas em Premissas apareçam
+        salas_para_mostrar = cadastro.salas_ativas
+        
+        if not salas_para_mostrar:
+            st.warning("⚠️ Nenhuma sala ativa. Configure o Nº de Salas em **🏥 Operacionais**.")
+        
+        for sala in salas_para_mostrar:
+            # Título do expander
+            if sala.metros_quadrados > 0:
+                titulo_sala = f"✅ Sala {sala.numero} - {sala.tipo} ({sala.metros_quadrados:.0f}m²)"
+            else:
+                titulo_sala = f"⚠️ Sala {sala.numero} - Não configurada"
+            
+            with st.expander(titulo_sala, expanded=(sala.metros_quadrados == 0)):
+                col1, col2 = st.columns([1, 2])
                 
-                with st.expander(titulo_sala, expanded=(sala.metros_quadrados == 0)):
-                    col1, col2 = st.columns([1, 2])
-                    
-                    with col1:
-                        sala.metros_quadrados = st.number_input(
-                            "m²",
-                            min_value=0.0,
-                            max_value=200.0,
-                            value=float(sala.metros_quadrados),
-                            step=1.0,
-                            key=f"sala_{sala.numero}_m2"
-                        )
-                    
-                    with col2:
-                        sala.tipo = st.selectbox(
-                            "Tipo",
-                            options=["Individual", "Compartilhado"],
-                            index=0 if sala.tipo == "Individual" else 1,
-                            key=f"sala_{sala.numero}_tipo"
-                        )
-                    
-                    # Aviso se sala não configurada
-                    if sala.metros_quadrados == 0:
-                        st.warning("⚠️ Configure o tamanho (m²) desta sala")
-                    
-                    st.markdown("**Serviços atendidos nesta sala:**")
-                    
-                    # Filtrar serviços salvos que ainda existem nas opções
-                    servicos_validos = [s for s in (sala.servicos_atendidos or []) if s in servicos_disponiveis]
-                    
-                    # Multiselect para serviços
-                    servicos_selecionados = st.multiselect(
-                        "Selecione os serviços",
-                        options=servicos_disponiveis,
-                        default=servicos_validos,
-                        key=f"sala_{sala.numero}_servicos",
-                        label_visibility="collapsed"
+                with col1:
+                    sala.metros_quadrados = st.number_input(
+                        "m²",
+                        min_value=0.0,
+                        max_value=200.0,
+                        value=float(sala.metros_quadrados),
+                        step=1.0,
+                        key=f"sala_{sala.numero}_m2"
                     )
-                    sala.servicos_atendidos = servicos_selecionados
-                    
-                    if servicos_selecionados and sala.metros_quadrados > 0:
-                        st.caption(f"m²/serviço: {sala.m2_por_servico:.2f} m²")
+                
+                with col2:
+                    sala.tipo = st.selectbox(
+                        "Tipo",
+                        options=["Individual", "Compartilhado"],
+                        index=0 if sala.tipo == "Individual" else 1,
+                        key=f"sala_{sala.numero}_tipo"
+                    )
+                
+                # Aviso se sala não configurada
+                if sala.metros_quadrados == 0:
+                    st.warning("⚠️ Configure o tamanho (m²) desta sala")
+                
+                st.markdown("**Serviços atendidos nesta sala:**")
+                
+                # Filtrar serviços salvos que ainda existem nas opções
+                servicos_validos = [s for s in (sala.servicos_atendidos or []) if s in servicos_disponiveis]
+                
+                # Multiselect para serviços
+                servicos_selecionados = st.multiselect(
+                    "Selecione os serviços",
+                    options=servicos_disponiveis,
+                    default=servicos_validos,
+                    key=f"sala_{sala.numero}_servicos",
+                    label_visibility="collapsed"
+                )
+                sala.servicos_atendidos = servicos_selecionados
+                
+                if servicos_selecionados and sala.metros_quadrados > 0:
+                    st.caption(f"m²/serviço: {sala.m2_por_servico:.2f} m²")
+        
+        # Botões de ação
+        st.markdown("---")
+        col1, col2, col3 = st.columns([1, 1, 1])
+        
+        with col1:
+            if st.button("🗑️ Resetar Salas", use_container_width=True, key="btn_resetar_salas_prem"):
+                # Limpar todas as salas para valores em branco
+                for sala in cadastro.salas:
+                    sala.metros_quadrados = 0.0
+                    sala.tipo = "Individual"
+                    sala.servicos_atendidos = []
+                
+                # Limpar cache do session_state
+                keys_para_limpar = [k for k in st.session_state.keys() if k.startswith('sala_')]
+                for k in keys_para_limpar:
+                    del st.session_state[k]
+                
+                # Salvar imediatamente
+                if salvar_filial_atual():
+                    st.success("✅ Salas resetadas! Todas em branco.")
+                    st.rerun()
+        
+        with col2:
+            if st.button("💾 Salvar Configuração das Salas", type="primary", use_container_width=True, key="btn_salvar_salas_prem"):
+                if salvar_filial_atual():
+                    st.success("✅ Configuração das salas salva com sucesso!")
+                    st.rerun()
         
         st.markdown("---")
         
@@ -8721,10 +11529,323 @@ def pagina_premissas():
         else:
             st.warning("Nenhum serviço alocado às salas. Configure os serviços atendidos em cada sala.")
 
+    # ========== ABA CENÁRIOS ==========
+    with tab11:
+        st.markdown("### 🎯 Configuração de Cenários")
+        
+        # Toggle para habilitar/desabilitar módulo de cenários
+        if not hasattr(motor, 'usar_cenarios'):
+            motor.usar_cenarios = True
+        
+        col_toggle1, col_toggle2 = st.columns([1, 3])
+        with col_toggle1:
+            usar_cenarios = st.checkbox(
+                "Usar módulo de Cenários",
+                value=motor.usar_cenarios,
+                key="chk_usar_cenarios",
+                help="Habilita/desabilita análise de cenários para esta filial"
+            )
+            motor.usar_cenarios = usar_cenarios
+        
+        with col_toggle2:
+            if usar_cenarios:
+                st.success("✅ Módulo habilitado - O menu '🎯 Cenários' está visível")
+            else:
+                st.warning("⚠️ Módulo desabilitado - O menu '🎯 Cenários' ficará oculto")
+        
+        # Se desabilitado, mostra apenas o toggle
+        if not usar_cenarios:
+            st.info("💡 Marque a opção acima para habilitar análise de cenários (Pessimista/Conservador/Otimista)")
+            st.caption("🔄 Após habilitar, clique em **💾 Salvar** na barra lateral e recarregue a página")
+        
+        else:
+            # Conteúdo normal da aba
+            st.caption("O **Conservador** usa as premissas cadastradas. Configure ajustes para os cenários Pessimista e Otimista.")
+            
+            # Inicializa ajustes se não existir
+            if not hasattr(motor, 'ajustes_cenarios') or motor.ajustes_cenarios is None:
+                motor.restaurar_ajustes_padrao()
+            
+            if not hasattr(motor, 'cenario_oficial'):
+                motor.cenario_oficial = "Conservador"
+            
+            # Inicializa campos de faturamento anterior
+            if not hasattr(motor, 'usar_comparativo_anterior'):
+                motor.usar_comparativo_anterior = False
+            if not hasattr(motor, 'faturamento_anterior'):
+                motor.faturamento_anterior = [0.0] * 12
+            if not hasattr(motor, 'ano_anterior'):
+                motor.ano_anterior = 2025
+            
+            st.markdown("---")
+            
+            # ========================================================================
+            # FATURAMENTO DO EXERCÍCIO ANTERIOR
+            # ========================================================================
+            st.markdown("#### 📅 Comparativo com Exercício Anterior")
+        
+            col_comp1, col_comp2 = st.columns([1, 3])
+        
+            with col_comp1:
+                usar_comp = st.checkbox(
+                    "Usar comparativo",
+                    value=motor.usar_comparativo_anterior,
+                    key="chk_usar_comparativo",
+                    help="Habilita comparação do orçamento com faturamento real do ano anterior"
+                )
+                motor.usar_comparativo_anterior = usar_comp
+            
+            with col_comp2:
+                ano_ant = st.number_input(
+                    "Ano de referência",
+                    min_value=2020, max_value=2030,
+                    value=motor.ano_anterior,
+                    key="input_ano_anterior",
+                    disabled=not usar_comp
+                )
+                motor.ano_anterior = ano_ant
+            
+            if usar_comp:
+                st.markdown(f"##### 💰 Faturamento Bruto {ano_ant} (Real)")
+                st.caption("Informe o faturamento mensal realizado no ano anterior")
+                
+                meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+                
+                # Linha 1: Jan-Jun
+                col1, col2, col3, col4, col5, col6 = st.columns(6)
+                cols_1 = [col1, col2, col3, col4, col5, col6]
+                
+                for i, col in enumerate(cols_1):
+                    with col:
+                        valor = st.number_input(
+                            meses[i],
+                            min_value=0.0,
+                            value=float(motor.faturamento_anterior[i]),
+                            step=1000.0,
+                            format="%.0f",
+                            key=f"fat_ant_{i}"
+                        )
+                        motor.faturamento_anterior[i] = valor
+                
+                # Linha 2: Jul-Dez
+                col7, col8, col9, col10, col11, col12 = st.columns(6)
+                cols_2 = [col7, col8, col9, col10, col11, col12]
+                
+                for i, col in enumerate(cols_2):
+                    with col:
+                        idx = i + 6
+                        valor = st.number_input(
+                            meses[idx],
+                            min_value=0.0,
+                            value=float(motor.faturamento_anterior[idx]),
+                            step=1000.0,
+                            format="%.0f",
+                            key=f"fat_ant_{idx}"
+                        )
+                        motor.faturamento_anterior[idx] = valor
+                
+                # Total
+                total_anterior = sum(motor.faturamento_anterior)
+                st.success(f"**Total {ano_ant}: R$ {total_anterior:,.0f}**")
+                
+                # Botão para salvar faturamento anterior
+                if st.button("💾 Salvar Faturamento Anterior", key="btn_salvar_fat_anterior", type="primary"):
+                    if salvar_filial_atual():
+                        st.success("✅ Faturamento salvo! Agora vá em **🎯 Cenários** para ver o comparativo.")
+                        st.balloons()
+                    else:
+                        st.error("❌ Erro ao salvar. Verifique se uma filial está selecionada.")
+            
+            st.markdown("---")
+            
+            # CENÁRIO OFICIAL
+            st.markdown("#### ✅ Cenário Oficial para Relatórios")
+            
+            cenarios_opcoes = ["Conservador", "Pessimista", "Otimista"]
+            idx_oficial = cenarios_opcoes.index(motor.cenario_oficial) if motor.cenario_oficial in cenarios_opcoes else 0
+            
+            col_of1, col_of2 = st.columns([2, 3])
+            with col_of1:
+                novo_oficial = st.selectbox(
+                    "Cenário que aparece por padrão",
+                    cenarios_opcoes,
+                    index=idx_oficial,
+                    key="select_cenario_oficial",
+                    format_func=lambda x: f"⚠️ {x}" if x == "Conservador" else (f"📉 {x}" if x == "Pessimista" else f"🚀 {x}")
+                )
+                if novo_oficial != motor.cenario_oficial:
+                    motor.cenario_oficial = novo_oficial
+            
+            with col_of2:
+                descricoes = {
+                    "Conservador": "Premissas cadastradas (base de referência)",
+                    "Pessimista": "Base com ajustes negativos (cenário de crise)",
+                    "Otimista": "Base com ajustes positivos (cenário favorável)"
+                }
+                st.info(f"💡 {descricoes[novo_oficial]}")
+            
+            st.markdown("---")
+            
+            # AJUSTES POR CENÁRIO
+            st.markdown("#### 📊 Ajustes por Cenário")
+            st.caption("Os ajustes são valores que **somam** às premissas base (Conservador). Positivo = aumenta, Negativo = diminui.")
+            
+            tab_pess, tab_otim = st.tabs(["📉 Pessimista", "🚀 Otimista"])
+            
+            # ========== PESSIMISTA ==========
+            with tab_pess:
+                st.markdown("##### 📉 Ajustes do Cenário Pessimista")
+                st.caption("Configure reduções de sessões, valores ou aumentos de despesas")
+                
+                if "Pessimista" not in motor.ajustes_cenarios:
+                    motor.ajustes_cenarios["Pessimista"] = {"sessoes": {}, "valores": {}, "despesas": {}, "descricao": ""}
+                
+                # Descrição
+                desc_pess = st.text_input(
+                    "Descrição do cenário",
+                    value=motor.ajustes_cenarios["Pessimista"].get("descricao", "Cenário de crise"),
+                    key="desc_pessimista"
+                )
+                motor.ajustes_cenarios["Pessimista"]["descricao"] = desc_pess
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**🩺 Ajustes de Sessões/Mês**")
+                    for servico in motor.servicos:
+                        ajuste_atual = motor.ajustes_cenarios["Pessimista"].get("sessoes", {}).get(servico, 0)
+                        novo_ajuste = st.number_input(
+                            f"{servico}",
+                            value=float(ajuste_atual),
+                            step=5.0,
+                            key=f"pess_sessoes_{servico}",
+                            help=f"Ajuste sobre a base. Ex: -10 = reduz 10 sessões/mês"
+                        )
+                        if novo_ajuste != ajuste_atual:
+                            if "sessoes" not in motor.ajustes_cenarios["Pessimista"]:
+                                motor.ajustes_cenarios["Pessimista"]["sessoes"] = {}
+                            motor.ajustes_cenarios["Pessimista"]["sessoes"][servico] = novo_ajuste
+                
+                with col2:
+                    st.markdown("**💰 Ajustes de Despesas (R$/mês)**")
+                    despesas_principais = ["Aluguel", "Energia Elétrica", "Marketing", "Contador", "Software"]
+                    for desp in despesas_principais:
+                        if desp in motor.despesas_fixas:
+                            ajuste_atual = motor.ajustes_cenarios["Pessimista"].get("despesas", {}).get(desp, 0)
+                            novo_ajuste = st.number_input(
+                                f"{desp}",
+                                value=float(ajuste_atual),
+                                step=100.0,
+                                key=f"pess_desp_{desp}",
+                                help=f"Ajuste sobre a base. Ex: +500 = aumenta R$500/mês"
+                            )
+                            if novo_ajuste != ajuste_atual:
+                                if "despesas" not in motor.ajustes_cenarios["Pessimista"]:
+                                    motor.ajustes_cenarios["Pessimista"]["despesas"] = {}
+                                motor.ajustes_cenarios["Pessimista"]["despesas"][desp] = novo_ajuste
+            
+            # ========== OTIMISTA ==========
+            with tab_otim:
+                st.markdown("##### 🚀 Ajustes do Cenário Otimista")
+                st.caption("Configure aumentos de sessões, valores ou reduções de despesas")
+                
+                if "Otimista" not in motor.ajustes_cenarios:
+                    motor.ajustes_cenarios["Otimista"] = {"sessoes": {}, "valores": {}, "despesas": {}, "descricao": ""}
+                
+                # Descrição
+                desc_otim = st.text_input(
+                    "Descrição do cenário",
+                    value=motor.ajustes_cenarios["Otimista"].get("descricao", "Cenário favorável"),
+                    key="desc_otimista"
+                )
+                motor.ajustes_cenarios["Otimista"]["descricao"] = desc_otim
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**🩺 Ajustes de Sessões/Mês**")
+                    for servico in motor.servicos:
+                        ajuste_atual = motor.ajustes_cenarios["Otimista"].get("sessoes", {}).get(servico, 0)
+                        novo_ajuste = st.number_input(
+                            f"{servico}",
+                            value=float(ajuste_atual),
+                            step=5.0,
+                            key=f"otim_sessoes_{servico}",
+                            help=f"Ajuste sobre a base. Ex: +20 = aumenta 20 sessões/mês"
+                        )
+                        if novo_ajuste != ajuste_atual:
+                            if "sessoes" not in motor.ajustes_cenarios["Otimista"]:
+                                motor.ajustes_cenarios["Otimista"]["sessoes"] = {}
+                            motor.ajustes_cenarios["Otimista"]["sessoes"][servico] = novo_ajuste
+                
+                with col2:
+                    st.markdown("**💰 Ajustes de Despesas (R$/mês)**")
+                    despesas_principais = ["Aluguel", "Energia Elétrica", "Marketing", "Contador", "Software"]
+                    for desp in despesas_principais:
+                        if desp in motor.despesas_fixas:
+                            ajuste_atual = motor.ajustes_cenarios["Otimista"].get("despesas", {}).get(desp, 0)
+                            novo_ajuste = st.number_input(
+                                f"{desp}",
+                                value=float(ajuste_atual),
+                                step=100.0,
+                                key=f"otim_desp_{desp}",
+                                help=f"Ajuste sobre a base. Ex: -300 = reduz R$300/mês"
+                            )
+                            if novo_ajuste != ajuste_atual:
+                                if "despesas" not in motor.ajustes_cenarios["Otimista"]:
+                                    motor.ajustes_cenarios["Otimista"]["despesas"] = {}
+                                motor.ajustes_cenarios["Otimista"]["despesas"][desp] = novo_ajuste
+            
+            st.markdown("---")
+            
+            # BOTÕES
+            col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+            
+            with col_btn1:
+                if st.button("🔄 Limpar Ajustes", key="btn_limpar_cenarios", use_container_width=True):
+                    motor.restaurar_ajustes_padrao()
+                    st.success("✅ Ajustes limpos!")
+                    st.rerun()
+            
+            with col_btn2:
+                if st.button("💾 Salvar", key="btn_salvar_cenarios", use_container_width=True, type="primary"):
+                    if salvar_filial_atual():
+                        st.success("✅ Cenários salvos!")
+                    else:
+                        st.error("❌ Erro ao salvar. Verifique se uma filial está selecionada.")
+            
+            # RESUMO
+            st.markdown("---")
+            st.markdown("#### 📋 Resumo dos Cenários")
+            
+            # Calcular totais para comparação
+            motor.aplicar_cenario("Conservador")
+            receita_conserv = sum(motor.calcular_receita_servico_mes(s, 5) for s in motor.servicos)
+            
+            motor.aplicar_cenario("Pessimista")
+            receita_pess = sum(motor.calcular_receita_servico_mes(s, 5) for s in motor.servicos)
+            
+            motor.aplicar_cenario("Otimista")
+            receita_otim = sum(motor.calcular_receita_servico_mes(s, 5) for s in motor.servicos)
+            
+            # Restaura cenário oficial
+            motor.aplicar_cenario(motor.cenario_oficial)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📉 Pessimista (Jun)", f"R$ {receita_pess:,.0f}", 
+                         f"{((receita_pess/receita_conserv)-1)*100:+.1f}%" if receita_conserv > 0 else "")
+            with col2:
+                st.metric("⚠️ Conservador (Jun)", f"R$ {receita_conserv:,.0f}", "Base")
+            with col3:
+                st.metric("🚀 Otimista (Jun)", f"R$ {receita_otim:,.0f}", 
+                         f"{((receita_otim/receita_conserv)-1)*100:+.1f}%" if receita_conserv > 0 else "")
+
 
 def pagina_simulador_dre():
     """Página de DRE Simulado - Formato Profissional"""
     render_header()
+    # Badge no header
     
     st.markdown('<div class="section-header"><h3>📊 DRE - Demonstração do Resultado do Exercício</h3></div>', unsafe_allow_html=True)
     
@@ -8849,16 +11970,13 @@ def pagina_simulador_dre():
             # Deduções
             "(-) Simples Nacional", "(-) Carnê Leão (PF)", "(-) Taxa Cartão", "Total Deduções",
             "Receita Líquida",
-            # Custos Variáveis
-            "(-) Materiais", "Total Custos Variáveis",
+            # Custos Variáveis - adicionados dinamicamente
+            "Total Custos Variáveis",
             "Margem de Contribuição",
             # Custos Fixos - Pessoal (detalhado)
             "(-) Folha Fisioterapeutas", "(-) Folha Proprietários", "(-) Pró-Labore", "(-) Folha CLT + Encargos",
             "Subtotal Pessoal",
-            # Despesas Operacionais
-            "(-) Aluguel", "(-) IPTU", "(-) Condomínio", "(-) Energia", "(-) TV/Telefone/Internet",
-            "(-) Limpeza", "(-) Manutenção", "(-) Seguros", "(-) Sistema", "(-) Compras",
-            "(-) Contabilidade", "(-) Marketing", "(-) Serviços Terceiros", "(-) Cursos",
+            # Despesas Operacionais - DINÂMICAS (apenas as que são FIXAS)
             "Total Despesas Fixas",
             "Total Custos Fixos",
             "EBITDA",
@@ -8875,9 +11993,63 @@ def pagina_simulador_dre():
             ]
         )
         
+        # Adiciona custos variáveis dinâmicos (antes de Total Custos Variáveis)
+        custos_variaveis_dinamicos = [k for k in dre.keys() if k.startswith("(-)") and k in [f"(-) {nome}" for nome in motor.custos.keys() if nome != "Total Custos Variáveis"]]
+        
+        # Adiciona despesas fixas dinâmicas (antes de Total Despesas Fixas)
+        despesas_fixas_dinamicas = [f"(-) {nome}" for nome, desp in motor.despesas_fixas.items() if desp.ativa and desp.tipo_despesa == "fixa"]
+        
         # Filtra contas que existem e adiciona separadores
         secao_atual = None
+        primeiro_cv = True  # Flag para identificar primeiro custo variável
+        primeiro_df = True  # Flag para identificar primeira despesa fixa
         for conta in ordem_contas:
+            # Se for Total Custos Variáveis, insere os CVs dinâmicos antes
+            if conta == "Total Custos Variáveis":
+                for cv in custos_variaveis_dinamicos:
+                    if cv in dre:
+                        valores = dre[cv]
+                        total = sum(valores)
+                        
+                        # Cabeçalho da seção apenas no primeiro CV
+                        if primeiro_cv:
+                            html += '<tr><td colspan="14" style="background:#2c5282;color:white;font-weight:700;padding:6px 8px;">▸ CUSTOS VARIÁVEIS</td></tr>'
+                            secao_atual = "CUSTOS VARIÁVEIS"
+                            primeiro_cv = False
+                        
+                        row_style = get_row_style(cv)
+                        nome_conta = "&nbsp;&nbsp;&nbsp;" + cv
+                        
+                        valores_html = ""
+                        for v in valores:
+                            valores_html += f'<td style="padding:8px; text-align:right; border-bottom:1px solid #e2e8f0;">{format_val(v)}</td>'
+                        
+                        total_html = format_val(total)
+                        html += f'<tr style="{row_style}"><td style="padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;">{nome_conta}</td>{valores_html}<td style="padding:8px; text-align:right; border-bottom:1px solid #e2e8f0;"><strong>{total_html}</strong></td></tr>'
+            
+            # Se for Total Despesas Fixas, insere as despesas fixas dinâmicas antes
+            if conta == "Total Despesas Fixas":
+                for df in despesas_fixas_dinamicas:
+                    if df in dre:
+                        valores = dre[df]
+                        total = sum(valores)
+                        
+                        # Cabeçalho da seção apenas na primeira despesa fixa
+                        if primeiro_df:
+                            html += '<tr><td colspan="14" style="background:#2c5282;color:white;font-weight:700;padding:6px 8px;">▸ DESPESAS OPERACIONAIS</td></tr>'
+                            secao_atual = "DESPESAS OPERACIONAIS"
+                            primeiro_df = False
+                        
+                        row_style = get_row_style(df)
+                        nome_conta = "&nbsp;&nbsp;&nbsp;" + df
+                        
+                        valores_html = ""
+                        for v in valores:
+                            valores_html += f'<td style="padding:8px; text-align:right; border-bottom:1px solid #e2e8f0;">{format_val(v)}</td>'
+                        
+                        total_html = format_val(total)
+                        html += f'<tr style="{row_style}"><td style="padding:8px; text-align:left; border-bottom:1px solid #e2e8f0;">{nome_conta}</td>{valores_html}<td style="padding:8px; text-align:right; border-bottom:1px solid #e2e8f0;"><strong>{total_html}</strong></td></tr>'
+            
             if conta not in dre:
                 continue
             
@@ -8891,12 +12063,9 @@ def pagina_simulador_dre():
                 nova_secao = "RECEITA BRUTA"
             elif conta in ["(-) Simples Nacional", "(-) Carnê Leão (PF)"]:
                 nova_secao = "DEDUÇÕES"
-            elif conta == "(-) Materiais":
-                nova_secao = "CUSTOS VARIÁVEIS"
+            # CUSTOS VARIÁVEIS e DESPESAS OPERACIONAIS são tratados nos loops acima
             elif conta == "(-) Folha Fisioterapeutas":
                 nova_secao = "CUSTOS DE PESSOAL"
-            elif conta == "(-) Aluguel":
-                nova_secao = "DESPESAS OPERACIONAIS"
             elif conta in ["(+) Rendimentos Aplicações", "(-) Juros Novos Investimentos"]:
                 nova_secao = "RESULTADO FINANCEIRO"
             elif conta == "(-) Reserva Legal":
@@ -9097,6 +12266,7 @@ def pagina_simulador_dre():
 def pagina_atendimentos():
     """Página de Evolução de Atendimentos e Faturamento"""
     render_header()
+    # Badge no header
     
     st.markdown('<div class="section-header"><h3>📈 Painel de Atendimentos e Faturamento</h3></div>', unsafe_allow_html=True)
     
@@ -9131,6 +12301,10 @@ def pagina_atendimentos():
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes_mes += qtd_base + cresc_mensal * (mes_idx + 0.944)
                     
+                    # APLICA SAZONALIDADE
+                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                    sessoes_mes = sessoes_mes * fator_saz
+                    
                     row[mes] = round(sessoes_mes, 2)
                     total_ano += sessoes_mes
                 
@@ -9158,6 +12332,10 @@ def pagina_atendimentos():
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
                         
+                        # APLICA SAZONALIDADE nas sessões
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
                         # Calcula valor (antes/depois do reajuste)
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                         faturamento_mes += sessoes * valor
@@ -9170,6 +12348,49 @@ def pagina_atendimentos():
             
             if dados_faturamento:
                 st.dataframe(pd.DataFrame(dados_faturamento), use_container_width=True, hide_index=True)
+            
+            # Tabela de ticket médio por proprietário
+            st.markdown("#### 🎫 Ticket Médio por Mês")
+            st.caption("Faturamento ÷ Sessões = Valor médio por atendimento")
+            
+            dados_ticket = []
+            for prop_nome, prop in motor.proprietarios.items():
+                row = {'Profissional': f"👔 {prop_nome}"}
+                total_faturamento = 0
+                total_sessoes = 0
+                
+                for mes_idx, mes in enumerate(MESES_ABREV):
+                    faturamento_mes = 0
+                    sessoes_mes = 0
+                    
+                    for servico, qtd_base in prop.sessoes_por_servico.items():
+                        # Calcula sessões
+                        pct_cresc = prop.pct_crescimento_por_servico.get(servico, 0.105)
+                        crescimento_qtd = qtd_base * pct_cresc
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        
+                        # APLICA SAZONALIDADE
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
+                        sessoes_mes += sessoes
+                        
+                        # Calcula valor (antes/depois do reajuste)
+                        valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
+                        faturamento_mes += sessoes * valor
+                    
+                    ticket = faturamento_mes / sessoes_mes if sessoes_mes > 0 else 0
+                    row[mes] = format_currency(ticket, prefix="")
+                    total_faturamento += faturamento_mes
+                    total_sessoes += sessoes_mes
+                
+                ticket_medio_ano = total_faturamento / total_sessoes if total_sessoes > 0 else 0
+                row['Média Ano'] = format_currency(ticket_medio_ano, prefix="")
+                dados_ticket.append(row)
+            
+            if dados_ticket:
+                st.dataframe(pd.DataFrame(dados_ticket), use_container_width=True, hide_index=True)
             
             # Gráfico de evolução
             st.markdown("#### 📈 Gráfico de Evolução")
@@ -9185,6 +12406,11 @@ def pagina_atendimentos():
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        
+                        # APLICA SAZONALIDADE
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                         faturamento_mes += sessoes * valor
                     valores_mes.append(faturamento_mes)
@@ -9241,6 +12467,11 @@ def pagina_atendimentos():
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes_mes += qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    
+                    # APLICA SAZONALIDADE
+                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                    sessoes_mes = sessoes_mes * fator_saz
+                    
                     row[mes] = round(sessoes_mes, 2)
                     total_ano += sessoes_mes
                 
@@ -9280,6 +12511,10 @@ def pagina_atendimentos():
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
                         
+                        # APLICA SAZONALIDADE nas sessões
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
                         # Calcula valor (antes/depois do reajuste)
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
                         faturamento_mes += sessoes * valor
@@ -9310,6 +12545,66 @@ def pagina_atendimentos():
             if dados_faturamento:
                 st.dataframe(pd.DataFrame(dados_faturamento), use_container_width=True, hide_index=True)
             
+            # Tabela de ticket médio
+            st.markdown("#### 🎫 Ticket Médio por Mês")
+            st.caption("Faturamento ÷ Sessões = Valor médio por atendimento")
+            
+            dados_ticket = []
+            totais_ticket = {'faturamento': [0]*12, 'sessoes': [0]*12}
+            
+            for prof_nome, prof in profs_mostrar:
+                if sum(prof.sessoes_por_servico.values()) == 0:
+                    continue
+                    
+                row = {'Profissional': f"🩺 {prof_nome}"}
+                total_faturamento = 0
+                total_sessoes = 0
+                
+                for mes_idx, mes in enumerate(MESES_ABREV):
+                    faturamento_mes = 0
+                    sessoes_mes = 0
+                    
+                    for servico, qtd_base in prof.sessoes_por_servico.items():
+                        # Calcula sessões com crescimento linear
+                        pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.05)
+                        crescimento_qtd = qtd_base * pct_cresc
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        
+                        # APLICA SAZONALIDADE
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
+                        sessoes_mes += sessoes
+                        
+                        # Calcula valor (antes/depois do reajuste)
+                        valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
+                        faturamento_mes += sessoes * valor
+                    
+                    ticket = faturamento_mes / sessoes_mes if sessoes_mes > 0 else 0
+                    row[mes] = format_currency(ticket, prefix="")
+                    total_faturamento += faturamento_mes
+                    total_sessoes += sessoes_mes
+                    totais_ticket['faturamento'][mes_idx] += faturamento_mes
+                    totais_ticket['sessoes'][mes_idx] += sessoes_mes
+                
+                ticket_medio_ano = total_faturamento / total_sessoes if total_sessoes > 0 else 0
+                row['Média Ano'] = format_currency(ticket_medio_ano, prefix="")
+                dados_ticket.append(row)
+            
+            # Linha de média geral
+            if len(dados_ticket) > 1:
+                row_media = {'Profissional': '📊 MÉDIA GERAL'}
+                for i, mes in enumerate(MESES_ABREV):
+                    ticket_geral = totais_ticket['faturamento'][i] / totais_ticket['sessoes'][i] if totais_ticket['sessoes'][i] > 0 else 0
+                    row_media[mes] = format_currency(ticket_geral, prefix="")
+                ticket_ano = sum(totais_ticket['faturamento']) / sum(totais_ticket['sessoes']) if sum(totais_ticket['sessoes']) > 0 else 0
+                row_media['Média Ano'] = format_currency(ticket_ano, prefix="")
+                dados_ticket.append(row_media)
+            
+            if dados_ticket:
+                st.dataframe(pd.DataFrame(dados_ticket), use_container_width=True, hide_index=True)
+            
             # Gráfico
             st.markdown("#### 📈 Gráfico de Evolução")
             
@@ -9327,6 +12622,11 @@ def pagina_atendimentos():
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        
+                        # APLICA SAZONALIDADE
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
                         faturamento_mes += sessoes * valor
                     valores_mes.append(faturamento_mes)
@@ -9365,6 +12665,9 @@ def pagina_atendimentos():
                     crescimento_qtd = qtd_base * pct_cresc
                     cresc_mensal = crescimento_qtd / 13.1
                     sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    # APLICA SAZONALIDADE
+                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                    sessoes = sessoes * fator_saz
                     valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                     faturamento_mes += sessoes * valor
             row_prop[mes] = faturamento_mes
@@ -9383,6 +12686,9 @@ def pagina_atendimentos():
                     crescimento_qtd = qtd_base * pct_cresc
                     cresc_mensal = crescimento_qtd / 13.1
                     sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    # APLICA SAZONALIDADE
+                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                    sessoes = sessoes * fator_saz
                     valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
                     faturamento_mes += sessoes * valor
             row_prof[mes] = faturamento_mes
@@ -11348,8 +14654,1195 @@ def pagina_dividendos():
 
 
 # ============================================
-# CONSULTOR FINANCEIRO IA
+# MÓDULO REALIZADO - LANÇAMENTOS
 # ============================================
+
+def pagina_lancar_realizado():
+    """Página para lançar dados realizados mensais"""
+    
+    st.title("✅ Lançar Realizado")
+    st.markdown("*Registre os valores realizados para comparar com o orçado*")
+    
+    motor = st.session_state.motor
+    
+    # Verificar se tem cliente/filial selecionado
+    if not st.session_state.cliente_id or not st.session_state.filial_id:
+        st.warning("⚠️ Selecione um cliente e filial para lançar dados realizados.")
+        return
+    
+    if st.session_state.filial_id == "consolidado":
+        st.warning("⚠️ Não é possível lançar realizado na visão consolidada. Selecione uma filial específica.")
+        return
+    
+    # Inicializar manager de realizado
+    if 'realizado_manager' not in st.session_state:
+        st.session_state.realizado_manager = RealizadoManager()
+    
+    realizado_mgr = st.session_state.realizado_manager
+    
+    # Seletor de mês
+    MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    
+    col1, col2, col3 = st.columns([2, 1, 1])
+    
+    with col1:
+        mes_selecionado = st.selectbox(
+            "📅 Mês de Referência",
+            range(12),
+            format_func=lambda x: MESES[x],
+            key="mes_realizado"
+        )
+    
+    with col2:
+        ano = st.number_input("Ano", value=2026, min_value=2024, max_value=2030)
+    
+    with col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔄 Carregar Mês", use_container_width=True):
+            st.rerun()
+    
+    st.markdown("---")
+    
+    # Carregar dados existentes ou criar novo
+    realizado_anual = realizado_mgr.carregar_realizado(
+        st.session_state.cliente_id,
+        st.session_state.filial_id,
+        ano
+    )
+    
+    lancamento = realizado_anual.get_mes(mes_selecionado)
+    if not lancamento:
+        lancamento = LancamentoMesRealizado(mes=mes_selecionado, ano=ano)
+    
+    # Tabs de lançamento
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "💰 Receitas/Sessões", 
+        "📋 Despesas Fixas", 
+        "👥 Folha de Pagamento",
+        "💳 Impostos",
+        "📝 Observações"
+    ])
+    
+    # ===== TAB 1: RECEITAS/SESSÕES =====
+    with tab1:
+        st.subheader("📊 Sessões e Receitas por Serviço")
+        
+        # Calcular orçado para comparação
+        motor.calcular_receita_bruta_total()
+        
+        st.markdown("##### Serviços")
+        
+        cols_header = st.columns([3, 2, 2, 2, 2])
+        cols_header[0].markdown("**Serviço**")
+        cols_header[1].markdown("**Sessões Orçadas**")
+        cols_header[2].markdown("**Sessões Realizadas**")
+        cols_header[3].markdown("**Receita Orçada**")
+        cols_header[4].markdown("**Receita Realizada**")
+        
+        sessoes_realizadas = {}
+        receitas_realizadas = {}
+        
+        for nome_servico in motor.servicos.keys():
+            cols = st.columns([3, 2, 2, 2, 2])
+            
+            sessoes_orcadas = motor.calcular_sessoes_mes(nome_servico, mes_selecionado)
+            receita_orcada = motor.calcular_receita_servico_mes(nome_servico, mes_selecionado)
+            
+            cols[0].markdown(f"**{nome_servico}**")
+            cols[1].markdown(f"{sessoes_orcadas:.0f}")
+            
+            sessoes_realizadas[nome_servico] = cols[2].number_input(
+                f"Sessões {nome_servico}",
+                min_value=0,
+                value=int(lancamento.sessoes_por_servico.get(nome_servico, 0)),
+                key=f"sess_real_{nome_servico}",
+                label_visibility="collapsed"
+            )
+            
+            cols[3].markdown(f"R$ {receita_orcada:,.2f}")
+            
+            receitas_realizadas[nome_servico] = cols[4].number_input(
+                f"Receita {nome_servico}",
+                min_value=0.0,
+                value=float(lancamento.receita_por_servico.get(nome_servico, 0.0)),
+                key=f"rec_real_{nome_servico}",
+                label_visibility="collapsed",
+                format="%.2f"
+            )
+        
+        # Totais
+        st.markdown("---")
+        total_sessoes_orcadas = sum(motor.calcular_sessoes_mes(s, mes_selecionado) for s in motor.servicos.keys())
+        total_receita_orcada = motor.receita_bruta.get("Total", [0]*12)[mes_selecionado]
+        total_sessoes_realizadas = sum(sessoes_realizadas.values())
+        total_receita_realizada = sum(receitas_realizadas.values())
+        
+        cols_total = st.columns([3, 2, 2, 2, 2])
+        cols_total[0].markdown("**TOTAL**")
+        cols_total[1].markdown(f"**{total_sessoes_orcadas:.0f}**")
+        cols_total[2].markdown(f"**{total_sessoes_realizadas}**")
+        cols_total[3].markdown(f"**R$ {total_receita_orcada:,.2f}**")
+        cols_total[4].markdown(f"**R$ {total_receita_realizada:,.2f}**")
+        
+        # Variação
+        var_sessoes = total_sessoes_realizadas - total_sessoes_orcadas
+        var_receita = total_receita_realizada - total_receita_orcada
+        
+        col_var1, col_var2 = st.columns(2)
+        with col_var1:
+            cor = "green" if var_sessoes >= 0 else "red"
+            st.markdown(f"**Variação Sessões:** :{cor}[{'+' if var_sessoes >= 0 else ''}{var_sessoes:.0f}]")
+        with col_var2:
+            cor = "green" if var_receita >= 0 else "red"
+            st.markdown(f"**Variação Receita:** :{cor}[{'+' if var_receita >= 0 else ''}R$ {var_receita:,.2f}]")
+    
+    # ===== TAB 2: DESPESAS FIXAS =====
+    with tab2:
+        st.subheader("📋 Despesas Fixas Realizadas")
+        
+        cols_header = st.columns([3, 2, 2, 2])
+        cols_header[0].markdown("**Despesa**")
+        cols_header[1].markdown("**Orçado**")
+        cols_header[2].markdown("**Realizado**")
+        cols_header[3].markdown("**Variação**")
+        
+        despesas_realizadas = {}
+        
+        for nome_desp, desp in motor.despesas_fixas.items():
+            if not desp.ativa:
+                continue
+                
+            cols = st.columns([3, 2, 2, 2])
+            
+            cols[0].markdown(f"{nome_desp}")
+            cols[1].markdown(f"R$ {desp.valor_mensal:,.2f}")
+            
+            valor_realizado = cols[2].number_input(
+                f"Realizado {nome_desp}",
+                min_value=0.0,
+                value=float(lancamento.despesas_fixas.get(nome_desp, desp.valor_mensal)),
+                key=f"desp_real_{nome_desp}",
+                label_visibility="collapsed",
+                format="%.2f"
+            )
+            despesas_realizadas[nome_desp] = valor_realizado
+            
+            variacao = valor_realizado - desp.valor_mensal
+            cor = "green" if variacao <= 0 else "red"  # Despesa menor é bom
+            cols[3].markdown(f":{cor}[{'+' if variacao >= 0 else ''}R$ {variacao:,.2f}]")
+        
+        # Total
+        st.markdown("---")
+        total_desp_orcado = sum(d.valor_mensal for d in motor.despesas_fixas.values() if d.ativa)
+        total_desp_realizado = sum(despesas_realizadas.values())
+        
+        cols_total = st.columns([3, 2, 2, 2])
+        cols_total[0].markdown("**TOTAL DESPESAS**")
+        cols_total[1].markdown(f"**R$ {total_desp_orcado:,.2f}**")
+        cols_total[2].markdown(f"**R$ {total_desp_realizado:,.2f}**")
+        var_desp = total_desp_realizado - total_desp_orcado
+        cor = "green" if var_desp <= 0 else "red"
+        cols_total[3].markdown(f"**:{cor}[{'+' if var_desp >= 0 else ''}R$ {var_desp:,.2f}]**")
+    
+    # ===== TAB 3: FOLHA DE PAGAMENTO =====
+    with tab3:
+        st.subheader("👥 Folha de Pagamento Realizada")
+        
+        folha_func_realizada = {}
+        folha_fisio_realizada = {}
+        prolabore_realizado = {}
+        
+        # Funcionários CLT
+        if motor.funcionarios_clt:
+            st.markdown("##### 👔 Funcionários CLT")
+            for nome, func in motor.funcionarios_clt.items():
+                if not func.ativo:
+                    continue
+                cols = st.columns([3, 2, 2])
+                cols[0].markdown(f"{nome} ({func.cargo})")
+                cols[1].markdown(f"Orçado: R$ {func.salario_base:,.2f}")
+                folha_func_realizada[nome] = cols[2].number_input(
+                    f"Folha {nome}",
+                    min_value=0.0,
+                    value=float(lancamento.folha_funcionarios.get(nome, func.salario_base)),
+                    key=f"folha_func_{nome}",
+                    label_visibility="collapsed",
+                    format="%.2f"
+                )
+        
+        # Sócios Pró-labore
+        if motor.socios_prolabore:
+            st.markdown("##### 👔 Sócios (Pró-labore)")
+            for nome, socio in motor.socios_prolabore.items():
+                if not socio.ativo:
+                    continue
+                cols = st.columns([3, 2, 2])
+                cols[0].markdown(f"{nome}")
+                cols[1].markdown(f"Orçado: R$ {socio.prolabore:,.2f}")
+                prolabore_realizado[nome] = cols[2].number_input(
+                    f"Prolabore {nome}",
+                    min_value=0.0,
+                    value=float(lancamento.prolabore_socios.get(nome, socio.prolabore)),
+                    key=f"prolabore_{nome}",
+                    label_visibility="collapsed",
+                    format="%.2f"
+                )
+        
+        # Total Folha
+        st.markdown("---")
+        total_folha_realizada = (
+            sum(folha_func_realizada.values()) + 
+            sum(folha_fisio_realizada.values()) + 
+            sum(prolabore_realizado.values())
+        )
+        st.metric("Total Folha Realizada", f"R$ {total_folha_realizada:,.2f}")
+    
+    # ===== TAB 4: IMPOSTOS =====
+    with tab4:
+        st.subheader("💳 Impostos e Taxas")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            imposto_simples = st.number_input(
+                "Simples Nacional / DAS",
+                min_value=0.0,
+                value=float(lancamento.imposto_simples),
+                format="%.2f",
+                key="imposto_simples"
+            )
+        
+        with col2:
+            taxas_cartao = st.number_input(
+                "Taxas de Cartão",
+                min_value=0.0,
+                value=float(lancamento.taxas_cartao),
+                format="%.2f",
+                key="taxas_cartao"
+            )
+        
+        outros_impostos = st.number_input(
+            "Outros Impostos/Taxas",
+            min_value=0.0,
+            value=float(lancamento.outros_impostos),
+            format="%.2f",
+            key="outros_impostos"
+        )
+    
+    # ===== TAB 5: OBSERVAÇÕES =====
+    with tab5:
+        st.subheader("📝 Observações do Mês")
+        
+        observacoes = st.text_area(
+            "Observações",
+            value=lancamento.observacoes,
+            height=150,
+            placeholder="Registre observações importantes sobre o mês...",
+            key="obs_realizado"
+        )
+        
+        status = st.selectbox(
+            "Status do Lançamento",
+            ["rascunho", "confirmado", "fechado"],
+            index=["rascunho", "confirmado", "fechado"].index(lancamento.status),
+            key="status_realizado"
+        )
+    
+    # ===== SALVAR =====
+    st.markdown("---")
+    
+    col_save1, col_save2, col_save3 = st.columns([2, 1, 1])
+    
+    with col_save1:
+        if st.button("💾 Salvar Lançamento", type="primary", use_container_width=True):
+            # Atualizar objeto de lançamento
+            lancamento.sessoes_por_servico = {k: int(v) for k, v in sessoes_realizadas.items()}
+            lancamento.receita_por_servico = receitas_realizadas
+            lancamento.despesas_fixas = despesas_realizadas
+            lancamento.folha_funcionarios = folha_func_realizada
+            lancamento.folha_fisioterapeutas = folha_fisio_realizada
+            lancamento.prolabore_socios = prolabore_realizado
+            lancamento.imposto_simples = imposto_simples
+            lancamento.taxas_cartao = taxas_cartao
+            lancamento.outros_impostos = outros_impostos
+            lancamento.observacoes = observacoes
+            lancamento.status = status
+            lancamento.data_lancamento = datetime.now().isoformat()
+            
+            # Salvar
+            realizado_mgr.salvar_lancamento_mes(
+                st.session_state.cliente_id,
+                st.session_state.filial_id,
+                lancamento,
+                ano
+            )
+            
+            st.success(f"✅ Lançamento de {MESES[mes_selecionado]}/{ano} salvo com sucesso!")
+    
+    with col_save2:
+        if st.button("🗑️ Limpar", use_container_width=True):
+            st.rerun()
+    
+    with col_save3:
+        # Mostrar última atualização
+        if lancamento.data_lancamento:
+            try:
+                dt = datetime.fromisoformat(lancamento.data_lancamento)
+                st.caption(f"📅 Última atualização: {dt.strftime('%d/%m/%Y %H:%M')}")
+            except:
+                pass
+
+
+# ============================================
+# MÓDULO REALIZADO - COMPARATIVO
+# ============================================
+
+def pagina_orcado_realizado():
+    """Página de comparativo Orçado x Realizado - Análise Mensal"""
+    
+    st.title("📊 Orçado x Realizado")
+    st.markdown("*Análise comparativa mensal de performance*")
+    
+    motor = st.session_state.motor
+    
+    # Verificar se tem cliente/filial selecionado
+    if not st.session_state.cliente_id or not st.session_state.filial_id:
+        st.warning("⚠️ Selecione um cliente e filial para ver o comparativo.")
+        return
+    
+    # Inicializar manager de realizado
+    if 'realizado_manager' not in st.session_state:
+        st.session_state.realizado_manager = RealizadoManager()
+    
+    realizado_mgr = st.session_state.realizado_manager
+    
+    MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    
+    MESES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    
+    # Seletor de período
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        ano = st.number_input("Ano", value=2026, min_value=2024, max_value=2030, key="ano_comparativo")
+    
+    with col2:
+        mes_selecionado = st.selectbox(
+            "📅 Mês de Análise",
+            range(12),
+            format_func=lambda x: MESES_FULL[x],
+            key="mes_comparativo"
+        )
+    
+    st.markdown("---")
+    
+    # Carregar dados
+    realizado_anual = realizado_mgr.carregar_realizado(
+        st.session_state.cliente_id,
+        st.session_state.filial_id,
+        ano
+    )
+    
+    # Calcular orçado
+    motor.calcular_receita_bruta_total()
+    motor.calcular_deducoes_total()
+    
+    # Obter lançamento do mês
+    lanc = realizado_anual.get_mes(mes_selecionado) or LancamentoMesRealizado(mes=mes_selecionado)
+    
+    # ===== HEADER DO MÊS =====
+    st.subheader(f"🎯 Análise de {MESES_FULL[mes_selecionado]}/{ano}")
+    
+    # Status do lançamento
+    if lanc.status == "fechado":
+        st.success("✅ Mês fechado e conferido")
+    elif lanc.status == "confirmado":
+        st.info("📋 Lançamento confirmado")
+    else:
+        st.warning("⏳ Lançamento pendente ou em rascunho")
+    
+    # ===== KPIs DO MÊS =====
+    st.markdown("### 📊 Indicadores do Mês")
+    
+    # Valores ORÇADOS do mês específico
+    receita_orcada = motor.receita_bruta.get("Total", [0]*12)[mes_selecionado]
+    receita_realizada = lanc.receita_bruta
+    
+    sessoes_orcadas = sum(motor.calcular_sessoes_mes(s, mes_selecionado) for s in motor.servicos.keys())
+    sessoes_realizadas = lanc.total_sessoes
+    
+    despesas_orcadas = sum(d.valor_mensal for d in motor.despesas_fixas.values() if d.ativa)
+    despesas_realizadas = lanc.total_despesas_fixas
+    
+    folha_orcada = motor.custo_pessoal_mensal
+    folha_realizada = lanc.total_folha
+    
+    # Cards
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        var_receita = receita_realizada - receita_orcada
+        var_pct = (var_receita / receita_orcada * 100) if receita_orcada > 0 else 0
+        icone = "🟢" if var_pct >= -5 else ("🟡" if var_pct >= -15 else "🔴")
+        
+        st.metric(
+            label="💰 Receita",
+            value=f"R$ {receita_realizada:,.0f}",
+            delta=f"{var_pct:+.1f}% ({'+' if var_receita >= 0 else ''}R$ {var_receita:,.0f})",
+            delta_color="normal" if var_receita >= 0 else "inverse"
+        )
+        st.caption(f"Orçado: R$ {receita_orcada:,.0f}")
+    
+    with col2:
+        var_sessoes = sessoes_realizadas - sessoes_orcadas
+        var_pct_sess = (var_sessoes / sessoes_orcadas * 100) if sessoes_orcadas > 0 else 0
+        
+        st.metric(
+            label="📊 Sessões",
+            value=f"{sessoes_realizadas:,.0f}",
+            delta=f"{var_pct_sess:+.1f}% ({'+' if var_sessoes >= 0 else ''}{var_sessoes:.0f})",
+            delta_color="normal" if var_sessoes >= 0 else "inverse"
+        )
+        st.caption(f"Orçado: {sessoes_orcadas:,.0f}")
+    
+    with col3:
+        var_desp = despesas_realizadas - despesas_orcadas
+        var_pct_desp = (var_desp / despesas_orcadas * 100) if despesas_orcadas > 0 else 0
+        
+        st.metric(
+            label="📋 Despesas Fixas",
+            value=f"R$ {despesas_realizadas:,.0f}",
+            delta=f"{var_pct_desp:+.1f}%",
+            delta_color="inverse" if var_desp > 0 else "normal"  # Menor é melhor
+        )
+        st.caption(f"Orçado: R$ {despesas_orcadas:,.0f}")
+    
+    with col4:
+        var_folha = folha_realizada - folha_orcada
+        var_pct_folha = (var_folha / folha_orcada * 100) if folha_orcada > 0 else 0
+        
+        st.metric(
+            label="👥 Folha",
+            value=f"R$ {folha_realizada:,.0f}",
+            delta=f"{var_pct_folha:+.1f}%",
+            delta_color="inverse" if var_folha > 0 else "normal"
+        )
+        st.caption(f"Orçado: R$ {folha_orcada:,.0f}")
+    
+    st.markdown("---")
+    
+    # ===== DETALHAMENTO POR SERVIÇO =====
+    st.markdown("### 💼 Detalhamento por Serviço")
+    
+    dados_servicos = []
+    for nome_srv in motor.servicos.keys():
+        sessoes_orc = motor.calcular_sessoes_mes(nome_srv, mes_selecionado)
+        receita_orc = motor.calcular_receita_servico_mes(nome_srv, mes_selecionado)
+        
+        sessoes_real = lanc.sessoes_por_servico.get(nome_srv, 0)
+        receita_real = lanc.receita_por_servico.get(nome_srv, 0.0)
+        
+        var_sess = sessoes_real - sessoes_orc
+        var_rec = receita_real - receita_orc
+        
+        var_pct_sess = (var_sess / sessoes_orc * 100) if sessoes_orc > 0 else 0
+        var_pct_rec = (var_rec / receita_orc * 100) if receita_orc > 0 else 0
+        
+        status = "🟢" if abs(var_pct_rec) <= 5 else ("🟡" if abs(var_pct_rec) <= 15 else "🔴")
+        
+        dados_servicos.append({
+            "Serviço": nome_srv,
+            "Sessões Orç.": f"{sessoes_orc:.0f}",
+            "Sessões Real.": f"{sessoes_real}",
+            "Var. Sessões": f"{var_pct_sess:+.1f}%",
+            "Receita Orç.": f"R$ {receita_orc:,.2f}",
+            "Receita Real.": f"R$ {receita_real:,.2f}",
+            "Var. Receita": f"{var_pct_rec:+.1f}%",
+            "Status": status
+        })
+    
+    df_servicos = pd.DataFrame(dados_servicos)
+    st.dataframe(df_servicos, use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    
+    # ===== DETALHAMENTO DESPESAS FIXAS =====
+    st.markdown("### 📋 Detalhamento Despesas Fixas")
+    
+    dados_despesas = []
+    for nome_desp, desp in motor.despesas_fixas.items():
+        if not desp.ativa:
+            continue
+        
+        valor_orc = desp.valor_mensal
+        valor_real = lanc.despesas_fixas.get(nome_desp, 0.0)
+        var = valor_real - valor_orc
+        var_pct = (var / valor_orc * 100) if valor_orc > 0 else 0
+        
+        # Para despesas, menor é melhor
+        status = "🟢" if var_pct <= 5 else ("🟡" if var_pct <= 15 else "🔴")
+        
+        dados_despesas.append({
+            "Despesa": nome_desp,
+            "Categoria": desp.categoria,
+            "Orçado": f"R$ {valor_orc:,.2f}",
+            "Realizado": f"R$ {valor_real:,.2f}",
+            "Variação R$": f"R$ {var:+,.2f}",
+            "Variação %": f"{var_pct:+.1f}%",
+            "Status": status
+        })
+    
+    if dados_despesas:
+        df_despesas = pd.DataFrame(dados_despesas)
+        st.dataframe(df_despesas, use_container_width=True, hide_index=True)
+    else:
+        st.info("Nenhuma despesa fixa cadastrada")
+    
+    st.markdown("---")
+    
+    # ===== EVOLUÇÃO ANUAL =====
+    st.markdown("### 📈 Evolução Anual (Todos os Meses)")
+    
+    # Preparar dados
+    receitas_orcadas = motor.receita_bruta.get("Total", [0]*12)
+    receitas_realizadas = realizado_anual.get_receita_por_mes()
+    
+    # Gráfico
+    fig = go.Figure()
+    
+    fig.add_trace(go.Bar(
+        name="Orçado",
+        x=MESES,
+        y=receitas_orcadas,
+        marker_color="#90CAF9",
+        text=[f"R$ {v:,.0f}" for v in receitas_orcadas],
+        textposition='outside'
+    ))
+    
+    fig.add_trace(go.Bar(
+        name="Realizado",
+        x=MESES,
+        y=receitas_realizadas,
+        marker_color="#4CAF50",
+        text=[f"R$ {v:,.0f}" if v > 0 else "" for v in receitas_realizadas],
+        textposition='outside'
+    ))
+    
+    # Destacar mês selecionado
+    fig.add_vline(
+        x=mes_selecionado, 
+        line_dash="dash", 
+        line_color="red",
+        annotation_text=f"← {MESES[mes_selecionado]}"
+    )
+    
+    fig.update_layout(
+        barmode='group',
+        title="Receita Orçada x Realizada por Mês",
+        xaxis_title="Mês",
+        yaxis_title="Receita (R$)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        height=400
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # ===== TABELA RESUMO ANUAL =====
+    st.markdown("### 📋 Resumo Mensal")
+    
+    dados_tabela = []
+    acum_orcado = 0
+    acum_realizado = 0
+    
+    for m in range(12):
+        lanc_m = realizado_anual.get_mes(m) or LancamentoMesRealizado(mes=m)
+        orcado = receitas_orcadas[m]
+        realizado = lanc_m.receita_bruta
+        variacao = realizado - orcado
+        var_pct = (variacao / orcado * 100) if orcado > 0 else 0
+        
+        acum_orcado += orcado
+        acum_realizado += realizado
+        
+        status = "🟢" if abs(var_pct) <= 5 else ("🟡" if abs(var_pct) <= 15 else "🔴")
+        lancado = "✅" if lanc_m.receita_bruta > 0 else "⏳"
+        
+        # Destacar mês atual
+        mes_nome = f"**{MESES[m]}**" if m == mes_selecionado else MESES[m]
+        
+        dados_tabela.append({
+            "Mês": MESES[m],
+            "Orçado": f"R$ {orcado:,.2f}",
+            "Realizado": f"R$ {realizado:,.2f}" if realizado > 0 else "-",
+            "Variação": f"{var_pct:+.1f}%" if realizado > 0 else "-",
+            "Acum. Orç.": f"R$ {acum_orcado:,.2f}",
+            "Acum. Real.": f"R$ {acum_realizado:,.2f}" if acum_realizado > 0 else "-",
+            "Status": status if realizado > 0 else "⏳",
+            "Lançado": lancado
+        })
+    
+    df_tabela = pd.DataFrame(dados_tabela)
+    
+    # Destacar linha do mês selecionado
+    st.dataframe(
+        df_tabela, 
+        use_container_width=True, 
+        hide_index=True,
+        column_config={
+            "Mês": st.column_config.TextColumn("Mês", width="small"),
+            "Status": st.column_config.TextColumn("Status", width="small"),
+            "Lançado": st.column_config.TextColumn("", width="small"),
+        }
+    )
+    
+    # ===== RESULTADO DO MÊS (MINI DRE) =====
+    st.markdown("---")
+    st.markdown(f"### 📊 Resultado de {MESES_FULL[mes_selecionado]} (Mini DRE)")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown("**ORÇADO**")
+        rec_liq_orc = receita_orcada * 0.94  # Estimativa deduções 6%
+        resultado_orc = rec_liq_orc - despesas_orcadas - folha_orcada
+        margem_orc = (resultado_orc / receita_orcada * 100) if receita_orcada > 0 else 0
+        
+        st.write(f"Receita Bruta: R$ {receita_orcada:,.2f}")
+        st.write(f"(-) Deduções (~6%): R$ {receita_orcada * 0.06:,.2f}")
+        st.write(f"Receita Líquida: R$ {rec_liq_orc:,.2f}")
+        st.write(f"(-) Despesas Fixas: R$ {despesas_orcadas:,.2f}")
+        st.write(f"(-) Folha: R$ {folha_orcada:,.2f}")
+        st.markdown(f"**Resultado: R$ {resultado_orc:,.2f}**")
+        st.markdown(f"**Margem: {margem_orc:.1f}%**")
+    
+    with col2:
+        st.markdown("**REALIZADO**")
+        deducoes_real = lanc.taxas_cartao + lanc.imposto_simples + lanc.outros_impostos
+        rec_liq_real = receita_realizada - deducoes_real
+        resultado_real = rec_liq_real - despesas_realizadas - folha_realizada
+        margem_real = (resultado_real / receita_realizada * 100) if receita_realizada > 0 else 0
+        
+        st.write(f"Receita Bruta: R$ {receita_realizada:,.2f}")
+        st.write(f"(-) Deduções: R$ {deducoes_real:,.2f}")
+        st.write(f"Receita Líquida: R$ {rec_liq_real:,.2f}")
+        st.write(f"(-) Despesas Fixas: R$ {despesas_realizadas:,.2f}")
+        st.write(f"(-) Folha: R$ {folha_realizada:,.2f}")
+        st.markdown(f"**Resultado: R$ {resultado_real:,.2f}**")
+        st.markdown(f"**Margem: {margem_real:.1f}%**")
+    
+    with col3:
+        st.markdown("**VARIAÇÃO**")
+        var_resultado = resultado_real - resultado_orc
+        var_margem = margem_real - margem_orc
+        
+        cor_res = "green" if var_resultado >= 0 else "red"
+        cor_marg = "green" if var_margem >= 0 else "red"
+        
+        st.write(f"Receita: {'+' if receita_realizada - receita_orcada >= 0 else ''}R$ {receita_realizada - receita_orcada:,.2f}")
+        st.write(f"Deduções: {'+' if deducoes_real - receita_orcada * 0.06 >= 0 else ''}R$ {deducoes_real - receita_orcada * 0.06:,.2f}")
+        st.write(f"Rec. Líquida: {'+' if rec_liq_real - rec_liq_orc >= 0 else ''}R$ {rec_liq_real - rec_liq_orc:,.2f}")
+        st.write(f"Despesas: {'+' if despesas_realizadas - despesas_orcadas >= 0 else ''}R$ {despesas_realizadas - despesas_orcadas:,.2f}")
+        st.write(f"Folha: {'+' if folha_realizada - folha_orcada >= 0 else ''}R$ {folha_realizada - folha_orcada:,.2f}")
+        st.markdown(f"**Resultado: :{cor_res}[{'+' if var_resultado >= 0 else ''}R$ {var_resultado:,.2f}]**")
+        st.markdown(f"**Margem: :{cor_marg}[{'+' if var_margem >= 0 else ''}{var_margem:.1f}pp]**")
+    
+    # ===== AÇÕES =====
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("✏️ Editar Lançamento", use_container_width=True):
+            st.session_state.mes_realizado = mes_selecionado
+            st.info("👆 Vá para '✅ Lançar Realizado' no menu lateral")
+    
+    with col2:
+        if st.button("📥 Exportar Excel", use_container_width=True):
+            st.info("🚧 Em desenvolvimento...")
+    
+    with col3:
+        if st.button("📄 Gerar Relatório", use_container_width=True):
+            st.info("🚧 Em desenvolvimento...")
+
+
+# ============================================
+# MÓDULO REALIZADO - DRE COMPARATIVO
+# ============================================
+
+def pagina_dre_comparativo():
+    """Página de DRE Comparativo Orçado x Realizado"""
+    
+    st.title("📊 DRE Comparativo")
+    st.markdown("*Demonstração de Resultado: Orçado x Realizado*")
+    
+    motor = st.session_state.motor
+    
+    # Verificar se tem cliente/filial selecionado
+    if not st.session_state.cliente_id or not st.session_state.filial_id:
+        st.warning("⚠️ Selecione um cliente e filial para ver o DRE comparativo.")
+        return
+    
+    # Inicializar manager de realizado
+    if 'realizado_manager' not in st.session_state:
+        st.session_state.realizado_manager = RealizadoManager()
+    
+    realizado_mgr = st.session_state.realizado_manager
+    
+    MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+             "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    
+    MESES_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+    
+    # Seletor de período
+    col1, col2, col3 = st.columns([1, 1, 2])
+    
+    with col1:
+        ano = st.number_input("Ano", value=2026, min_value=2024, max_value=2030, key="ano_dre_comp")
+    
+    with col2:
+        mes_selecionado = st.selectbox(
+            "📅 Mês",
+            range(12),
+            format_func=lambda x: MESES_FULL[x],
+            key="mes_dre_comp"
+        )
+    
+    with col3:
+        visao = st.radio(
+            "Visão",
+            ["Mensal", "Acumulado YTD"],
+            horizontal=True,
+            key="visao_dre_comp"
+        )
+    
+    st.markdown("---")
+    
+    # Carregar dados realizados
+    realizado_anual = realizado_mgr.carregar_realizado(
+        st.session_state.cliente_id,
+        st.session_state.filial_id,
+        ano
+    )
+    
+    # Calcular orçado
+    motor.calcular_receita_bruta_total()
+    motor.calcular_deducoes_total()
+    
+    # ===== FUNÇÃO AUXILIAR PARA CALCULAR DRE =====
+    def calcular_linha_dre(meses_range):
+        """Calcula valores do DRE para um range de meses"""
+        
+        # ORÇADO
+        receita_bruta_orc = sum(motor.receita_bruta.get("Total", [0]*12)[m] for m in meses_range)
+        
+        # Deduções orçadas
+        impostos_orc = sum(motor.deducoes.get("Simples Nacional", [0]*12)[m] for m in meses_range)
+        taxas_cartao_orc = sum(motor.deducoes.get("Taxa Cartão Crédito", [0]*12)[m] + 
+                               motor.deducoes.get("Taxa Cartão Débito", [0]*12)[m] +
+                               motor.deducoes.get("Taxa Antecipação", [0]*12)[m] 
+                               for m in meses_range)
+        total_deducoes_orc = sum(motor.deducoes.get("Total Deduções", [0]*12)[m] for m in meses_range)
+        
+        receita_liq_orc = receita_bruta_orc - total_deducoes_orc
+        
+        # Custos de pessoal orçados (mensal * qtd meses)
+        num_meses = len(meses_range)
+        folha_fisio_orc = motor.custo_pessoal_mensal * 0.5 * num_meses  # Estimativa 50% fisios
+        folha_func_orc = sum(f.salario_base for f in motor.funcionarios_clt.values() if f.ativo) * num_meses
+        prolabore_orc = sum(s.prolabore for s in motor.socios_prolabore.values() if s.ativo) * num_meses
+        total_pessoal_orc = folha_fisio_orc + folha_func_orc + prolabore_orc
+        
+        # Despesas fixas orçadas
+        despesas_fixas_orc = sum(d.valor_mensal for d in motor.despesas_fixas.values() if d.ativa) * num_meses
+        
+        # EBITDA
+        ebitda_orc = receita_liq_orc - total_pessoal_orc - despesas_fixas_orc
+        margem_orc = (ebitda_orc / receita_bruta_orc * 100) if receita_bruta_orc > 0 else 0
+        
+        # REALIZADO
+        receita_bruta_real = 0
+        impostos_real = 0
+        taxas_cartao_real = 0
+        folha_fisio_real = 0
+        folha_func_real = 0
+        prolabore_real = 0
+        despesas_fixas_real = 0
+        
+        for m in meses_range:
+            lanc = realizado_anual.get_mes(m)
+            if lanc:
+                receita_bruta_real += lanc.receita_bruta
+                impostos_real += lanc.imposto_simples + lanc.outros_impostos
+                taxas_cartao_real += lanc.taxas_cartao
+                folha_fisio_real += sum(lanc.folha_fisioterapeutas.values())
+                folha_func_real += sum(lanc.folha_funcionarios.values())
+                prolabore_real += sum(lanc.prolabore_socios.values())
+                despesas_fixas_real += lanc.total_despesas_fixas
+        
+        total_deducoes_real = impostos_real + taxas_cartao_real
+        receita_liq_real = receita_bruta_real - total_deducoes_real
+        total_pessoal_real = folha_fisio_real + folha_func_real + prolabore_real
+        ebitda_real = receita_liq_real - total_pessoal_real - despesas_fixas_real
+        margem_real = (ebitda_real / receita_bruta_real * 100) if receita_bruta_real > 0 else 0
+        
+        return {
+            "receita_bruta": {"orc": receita_bruta_orc, "real": receita_bruta_real},
+            "impostos": {"orc": impostos_orc, "real": impostos_real},
+            "taxas_cartao": {"orc": taxas_cartao_orc, "real": taxas_cartao_real},
+            "total_deducoes": {"orc": total_deducoes_orc, "real": total_deducoes_real},
+            "receita_liq": {"orc": receita_liq_orc, "real": receita_liq_real},
+            "folha_fisio": {"orc": folha_fisio_orc, "real": folha_fisio_real},
+            "folha_func": {"orc": folha_func_orc, "real": folha_func_real},
+            "prolabore": {"orc": prolabore_orc, "real": prolabore_real},
+            "total_pessoal": {"orc": total_pessoal_orc, "real": total_pessoal_real},
+            "despesas_fixas": {"orc": despesas_fixas_orc, "real": despesas_fixas_real},
+            "ebitda": {"orc": ebitda_orc, "real": ebitda_real},
+            "margem": {"orc": margem_orc, "real": margem_real},
+        }
+    
+    # Calcular DRE baseado na visão
+    if visao == "Mensal":
+        meses_range = [mes_selecionado]
+        titulo_periodo = f"{MESES_FULL[mes_selecionado]}/{ano}"
+    else:
+        meses_range = list(range(mes_selecionado + 1))
+        titulo_periodo = f"Jan a {MESES[mes_selecionado]}/{ano}"
+    
+    dre = calcular_linha_dre(meses_range)
+    
+    # ===== HEADER =====
+    st.subheader(f"📊 DRE - {titulo_periodo}")
+    
+    # Status do mês
+    lanc_atual = realizado_anual.get_mes(mes_selecionado)
+    if lanc_atual and lanc_atual.receita_bruta > 0:
+        st.success(f"✅ Dados realizados lançados para {MESES_FULL[mes_selecionado]}")
+    else:
+        st.warning(f"⚠️ Dados realizados pendentes para {MESES_FULL[mes_selecionado]}")
+    
+    # ===== TABELA DRE =====
+    st.markdown("### 📋 Demonstração de Resultado")
+    
+    # Função para formatar linha com cor
+    def get_status_icon(var_pct, inverter=False):
+        """Retorna ícone baseado na variação"""
+        if inverter:
+            if var_pct <= -5:
+                return "🟢"
+            elif var_pct <= 5:
+                return "🟡"
+            else:
+                return "🔴"
+        else:
+            if var_pct >= 5:
+                return "🟢"
+            elif var_pct >= -5:
+                return "🟡"
+            else:
+                return "🔴"
+    
+    # Construir dados para DataFrame
+    dados_dre = []
+    
+    # RECEITA BRUTA
+    var_pct = ((dre['receita_bruta']['real'] - dre['receita_bruta']['orc']) / dre['receita_bruta']['orc'] * 100) if dre['receita_bruta']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "📈 RECEITA BRUTA",
+        "Orçado": f"R$ {dre['receita_bruta']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['receita_bruta']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['receita_bruta']['real'] - dre['receita_bruta']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct)} {var_pct:+.1f}%"
+    })
+    
+    # Impostos
+    var_pct = ((dre['impostos']['real'] - dre['impostos']['orc']) / dre['impostos']['orc'] * 100) if dre['impostos']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "    (-) Impostos (Simples/DAS)",
+        "Orçado": f"R$ {dre['impostos']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['impostos']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['impostos']['real'] - dre['impostos']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%"
+    })
+    
+    # Taxas Cartão
+    var_pct = ((dre['taxas_cartao']['real'] - dre['taxas_cartao']['orc']) / dre['taxas_cartao']['orc'] * 100) if dre['taxas_cartao']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "    (-) Taxas de Cartão",
+        "Orçado": f"R$ {dre['taxas_cartao']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['taxas_cartao']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['taxas_cartao']['real'] - dre['taxas_cartao']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%" if dre['taxas_cartao']['orc'] > 0 else "—"
+    })
+    
+    # Total Deduções
+    var_pct = ((dre['total_deducoes']['real'] - dre['total_deducoes']['orc']) / dre['total_deducoes']['orc'] * 100) if dre['total_deducoes']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "📉 (-) TOTAL DEDUÇÕES",
+        "Orçado": f"R$ {dre['total_deducoes']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['total_deducoes']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['total_deducoes']['real'] - dre['total_deducoes']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%"
+    })
+    
+    # Receita Líquida
+    var_pct = ((dre['receita_liq']['real'] - dre['receita_liq']['orc']) / dre['receita_liq']['orc'] * 100) if dre['receita_liq']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "💰 RECEITA LÍQUIDA",
+        "Orçado": f"R$ {dre['receita_liq']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['receita_liq']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['receita_liq']['real'] - dre['receita_liq']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct)} {var_pct:+.1f}%"
+    })
+    
+    # Remuneração Fisioterapeutas
+    var_pct = ((dre['folha_fisio']['real'] - dre['folha_fisio']['orc']) / dre['folha_fisio']['orc'] * 100) if dre['folha_fisio']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "    (-) Remuneração Fisioterapeutas",
+        "Orçado": f"R$ {dre['folha_fisio']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['folha_fisio']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['folha_fisio']['real'] - dre['folha_fisio']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%" if dre['folha_fisio']['orc'] > 0 else "—"
+    })
+    
+    # Folha Funcionários
+    var_pct = ((dre['folha_func']['real'] - dre['folha_func']['orc']) / dre['folha_func']['orc'] * 100) if dre['folha_func']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "    (-) Folha Funcionários CLT",
+        "Orçado": f"R$ {dre['folha_func']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['folha_func']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['folha_func']['real'] - dre['folha_func']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%" if dre['folha_func']['orc'] > 0 else "—"
+    })
+    
+    # Pró-labore
+    var_pct = ((dre['prolabore']['real'] - dre['prolabore']['orc']) / dre['prolabore']['orc'] * 100) if dre['prolabore']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "    (-) Pró-labore Sócios",
+        "Orçado": f"R$ {dre['prolabore']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['prolabore']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['prolabore']['real'] - dre['prolabore']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%" if dre['prolabore']['orc'] > 0 else "—"
+    })
+    
+    # Total Pessoal
+    var_pct = ((dre['total_pessoal']['real'] - dre['total_pessoal']['orc']) / dre['total_pessoal']['orc'] * 100) if dre['total_pessoal']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "👥 (-) TOTAL CUSTO PESSOAL",
+        "Orçado": f"R$ {dre['total_pessoal']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['total_pessoal']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['total_pessoal']['real'] - dre['total_pessoal']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%"
+    })
+    
+    # Despesas Fixas
+    var_pct = ((dre['despesas_fixas']['real'] - dre['despesas_fixas']['orc']) / dre['despesas_fixas']['orc'] * 100) if dre['despesas_fixas']['orc'] > 0 else 0
+    dados_dre.append({
+        "Conta": "🏢 (-) Despesas Fixas",
+        "Orçado": f"R$ {dre['despesas_fixas']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['despesas_fixas']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['despesas_fixas']['real'] - dre['despesas_fixas']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct, True)} {var_pct:+.1f}%"
+    })
+    
+    # EBITDA
+    var_pct = ((dre['ebitda']['real'] - dre['ebitda']['orc']) / dre['ebitda']['orc'] * 100) if dre['ebitda']['orc'] != 0 else 0
+    dados_dre.append({
+        "Conta": "⭐ EBITDA",
+        "Orçado": f"R$ {dre['ebitda']['orc']:,.2f}",
+        "Realizado": f"R$ {dre['ebitda']['real']:,.2f}",
+        "Variação R$": f"R$ {dre['ebitda']['real'] - dre['ebitda']['orc']:+,.2f}",
+        "Var %": f"{get_status_icon(var_pct)} {var_pct:+.1f}%"
+    })
+    
+    # Margem EBITDA
+    margem_var = dre['margem']['real'] - dre['margem']['orc']
+    dados_dre.append({
+        "Conta": "📊 Margem EBITDA",
+        "Orçado": f"{dre['margem']['orc']:.1f}%",
+        "Realizado": f"{dre['margem']['real']:.1f}%",
+        "Variação R$": f"{margem_var:+.1f}pp",
+        "Var %": f"{'🟢' if margem_var >= 0 else '🔴'}"
+    })
+    
+    # Criar DataFrame e exibir
+    df_dre = pd.DataFrame(dados_dre)
+    
+    st.dataframe(
+        df_dre,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Conta": st.column_config.TextColumn("Conta", width="large"),
+            "Orçado": st.column_config.TextColumn("Orçado", width="medium"),
+            "Realizado": st.column_config.TextColumn("Realizado", width="medium"),
+            "Variação R$": st.column_config.TextColumn("Variação R$", width="medium"),
+            "Var %": st.column_config.TextColumn("Var %", width="small"),
+        }
+    )
+    
+    st.markdown("---")
+    
+    # ===== CARDS RESUMO =====
+    st.markdown("### 🎯 Resumo de Performance")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        var_rec = dre['receita_bruta']['real'] - dre['receita_bruta']['orc']
+        var_pct = (var_rec / dre['receita_bruta']['orc'] * 100) if dre['receita_bruta']['orc'] > 0 else 0
+        st.metric(
+            "💰 Receita Bruta",
+            f"R$ {dre['receita_bruta']['real']:,.0f}",
+            f"{var_pct:+.1f}%",
+            delta_color="normal" if var_pct >= 0 else "inverse"
+        )
+    
+    with col2:
+        var_ded = dre['total_deducoes']['real'] - dre['total_deducoes']['orc']
+        var_pct = (var_ded / dre['total_deducoes']['orc'] * 100) if dre['total_deducoes']['orc'] > 0 else 0
+        st.metric(
+            "📉 Deduções",
+            f"R$ {dre['total_deducoes']['real']:,.0f}",
+            f"{var_pct:+.1f}%",
+            delta_color="inverse" if var_pct > 0 else "normal"
+        )
+    
+    with col3:
+        var_desp = dre['despesas_fixas']['real'] - dre['despesas_fixas']['orc']
+        var_pct = (var_desp / dre['despesas_fixas']['orc'] * 100) if dre['despesas_fixas']['orc'] > 0 else 0
+        st.metric(
+            "📋 Despesas Fixas",
+            f"R$ {dre['despesas_fixas']['real']:,.0f}",
+            f"{var_pct:+.1f}%",
+            delta_color="inverse" if var_pct > 0 else "normal"
+        )
+    
+    with col4:
+        var_ebitda = dre['ebitda']['real'] - dre['ebitda']['orc']
+        var_pct = (var_ebitda / dre['ebitda']['orc'] * 100) if dre['ebitda']['orc'] != 0 else 0
+        st.metric(
+            "📈 EBITDA",
+            f"R$ {dre['ebitda']['real']:,.0f}",
+            f"{var_pct:+.1f}%",
+            delta_color="normal" if var_pct >= 0 else "inverse"
+        )
+    
+    st.markdown("---")
+    
+    # ===== GRÁFICO EVOLUÇÃO MENSAL =====
+    st.markdown("### 📈 Evolução Mensal do EBITDA")
+    
+    # Calcular EBITDA de cada mês
+    ebitda_orcado = []
+    ebitda_realizado = []
+    
+    for m in range(12):
+        dre_mes = calcular_linha_dre([m])
+        ebitda_orcado.append(dre_mes['ebitda']['orc'])
+        ebitda_realizado.append(dre_mes['ebitda']['real'])
+    
+    fig = go.Figure()
+    
+    fig.add_trace(go.Scatter(
+        name="EBITDA Orçado",
+        x=MESES,
+        y=ebitda_orcado,
+        mode='lines+markers',
+        line=dict(color="#90CAF9", width=2),
+        marker=dict(size=8)
+    ))
+    
+    fig.add_trace(go.Scatter(
+        name="EBITDA Realizado",
+        x=MESES,
+        y=ebitda_realizado,
+        mode='lines+markers',
+        line=dict(color="#4CAF50", width=3),
+        marker=dict(size=10)
+    ))
+    
+    # Destacar mês selecionado
+    fig.add_vline(
+        x=mes_selecionado,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"← {MESES[mes_selecionado]}"
+    )
+    
+    fig.update_layout(
+        title="EBITDA Orçado x Realizado",
+        xaxis_title="Mês",
+        yaxis_title="EBITDA (R$)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=400,
+        hovermode="x unified"
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # ===== DETALHAMENTO DESPESAS FIXAS =====
+    with st.expander("📋 Detalhamento Despesas Fixas por Categoria"):
+        
+        # Agrupar por categoria
+        categorias = {}
+        for nome_desp, desp in motor.despesas_fixas.items():
+            if not desp.ativa:
+                continue
+            cat = desp.categoria or "Outras"
+            if cat not in categorias:
+                categorias[cat] = {"orc": 0, "real": 0, "itens": []}
+            
+            # Orçado (por mês ou acumulado)
+            valor_orc = desp.valor_mensal * len(meses_range)
+            
+            # Realizado
+            valor_real = 0
+            for m in meses_range:
+                lanc = realizado_anual.get_mes(m)
+                if lanc:
+                    valor_real += lanc.despesas_fixas.get(nome_desp, 0)
+            
+            categorias[cat]["orc"] += valor_orc
+            categorias[cat]["real"] += valor_real
+            categorias[cat]["itens"].append({
+                "nome": nome_desp,
+                "orc": valor_orc,
+                "real": valor_real
+            })
+        
+        for cat, dados in categorias.items():
+            var = dados["real"] - dados["orc"]
+            var_pct = (var / dados["orc"] * 100) if dados["orc"] > 0 else 0
+            icone = "🟢" if var_pct <= 5 else ("🟡" if var_pct <= 15 else "🔴")
+            
+            st.markdown(f"**{cat}** - Orç: R$ {dados['orc']:,.2f} | Real: R$ {dados['real']:,.2f} | {icone} {var_pct:+.1f}%")
+            
+            for item in dados["itens"]:
+                var_item = item["real"] - item["orc"]
+                st.caption(f"  • {item['nome']}: R$ {item['orc']:,.2f} → R$ {item['real']:,.2f} ({'+' if var_item >= 0 else ''}R$ {var_item:,.2f})")
+    
+    # ===== AÇÕES =====
+    st.markdown("---")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("✏️ Lançar Realizado", use_container_width=True, key="btn_lancar_dre"):
+            st.info("👆 Vá para '✅ Lançar Realizado' no menu lateral")
+    
+    with col2:
+        if st.button("📥 Exportar DRE Excel", use_container_width=True, key="btn_export_dre"):
+            st.info("🚧 Em desenvolvimento...")
+    
+    with col3:
+        if st.button("📄 Gerar Relatório", use_container_width=True, key="btn_relat_dre"):
+            st.info("🚧 Em desenvolvimento...")
+
+
 
 def pagina_consultor_ia():
     """Página do Consultor Financeiro IA"""
@@ -11477,7 +15970,8 @@ def pagina_consultor_ia():
                     st.session_state.chat_messages.append({"role": "assistant", "content": resposta})
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Erro: {str(e)}")
+                    erro_msg = registrar_erro("BE-500", str(e), "pagina_consultor_ia/perguntar")
+                    st.error(f"❌ {erro_msg}")
         
         if st.session_state.chat_messages:
             if st.button("🗑️ Limpar Conversa"):
@@ -11572,7 +16066,8 @@ def pagina_consultor_ia():
                     st.markdown("## 📊 Resultado da Simulação")
                     st.markdown(resultado)
                 except Exception as e:
-                    st.error(f"❌ Erro: {str(e)}")
+                    erro_msg = registrar_erro("BE-500", str(e), "pagina_consultor_ia/simular")
+                    st.error(f"❌ {erro_msg}")
 
 
 # ============================================
@@ -11585,8 +16080,1961 @@ render_seletor_cliente_filial()
 # ROTEAMENTO
 # ============================================
 
+# ============================================
+# PÁGINA DE DIAGNÓSTICO PARA DESENVOLVIMENTO
+# ============================================
+
+def pagina_diagnostico_dev():
+    """Página de diagnóstico COMPLETO - SOMENTE LEITURA - para identificar problemas"""
+    
+    st.title("🛠️ Diagnóstico Completo do Sistema")
+    st.caption(f"Budget Engine v{APP_VERSION} - Ferramenta de desenvolvimento")
+    
+    st.warning("⚠️ Esta página é para **diagnóstico técnico**. Nenhuma edição é permitida aqui.")
+    
+    # Tabs de diagnóstico
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "📊 Status Geral",
+        "💾 Persistência",
+        "🔍 Motor Atual",
+        "📁 Arquivos",
+        "🧪 Validações",
+        "🔬 Testes Avançados",
+        "📋 Changelog",
+        "🚨 Log de Erros"
+    ])
+    
+    # ===== TAB 1: STATUS GERAL =====
+    with tab1:
+        st.markdown("### 📊 Status Geral do Sistema")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("Versão", APP_VERSION)
+            st.metric("Cliente ID", st.session_state.get('cliente_id', 'Nenhum') or "Nenhum")
+        
+        with col2:
+            st.metric("Filial ID", st.session_state.get('filial_id', 'Nenhuma') or "Nenhuma")
+            cliente_nome = st.session_state.cliente_atual.nome if st.session_state.get('cliente_atual') else "N/A"
+            st.metric("Cliente Nome", cliente_nome)
+        
+        with col3:
+            # Contar clientes e filiais
+            manager = st.session_state.get('cliente_manager')
+            if manager:
+                clientes = manager.listar_clientes()
+                st.metric("Total Clientes", len(clientes))
+                
+                total_filiais = 0
+                for c in clientes:
+                    filiais = manager.listar_filiais(c["id"])
+                    total_filiais += len(filiais)
+                st.metric("Total Filiais", total_filiais)
+            else:
+                st.metric("Total Clientes", "N/A")
+                st.metric("Total Filiais", "N/A")
+        
+        st.markdown("---")
+        st.markdown("### 🔧 Session State")
+        
+        # Mostrar variáveis importantes do session_state
+        variaveis_importantes = [
+            'cliente_id', 'filial_id', 'cliente_atual', 'pagina', 
+            'motor', 'cliente_manager'
+        ]
+        
+        dados_session = {}
+        for var in variaveis_importantes:
+            if var in st.session_state:
+                valor = st.session_state[var]
+                if var == 'motor':
+                    dados_session[var] = f"MotorCalculo (cliente: {getattr(valor, 'cliente_nome', 'N/A')})"
+                elif var == 'cliente_atual':
+                    dados_session[var] = f"Cliente({getattr(valor, 'nome', 'N/A')})" if valor else "None"
+                elif var == 'cliente_manager':
+                    dados_session[var] = "ClienteManager (ativo)"
+                else:
+                    dados_session[var] = str(valor)[:50]
+            else:
+                dados_session[var] = "❌ NÃO DEFINIDO"
+        
+        st.json(dados_session)
+        
+        # Informações do sistema
+        st.markdown("---")
+        st.markdown("### 💻 Informações do Sistema")
+        
+        import sys
+        import os
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**Python:** {sys.version.split()[0]}")
+            st.write(f"**Diretório atual:** `{os.getcwd()}`")
+        with col2:
+            st.write(f"**Streamlit:** {st.__version__}")
+            st.write(f"**Pandas:** {pd.__version__}")
+    
+    # ===== TAB 2: PERSISTÊNCIA =====
+    with tab2:
+        st.markdown("### 💾 Diagnóstico de Persistência")
+        
+        import os
+        
+        if not st.session_state.get('cliente_id') or not st.session_state.get('filial_id'):
+            st.info("ℹ️ Selecione um cliente e filial para diagnosticar persistência.")
+        elif st.session_state.filial_id == "consolidado":
+            st.info("ℹ️ Modo consolidado não tem arquivo próprio.")
+        else:
+            # Caminho do arquivo
+            path_arquivo = f"data/clientes/{st.session_state.cliente_id}/{st.session_state.filial_id}.json"
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 🧠 Dados em Memória (Motor)")
+                motor = st.session_state.motor
+                
+                dados_memoria = {
+                    "macro.ipca": f"{motor.macro.ipca * 100:.2f}%",
+                    "macro.igpm": f"{motor.macro.igpm * 100:.2f}%",
+                    "macro.dissidio": f"{motor.macro.dissidio * 100:.2f}%",
+                    "operacional.num_salas": motor.operacional.num_salas,
+                    "operacional.horas_dia": motor.operacional.horas_atendimento_dia,
+                    "operacional.dias_uteis": motor.operacional.dias_uteis_mes,
+                    "pagamento.pix": f"{motor.pagamento.dinheiro_pix * 100:.1f}%",
+                    "pagamento.credito": f"{motor.pagamento.cartao_credito * 100:.1f}%",
+                    "qtd_servicos": len(motor.servicos),
+                    "qtd_fisioterapeutas": len(motor.fisioterapeutas),
+                    "qtd_funcionarios": len(motor.funcionarios_clt),
+                    "qtd_despesas": len(motor.despesas_fixas),
+                }
+                
+                for k, v in dados_memoria.items():
+                    st.write(f"**{k}:** {v}")
+            
+            with col2:
+                st.markdown("#### 📁 Dados no Disco (JSON)")
+                
+                if os.path.exists(path_arquivo):
+                    st.success(f"✅ Arquivo existe")
+                    st.caption(f"Path: `{path_arquivo}`")
+                    
+                    try:
+                        with open(path_arquivo, 'r', encoding='utf-8') as f:
+                            dados_disco = json.load(f)
+                        
+                        st.write(f"**Tamanho:** {os.path.getsize(path_arquivo):,} bytes")
+                        st.write(f"**Chaves:** {len(dados_disco)}")
+                        
+                        # Detectar formato v2 (cenários) ou v1 (antigo)
+                        is_v2 = dados_disco.get('_version') == '2.0' and 'cenarios' in dados_disco
+                        
+                        if is_v2:
+                            st.info(f"📦 Formato v2.0 (3 cenários)")
+                            cenario_ativo = dados_disco.get('cenario_ativo', 'Conservador')
+                            st.write(f"**Cenário ativo:** {cenario_ativo}")
+                            dados_cenario = dados_disco.get('cenarios', {}).get(cenario_ativo, {})
+                            
+                            if 'macro' in dados_cenario:
+                                m = dados_cenario['macro']
+                                st.write(f"**macro.ipca:** {m.get('ipca', 0) * 100:.2f}%")
+                                st.write(f"**macro.igpm:** {m.get('igpm', 0) * 100:.2f}%")
+                            
+                            if 'operacional' in dados_cenario:
+                                o = dados_cenario['operacional']
+                                st.write(f"**operacional.salas:** {o.get('num_salas', 0)}")
+                                st.write(f"**operacional.horas:** {o.get('horas_atendimento_dia', 0)}")
+                        else:
+                            st.info(f"📦 Formato v1.x (antigo)")
+                            # Mostrar valores salvos no formato antigo
+                            if 'macro' in dados_disco:
+                                m = dados_disco['macro']
+                                st.write(f"**macro.ipca:** {m.get('ipca', 0) * 100:.2f}%")
+                                st.write(f"**macro.igpm:** {m.get('igpm', 0) * 100:.2f}%")
+                            else:
+                                st.error("❌ Campo 'macro' NÃO EXISTE!")
+                            
+                            if 'operacional' in dados_disco:
+                                o = dados_disco['operacional']
+                                st.write(f"**operacional.salas:** {o.get('num_salas', 0)}")
+                                st.write(f"**operacional.horas:** {o.get('horas_atendimento_dia', 0)}")
+                            else:
+                                st.error("❌ Campo 'operacional' NÃO EXISTE!")
+                            
+                    except Exception as e:
+                        erro_msg = registrar_erro("BE-301", str(e), "diagnostico/ler_arquivo_filial")
+                        st.error(f"❌ {erro_msg}")
+                else:
+                    st.error(f"❌ Arquivo NÃO existe!")
+                    st.caption(f"Path esperado: `{path_arquivo}`")
+            
+            # Comparação
+            st.markdown("---")
+            st.markdown("#### 🔄 Comparação Memória vs Disco")
+            
+            if os.path.exists(path_arquivo):
+                try:
+                    with open(path_arquivo, 'r', encoding='utf-8') as f:
+                        dados_disco = json.load(f)
+                    
+                    comparacoes = []
+                    
+                    # Detectar formato v2 (cenários) ou v1 (antigo)
+                    is_v2 = dados_disco.get('_version') == '2.0' and 'cenarios' in dados_disco
+                    
+                    if is_v2:
+                        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+                        dados_cenario = dados_disco.get('cenarios', {}).get(cenario_ativo, {})
+                        st.caption(f"Comparando com cenário: {cenario_ativo}")
+                    else:
+                        dados_cenario = dados_disco
+                    
+                    # IPCA
+                    mem_ipca = motor.macro.ipca
+                    disco_ipca = dados_cenario.get('macro', {}).get('ipca', 0)
+                    status_ipca = "✅" if abs(mem_ipca - disco_ipca) < 0.0001 else "❌ DIFERENTE!"
+                    comparacoes.append({"Campo": "IPCA", "Memória": f"{mem_ipca*100:.2f}%", "Disco": f"{disco_ipca*100:.2f}%", "Status": status_ipca})
+                    
+                    # Salas
+                    mem_salas = motor.operacional.num_salas
+                    disco_salas = dados_cenario.get('operacional', {}).get('num_salas', 0)
+                    status_salas = "✅" if mem_salas == disco_salas else "❌ DIFERENTE!"
+                    comparacoes.append({"Campo": "Nº Salas", "Memória": str(mem_salas), "Disco": str(disco_salas), "Status": status_salas})
+                    
+                    # Horas
+                    mem_horas = motor.operacional.horas_atendimento_dia
+                    disco_horas = dados_cenario.get('operacional', {}).get('horas_atendimento_dia', 0)
+                    status_horas = "✅" if mem_horas == disco_horas else "❌ DIFERENTE!"
+                    comparacoes.append({"Campo": "Horas/Dia", "Memória": str(mem_horas), "Disco": str(disco_horas), "Status": status_horas})
+                    
+                    # Serviços
+                    mem_srv = len(motor.servicos)
+                    disco_srv = len(dados_cenario.get('servicos', {}))
+                    status_srv = "✅" if mem_srv == disco_srv else "⚠️ Qtd diferente"
+                    comparacoes.append({"Campo": "Serviços", "Memória": str(mem_srv), "Disco": str(disco_srv), "Status": status_srv})
+                    
+                    # Fisioterapeutas
+                    mem_fisio = len(motor.fisioterapeutas)
+                    disco_fisio = len(dados_cenario.get('fisioterapeutas', {}))
+                    status_fisio = "✅" if mem_fisio == disco_fisio else "⚠️ Qtd diferente"
+                    comparacoes.append({"Campo": "Fisioterapeutas", "Memória": str(mem_fisio), "Disco": str(disco_fisio), "Status": status_fisio})
+                    
+                    df_comp = pd.DataFrame(comparacoes)
+                    st.dataframe(df_comp, use_container_width=True, hide_index=True)
+                    
+                except Exception as e:
+                    erro_msg = registrar_erro("BE-301", str(e), "diagnostico/comparacao_mem_disco")
+                    st.error(f"Erro na comparação: {erro_msg}")
+            
+            # Última seleção
+            st.markdown("---")
+            st.markdown("#### 📌 Última Seleção Salva")
+            
+            if os.path.exists(ULTIMA_SELECAO_PATH):
+                try:
+                    with open(ULTIMA_SELECAO_PATH, 'r') as f:
+                        ultima = json.load(f)
+                    st.json(ultima)
+                except:
+                    erro_msg = registrar_erro("BE-301", "JSON inválido", "diagnostico/ultima_selecao")
+                    st.error(f"Erro: {erro_msg}")
+            else:
+                st.warning("Arquivo ultima_selecao.json não existe")
+    
+    # ===== TAB 3: MOTOR ATUAL =====
+    with tab3:
+        st.markdown("### 🔍 Detalhes do Motor Atual")
+        
+        motor = st.session_state.motor
+        
+        # Informações gerais
+        st.markdown("#### ℹ️ Informações Gerais")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"**Cliente:** {getattr(motor, 'cliente_nome', 'N/A')}")
+            st.write(f"**Filial:** {getattr(motor, 'filial_nome', 'N/A')}")
+        with col2:
+            st.write(f"**Tipo:** {getattr(motor, 'tipo_relatorio', 'N/A')}")
+        with col3:
+            st.write(f"**Modelo Tributário:** {motor.operacional.modelo_tributario}")
+        
+        # Premissas Macro
+        st.markdown("#### 📊 Premissas Macroeconômicas")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"IPCA: {motor.macro.ipca * 100:.2f}%")
+            st.write(f"IGP-M: {motor.macro.igpm * 100:.2f}%")
+        with col2:
+            st.write(f"Dissídio: {motor.macro.dissidio * 100:.2f}%")
+            st.write(f"Reajuste Tarifas: {motor.macro.reajuste_tarifas * 100:.2f}%")
+        with col3:
+            st.write(f"Taxa Crédito: {motor.macro.taxa_cartao_credito * 100:.2f}%")
+            st.write(f"Taxa Débito: {motor.macro.taxa_cartao_debito * 100:.2f}%")
+        
+        # Operacional
+        st.markdown("#### 🏥 Premissas Operacionais")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"Fisioterapeutas: {motor.operacional.num_fisioterapeutas}")
+            st.write(f"Salas: {motor.operacional.num_salas}")
+        with col2:
+            st.write(f"Horas/dia: {motor.operacional.horas_atendimento_dia}")
+            st.write(f"Dias úteis/mês: {motor.operacional.dias_uteis_mes}")
+        with col3:
+            capacidade = motor.operacional.num_salas * motor.operacional.horas_atendimento_dia * motor.operacional.dias_uteis_mes
+            st.write(f"Capacidade/mês: {capacidade}h")
+            modo_sessoes = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+            st.write(f"**Modo Sessões:** {modo_sessoes.upper()}")
+        
+        # Cadastro de Salas
+        st.markdown("#### 🏢 Cadastro de Salas")
+        cadastro = motor.cadastro_salas
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.write(f"Total salas cadastradas: {len(cadastro.salas)}")
+            st.write(f"Salas ativas: {cadastro.num_salas_ativas}")
+        with col2:
+            st.write(f"m² total ativo: {cadastro.m2_ativo:.0f}")
+            st.write(f"Capacidade: {cadastro.capacidade_total_horas:.0f}h/mês")
+        with col3:
+            salas_zeradas = sum(1 for s in cadastro.salas_ativas if s.metros_quadrados == 0)
+            st.write(f"Salas sem m²: {salas_zeradas}")
+        
+        # Serviços
+        st.markdown("#### 🩺 Serviços Cadastrados")
+        if motor.servicos:
+            dados_srv = []
+            for nome, srv in motor.servicos.items():
+                dados_srv.append({
+                    "Nome": nome,
+                    "Duração": f"{srv.duracao_minutos} min",
+                    "Valor 2026": f"R$ {srv.valor_2026:,.2f}",
+                    "Usa Sala": "Sim" if srv.usa_sala else "Não"
+                })
+            st.dataframe(pd.DataFrame(dados_srv), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum serviço cadastrado")
+        
+        # Fisioterapeutas
+        st.markdown("#### 👥 Fisioterapeutas")
+        if motor.fisioterapeutas:
+            dados_fisio = []
+            for nome, fisio in motor.fisioterapeutas.items():
+                dados_fisio.append({
+                    "Nome": nome,
+                    "Cargo": getattr(fisio, 'cargo', 'N/A'),
+                    "Nível": getattr(fisio, 'nivel', 'N/A'),
+                    "Ativo": "Sim" if fisio.ativo else "Não"
+                })
+            st.dataframe(pd.DataFrame(dados_fisio), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum fisioterapeuta cadastrado")
+        
+        # Despesas
+        st.markdown("#### 💰 Despesas Fixas")
+        if motor.despesas_fixas:
+            dados_desp = []
+            for nome, desp in motor.despesas_fixas.items():
+                dados_desp.append({
+                    "Nome": nome,
+                    "Categoria": desp.categoria,
+                    "Valor Mensal": f"R$ {desp.valor_mensal:,.2f}",
+                    "Ativa": "Sim" if desp.ativa else "Não"
+                })
+            st.dataframe(pd.DataFrame(dados_desp), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhuma despesa cadastrada")
+    
+    # ===== TAB 4: ARQUIVOS =====
+    with tab4:
+        st.markdown("### 📁 Arquivos do Sistema")
+        
+        import os
+        
+        # Diretório de dados
+        data_dir = "data/clientes"
+        
+        if os.path.exists(data_dir):
+            st.success(f"✅ Diretório existe: `{data_dir}`")
+            
+            # Listar clientes
+            clientes_dirs = [d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))]
+            
+            st.write(f"**Total de pastas de clientes:** {len(clientes_dirs)}")
+            
+            for cliente_dir in sorted(clientes_dirs):
+                cliente_path = os.path.join(data_dir, cliente_dir)
+                
+                with st.expander(f"📂 {cliente_dir}", expanded=False):
+                    arquivos = os.listdir(cliente_path)
+                    
+                    dados_arquivos = []
+                    for arq in sorted(arquivos):
+                        arq_path = os.path.join(cliente_path, arq)
+                        tamanho = os.path.getsize(arq_path)
+                        
+                        # Verificar integridade
+                        status = "❓"
+                        if arq.endswith('.json'):
+                            try:
+                                with open(arq_path, 'r', encoding='utf-8') as f:
+                                    dados = json.load(f)
+                                if 'macro' in dados and 'operacional' in dados:
+                                    status = "✅ OK"
+                                elif 'macro' not in dados:
+                                    status = "⚠️ Sem macro"
+                                elif 'operacional' not in dados:
+                                    status = "⚠️ Sem operacional"
+                            except:
+                                status = "❌ Erro JSON"
+                        
+                        dados_arquivos.append({
+                            "Arquivo": arq,
+                            "Tamanho": f"{tamanho:,} bytes",
+                            "Status": status
+                        })
+                    
+                    st.dataframe(pd.DataFrame(dados_arquivos), use_container_width=True, hide_index=True)
+        else:
+            st.error(f"❌ Diretório NÃO existe: `{data_dir}`")
+        
+        # Arquivo de última seleção
+        st.markdown("---")
+        st.markdown("#### 📌 Arquivo ultima_selecao.json")
+        
+        if os.path.exists(ULTIMA_SELECAO_PATH):
+            st.success(f"✅ Existe: `{ULTIMA_SELECAO_PATH}`")
+            st.write(f"Tamanho: {os.path.getsize(ULTIMA_SELECAO_PATH)} bytes")
+        else:
+            st.warning("⚠️ Não existe")
+    
+    # ===== TAB 5: VALIDAÇÕES =====
+    with tab5:
+        st.markdown("### 🧪 Validações do Sistema")
+        
+        resultados = []
+        
+        import os
+        
+        # 1. Session State
+        st.markdown("#### 1️⃣ Session State")
+        
+        resultados.append({
+            "Categoria": "Session State",
+            "Teste": "motor",
+            "Resultado": "✅ OK" if 'motor' in st.session_state else "❌ FALHA",
+            "Detalhe": "Presente" if 'motor' in st.session_state else "Ausente"
+        })
+        
+        resultados.append({
+            "Categoria": "Session State",
+            "Teste": "cliente_manager",
+            "Resultado": "✅ OK" if 'cliente_manager' in st.session_state else "❌ FALHA",
+            "Detalhe": "Presente" if 'cliente_manager' in st.session_state else "Ausente"
+        })
+        
+        resultados.append({
+            "Categoria": "Session State",
+            "Teste": "cliente_id",
+            "Resultado": "✅ OK" if st.session_state.get('cliente_id') else "⚠️ Não selecionado",
+            "Detalhe": st.session_state.get('cliente_id', 'Nenhum')
+        })
+        
+        # 2. Diretórios
+        st.markdown("#### 2️⃣ Diretórios")
+        
+        diretorios = ["data", "data/clientes", "modules"]
+        for d in diretorios:
+            resultados.append({
+                "Categoria": "Diretório",
+                "Teste": d,
+                "Resultado": "✅ OK" if os.path.exists(d) else "❌ FALHA",
+                "Detalhe": "Existe" if os.path.exists(d) else "Não existe"
+            })
+        
+        # 3. Arquivos essenciais
+        st.markdown("#### 3️⃣ Arquivos Essenciais")
+        
+        arquivos = [
+            ("config.py", "Configuração"),
+            ("motor_calculo.py", "Motor de cálculo"),
+            ("modules/cliente_manager.py", "Gerenciador de clientes"),
+        ]
+        for arq, desc in arquivos:
+            resultados.append({
+                "Categoria": "Arquivo",
+                "Teste": arq,
+                "Resultado": "✅ OK" if os.path.exists(arq) else "❌ FALHA",
+                "Detalhe": desc
+            })
+        
+        # 4. Motor
+        st.markdown("#### 4️⃣ Estrutura do Motor")
+        
+        motor = st.session_state.motor
+        
+        atributos_motor = [
+            ('macro', 'Premissas Macro'),
+            ('operacional', 'Premissas Operacionais'),
+            ('pagamento', 'Formas de Pagamento'),
+            ('servicos', 'Serviços'),
+            ('fisioterapeutas', 'Fisioterapeutas'),
+            ('despesas_fixas', 'Despesas Fixas'),
+            ('cadastro_salas', 'Cadastro de Salas'),
+            ('premissas_folha', 'Premissas Folha'),
+        ]
+        
+        for attr, desc in atributos_motor:
+            tem = hasattr(motor, attr)
+            resultados.append({
+                "Categoria": "Motor",
+                "Teste": attr,
+                "Resultado": "✅ OK" if tem else "❌ FALHA",
+                "Detalhe": desc
+            })
+        
+        # 5. Imports
+        st.markdown("#### 5️⃣ Imports de Módulos")
+        
+        try:
+            from motor_calculo import MotorCalculo, criar_motor_vazio, criar_motor_padrao
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "motor_calculo",
+                "Resultado": "✅ OK",
+                "Detalhe": "Todas as funções"
+            })
+        except Exception as e:
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "motor_calculo",
+                "Resultado": "❌ FALHA",
+                "Detalhe": str(e)[:50]
+            })
+        
+        try:
+            from modules.cliente_manager import ClienteManager, motor_para_dict, dict_para_motor
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "cliente_manager",
+                "Resultado": "✅ OK",
+                "Detalhe": "Todas as funções"
+            })
+        except Exception as e:
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "cliente_manager",
+                "Resultado": "❌ FALHA",
+                "Detalhe": str(e)[:50]
+            })
+        
+        try:
+            from realizado_manager import RealizadoManager
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "realizado_manager",
+                "Resultado": "✅ OK",
+                "Detalhe": "Módulo carregado"
+            })
+        except Exception as e:
+            resultados.append({
+                "Categoria": "Import",
+                "Teste": "realizado_manager",
+                "Resultado": "⚠️ Aviso",
+                "Detalhe": str(e)[:50]
+            })
+        
+        # Mostrar resultados
+        df_resultados = pd.DataFrame(resultados)
+        st.dataframe(df_resultados, use_container_width=True, hide_index=True)
+        
+        # Resumo
+        st.markdown("---")
+        total = len(resultados)
+        ok = len([r for r in resultados if "✅" in r["Resultado"]])
+        falhas = len([r for r in resultados if "❌" in r["Resultado"]])
+        avisos = len([r for r in resultados if "⚠️" in r["Resultado"]])
+        
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Total Testes", total)
+        with col2:
+            st.metric("✅ OK", ok)
+        with col3:
+            st.metric("⚠️ Avisos", avisos)
+        with col4:
+            st.metric("❌ Falhas", falhas)
+        
+        if falhas == 0:
+            st.success("🎉 Todos os testes de estrutura passaram!")
+        else:
+            st.error(f"⚠️ {falhas} teste(s) falharam. Verifique os detalhes acima.")
+    
+    # ===== TAB 6: TESTES AVANÇADOS =====
+    with tab6:
+        st.markdown("### 🔬 Testes Avançados de Funcionamento - VARREDURA COMPLETA")
+        
+        st.info("Clique no botão abaixo para executar **TODOS** os testes de cálculo e funcionalidades do sistema.")
+        
+        if st.button("🚀 Executar Varredura Completa", type="primary", use_container_width=True):
+            
+            testes_avancados = []
+            motor = st.session_state.motor
+            
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            total_testes = 40  # Total de testes (13 categorias incluindo Cenários)
+            teste_atual = 0
+            
+            def atualizar_progresso(nome_teste):
+                nonlocal teste_atual
+                teste_atual += 1
+                progress_bar.progress(teste_atual / total_testes)
+                status_text.text(f"Executando: {nome_teste}...")
+            
+            # ========================================
+            # CATEGORIA 1: CÁLCULOS BÁSICOS
+            # ========================================
+            st.markdown("---")
+            st.markdown("#### 📊 1. Cálculos Básicos")
+            
+            # Teste 1.1: calcular_dre
+            atualizar_progresso("calcular_dre()")
+            try:
+                dre = motor.calcular_dre()
+                tem_receita = 'Receita Bruta Total' in dre
+                tem_12_meses = len(dre.get('Receita Bruta Total', [])) == 12
+                testes_avancados.append({
+                    "Categoria": "Cálculos Básicos",
+                    "Teste": "calcular_dre()",
+                    "Resultado": "✅ OK" if tem_receita and tem_12_meses else "⚠️ Incompleto",
+                    "Detalhe": f"Receita: {'Sim' if tem_receita else 'Não'}, 12 meses: {'Sim' if tem_12_meses else 'Não'}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cálculos Básicos",
+                    "Teste": "calcular_dre()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 1.2: calcular_indicadores
+            atualizar_progresso("calcular_indicadores()")
+            try:
+                indicadores = motor.calcular_indicadores()
+                tem_dados = len(indicadores) > 0
+                testes_avancados.append({
+                    "Categoria": "Cálculos Básicos",
+                    "Teste": "calcular_indicadores()",
+                    "Resultado": "✅ OK" if tem_dados else "⚠️ Vazio",
+                    "Detalhe": f"{len(indicadores)} indicadores"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cálculos Básicos",
+                    "Teste": "calcular_indicadores()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 1B: VALIDAÇÃO DE SESSÕES
+            # ========================================
+            st.markdown("#### 📊 1B. Validação de Sessões")
+            
+            # Teste 1B.1: validar_sessoes()
+            atualizar_progresso("validar_sessoes()")
+            try:
+                validacao = motor.validar_sessoes()
+                modo = validacao["detalhes"]["modo"]
+                totais = validacao["detalhes"]["totais"]
+                
+                # Teste modo configurado
+                testes_avancados.append({
+                    "Categoria": "Validação Sessões",
+                    "Teste": "Modo de Cálculo",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Modo: {modo.upper()}"
+                })
+                
+                # Teste sessões nos serviços
+                if modo == "servico":
+                    status_srv = "✅ OK" if totais["servicos"] > 0 else "⚠️ Zero"
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Sessões nos Serviços",
+                        "Resultado": status_srv,
+                        "Detalhe": f"{totais['servicos']} sessões/mês"
+                    })
+                
+                # Teste sessões nos fisios
+                if modo == "profissional":
+                    status_fisio = "✅ OK" if totais["fisioterapeutas"] > 0 else "❌ Zero"
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Sessões nos Fisioterapeutas",
+                        "Resultado": status_fisio,
+                        "Detalhe": f"{totais['fisioterapeutas']} sessões/mês"
+                    })
+                
+                # Teste consistência
+                diff = abs(totais["servicos"] - totais["fisioterapeutas"])
+                if totais["servicos"] > 0 and totais["fisioterapeutas"] > 0:
+                    status_consist = "✅ OK" if diff <= 5 else "⚠️ Divergente"
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Consistência Serviços vs Fisios",
+                        "Resultado": status_consist,
+                        "Detalhe": f"Diferença: {diff} sessões"
+                    })
+                
+                # Teste capacidade
+                sessoes_usadas = totais["servicos"] if modo == "servico" else totais["fisioterapeutas"]
+                if totais["capacidade_salas"] > 0:
+                    status_cap = "✅ OK" if sessoes_usadas <= totais["capacidade_salas"] else "⚠️ Acima"
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Sessões vs Capacidade Salas",
+                        "Resultado": status_cap,
+                        "Detalhe": f"{sessoes_usadas}/{totais['capacidade_salas']} sessões"
+                    })
+                
+                # Alertas e erros
+                for erro in validacao["erros"]:
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Erro Crítico",
+                        "Resultado": "❌ ERRO",
+                        "Detalhe": erro[:60]
+                    })
+                
+                for alerta in validacao["alertas"]:
+                    testes_avancados.append({
+                        "Categoria": "Validação Sessões",
+                        "Teste": "Alerta",
+                        "Resultado": "⚠️ Aviso",
+                        "Detalhe": alerta[:60]
+                    })
+                    
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Validação Sessões",
+                    "Teste": "validar_sessoes()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 2: TDABC / CUSTEIO ABC
+            # ========================================
+            st.markdown("#### 🎯 2. Custeio ABC (TDABC)")
+            
+            # Teste 2.1: calcular_tdabc_mes
+            atualizar_progresso("calcular_tdabc_mes()")
+            try:
+                tdabc = motor.calcular_tdabc_mes(0)
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "calcular_tdabc_mes(0)",
+                    "Resultado": "✅ OK" if tdabc else "⚠️ Vazio",
+                    "Detalhe": f"Rateios: {len(tdabc.rateios) if tdabc else 0}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "calcular_tdabc_mes(0)",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 2.2: get_resumo_tdabc
+            atualizar_progresso("get_resumo_tdabc()")
+            try:
+                resumo = motor.get_resumo_tdabc()
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "get_resumo_tdabc()",
+                    "Resultado": "✅ OK" if resumo else "⚠️ Vazio",
+                    "Detalhe": f"Tipo: {type(resumo).__name__}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "get_resumo_tdabc()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 2.3: CadastroSalas
+            atualizar_progresso("CadastroSalas")
+            try:
+                cadastro = motor.cadastro_salas
+                tem_salas = len(cadastro.salas) > 0
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "CadastroSalas",
+                    "Resultado": "✅ OK" if tem_salas else "⚠️ Sem salas",
+                    "Detalhe": f"Total: {len(cadastro.salas)}, Ativas: {cadastro.num_salas_ativas}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "CadastroSalas",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 2.4: sincronizar_num_salas
+            atualizar_progresso("sincronizar_num_salas()")
+            try:
+                cadastro = motor.cadastro_salas
+                # Verificar se há salas para sincronizar
+                if len(cadastro.salas) == 0:
+                    testes_avancados.append({
+                        "Categoria": "TDABC",
+                        "Teste": "sincronizar_num_salas()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Sem salas cadastradas para testar"
+                    })
+                else:
+                    num_original = cadastro.num_salas_ativas
+                    cadastro.sincronizar_num_salas(5)
+                    ok_5 = cadastro.num_salas_ativas == 5 or cadastro.num_salas_ativas == len(cadastro.salas)
+                    cadastro.sincronizar_num_salas(num_original)  # Restaurar
+                    testes_avancados.append({
+                        "Categoria": "TDABC",
+                        "Teste": "sincronizar_num_salas()",
+                        "Resultado": "✅ OK" if ok_5 else "❌ FALHA",
+                        "Detalhe": f"Sincronização: {'OK' if ok_5 else 'Falhou'}"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "TDABC",
+                    "Teste": "sincronizar_num_salas()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 3: OCUPAÇÃO E CAPACIDADE
+            # ========================================
+            st.markdown("#### 📈 3. Ocupação e Capacidade")
+            
+            # Teste 3.1: calcular_ocupacao_anual
+            atualizar_progresso("calcular_ocupacao_anual()")
+            try:
+                ocupacao = motor.calcular_ocupacao_anual()
+                testes_avancados.append({
+                    "Categoria": "Ocupação",
+                    "Teste": "calcular_ocupacao_anual()",
+                    "Resultado": "✅ OK" if ocupacao else "⚠️ Vazio",
+                    "Detalhe": f"Meses: {len(ocupacao.meses) if ocupacao else 0}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Ocupação",
+                    "Teste": "calcular_ocupacao_anual()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 3.2: calcular_ocupacao_mes
+            atualizar_progresso("calcular_ocupacao_mes()")
+            try:
+                ocup_mes = motor.calcular_ocupacao_mes(0)
+                testes_avancados.append({
+                    "Categoria": "Ocupação",
+                    "Teste": "calcular_ocupacao_mes(0)",
+                    "Resultado": "✅ OK" if ocup_mes else "⚠️ Vazio",
+                    "Detalhe": f"Taxa prof: {ocup_mes.taxa_ocupacao_profissional*100:.1f}%" if ocup_mes else "N/A"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Ocupação",
+                    "Teste": "calcular_ocupacao_mes(0)",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 4: TRIBUTAÇÃO
+            # ========================================
+            st.markdown("#### 💼 4. Tributação")
+            
+            # Teste 4.1: Simples Nacional
+            atualizar_progresso("calcular_simples_nacional_anual()")
+            try:
+                if hasattr(motor, 'calcular_simples_nacional_anual'):
+                    sn = motor.calcular_simples_nacional_anual()
+                    testes_avancados.append({
+                        "Categoria": "Tributação",
+                        "Teste": "calcular_simples_nacional_anual()",
+                        "Resultado": "✅ OK" if sn else "⚠️ Vazio",
+                        "Detalhe": f"Chaves: {len(sn) if sn else 0}"
+                    })
+                else:
+                    # Tenta calcular via DRE
+                    dre = motor.calcular_dre()
+                    tem_sn = any('Simples' in k for k in dre.keys())
+                    testes_avancados.append({
+                        "Categoria": "Tributação",
+                        "Teste": "Simples Nacional (via DRE)",
+                        "Resultado": "✅ OK" if tem_sn else "⚠️ Não encontrado",
+                        "Detalhe": "Calculado no DRE" if tem_sn else "Usar Carnê Leão?"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Tributação",
+                    "Teste": "Simples Nacional",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 4.2: Carnê Leão
+            atualizar_progresso("Carnê Leão")
+            try:
+                dre = motor.calcular_dre()
+                tem_cl = any('Carnê' in k for k in dre.keys())
+                testes_avancados.append({
+                    "Categoria": "Tributação",
+                    "Teste": "Carnê Leão (via DRE)",
+                    "Resultado": "✅ OK" if tem_cl else "⚠️ Não encontrado",
+                    "Detalhe": "Calculado no DRE" if tem_cl else "Usando Simples?"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Tributação",
+                    "Teste": "Carnê Leão",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 5: FOLHA DE PAGAMENTO
+            # ========================================
+            st.markdown("#### 👔 5. Folha de Pagamento")
+            
+            # Teste 5.1: Premissas Folha
+            atualizar_progresso("premissas_folha")
+            try:
+                pf = motor.premissas_folha
+                tem_regime = hasattr(pf, 'regime_tributario')
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "premissas_folha",
+                    "Resultado": "✅ OK" if tem_regime else "⚠️ Incompleto",
+                    "Detalhe": f"Regime: {pf.regime_tributario}" if tem_regime else "Sem regime"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "premissas_folha",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 5.2: Funcionários CLT
+            atualizar_progresso("funcionarios_clt")
+            try:
+                func = motor.funcionarios_clt
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "funcionarios_clt",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Total: {len(func)} funcionários"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "funcionarios_clt",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 5.3: Sócios Pró-labore
+            atualizar_progresso("socios_prolabore")
+            try:
+                socios = motor.socios_prolabore
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "socios_prolabore",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Total: {len(socios)} sócios"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "socios_prolabore",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 5.4: calcular_folha_clt
+            atualizar_progresso("calcular_folha_clt()")
+            try:
+                if hasattr(motor, 'calcular_folha_clt'):
+                    folha_clt = motor.calcular_folha_clt()
+                    testes_avancados.append({
+                        "Categoria": "Folha",
+                        "Teste": "calcular_folha_clt()",
+                        "Resultado": "✅ OK" if folha_clt else "⚠️ Vazio",
+                        "Detalhe": f"Tipo: {type(folha_clt).__name__}"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Folha",
+                        "Teste": "calcular_folha_clt()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Método não encontrado"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Folha",
+                    "Teste": "calcular_folha_clt()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 6: FISIOTERAPEUTAS
+            # ========================================
+            st.markdown("#### 🏥 6. Fisioterapeutas")
+            
+            # Teste 6.1: fisioterapeutas
+            atualizar_progresso("fisioterapeutas")
+            try:
+                fisios = motor.fisioterapeutas
+                testes_avancados.append({
+                    "Categoria": "Fisioterapeutas",
+                    "Teste": "fisioterapeutas",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Total: {len(fisios)} cadastrados"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Fisioterapeutas",
+                    "Teste": "fisioterapeutas",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 6.2: premissas_fisio
+            atualizar_progresso("premissas_fisio")
+            try:
+                pf = motor.premissas_fisio
+                tem_niveis = hasattr(pf, 'niveis_remuneracao')
+                testes_avancados.append({
+                    "Categoria": "Fisioterapeutas",
+                    "Teste": "premissas_fisio",
+                    "Resultado": "✅ OK" if tem_niveis else "⚠️ Incompleto",
+                    "Detalhe": f"Níveis: {len(pf.niveis_remuneracao) if tem_niveis else 0}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Fisioterapeutas",
+                    "Teste": "premissas_fisio",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 7: FLUXO DE CAIXA
+            # ========================================
+            st.markdown("#### 🏦 7. Fluxo de Caixa")
+            
+            # Teste 7.1: premissas_fc
+            atualizar_progresso("premissas_fc")
+            try:
+                pfc = motor.premissas_fc
+                testes_avancados.append({
+                    "Categoria": "Fluxo Caixa",
+                    "Teste": "premissas_fc",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Caixa inicial: R$ {pfc.caixa_inicial:,.0f}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Fluxo Caixa",
+                    "Teste": "premissas_fc",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 7.2: calcular_fluxo_caixa
+            atualizar_progresso("calcular_fluxo_caixa()")
+            try:
+                if hasattr(motor, 'calcular_fluxo_caixa'):
+                    fc = motor.calcular_fluxo_caixa()
+                    testes_avancados.append({
+                        "Categoria": "Fluxo Caixa",
+                        "Teste": "calcular_fluxo_caixa()",
+                        "Resultado": "✅ OK" if fc else "⚠️ Vazio",
+                        "Detalhe": f"Chaves: {len(fc) if fc else 0}"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Fluxo Caixa",
+                        "Teste": "calcular_fluxo_caixa()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Método não encontrado"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Fluxo Caixa",
+                    "Teste": "calcular_fluxo_caixa()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 8: DIVIDENDOS
+            # ========================================
+            st.markdown("#### 📊 8. Dividendos")
+            
+            # Teste 8.1: premissas_dividendos
+            atualizar_progresso("premissas_dividendos")
+            try:
+                pd_div = motor.premissas_dividendos
+                testes_avancados.append({
+                    "Categoria": "Dividendos",
+                    "Teste": "premissas_dividendos",
+                    "Resultado": "✅ OK",
+                    "Detalhe": f"Distribuir: {pd_div.pct_distribuir*100:.0f}%"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Dividendos",
+                    "Teste": "premissas_dividendos",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 9: PONTO DE EQUILÍBRIO
+            # ========================================
+            st.markdown("#### ⚖️ 9. Ponto de Equilíbrio")
+            
+            # Teste 9.1: get_resumo_pe_por_servico
+            atualizar_progresso("get_resumo_pe_por_servico()")
+            try:
+                if hasattr(motor, 'get_resumo_pe_por_servico'):
+                    pe = motor.get_resumo_pe_por_servico()
+                    testes_avancados.append({
+                        "Categoria": "Ponto Equilíbrio",
+                        "Teste": "get_resumo_pe_por_servico()",
+                        "Resultado": "✅ OK" if pe else "⚠️ Vazio",
+                        "Detalhe": f"Serviços: {len(pe.get('servicos', []))}" if pe else "N/A"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Ponto Equilíbrio",
+                        "Teste": "get_resumo_pe_por_servico()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Método não encontrado"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Ponto Equilíbrio",
+                    "Teste": "get_resumo_pe_por_servico()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 10: SERIALIZAÇÃO
+            # ========================================
+            st.markdown("#### 💾 10. Serialização e Persistência")
+            
+            # Teste 10.1: motor_para_dict
+            atualizar_progresso("motor_para_dict()")
+            try:
+                from modules.cliente_manager import motor_para_dict
+                dados = motor_para_dict(motor)
+                campos_obrigatorios = ['macro', 'operacional', 'pagamento', 'servicos']
+                campos_ok = all(c in dados for c in campos_obrigatorios)
+                testes_avancados.append({
+                    "Categoria": "Serialização",
+                    "Teste": "motor_para_dict()",
+                    "Resultado": "✅ OK" if campos_ok else "⚠️ Incompleto",
+                    "Detalhe": f"Chaves: {len(dados)}, Obrigatórios: {'OK' if campos_ok else 'Faltando'}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Serialização",
+                    "Teste": "motor_para_dict()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 10.2: Realizado Manager
+            atualizar_progresso("RealizadoManager")
+            try:
+                from realizado_manager import RealizadoManager
+                rm = RealizadoManager('data')
+                testes_avancados.append({
+                    "Categoria": "Serialização",
+                    "Teste": "RealizadoManager",
+                    "Resultado": "✅ OK",
+                    "Detalhe": "Import e instância OK"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Serialização",
+                    "Teste": "RealizadoManager",
+                    "Resultado": "⚠️ Aviso",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 11: PÁGINAS DO SISTEMA
+            # ========================================
+            st.markdown("#### 📄 11. Páginas do Sistema")
+            
+            # Lista de todas as páginas
+            paginas = [
+                'pagina_dashboard', 'pagina_consultor_ia', 'pagina_premissas',
+                'pagina_atendimentos', 'pagina_folha_funcionarios', 'pagina_folha_fisioterapeutas',
+                'pagina_simples_nacional', 'pagina_financeiro', 'pagina_dividendos',
+                'pagina_simulador_dre', 'pagina_fc_simulado', 'pagina_taxa_ocupacao',
+                'pagina_ponto_equilibrio', 'pagina_custeio_abc', 'pagina_lancar_realizado',
+                'pagina_orcado_realizado', 'pagina_dre_comparativo', 'pagina_clientes',
+                'pagina_importar', 'pagina_dre', 'pagina_fluxo_caixa', 'pagina_diagnostico_dev'
+            ]
+            
+            atualizar_progresso("Verificando 22 páginas...")
+            
+            paginas_ok = 0
+            paginas_erro = []
+            for pag in paginas:
+                if pag in globals():
+                    paginas_ok += 1
+                else:
+                    paginas_erro.append(pag)
+            
+            testes_avancados.append({
+                "Categoria": "Páginas",
+                "Teste": f"22 páginas definidas",
+                "Resultado": "✅ OK" if paginas_ok == 22 else f"⚠️ {paginas_ok}/22",
+                "Detalhe": "Todas OK" if paginas_ok == 22 else f"Faltam: {', '.join(paginas_erro[:3])}"
+            })
+            
+            # ========================================
+            # CATEGORIA 12: GERENCIAMENTO DE CLIENTES/FILIAIS
+            # ========================================
+            st.markdown("#### 👥 12. Gerenciamento de Clientes/Filiais")
+            
+            # Teste 12.1: ClienteManager existe
+            atualizar_progresso("ClienteManager")
+            try:
+                manager = st.session_state.get('cliente_manager')
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "ClienteManager",
+                    "Resultado": "✅ OK" if manager else "❌ FALHA",
+                    "Detalhe": "Ativo" if manager else "Não inicializado"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "ClienteManager",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.2: listar_clientes
+            atualizar_progresso("listar_clientes()")
+            try:
+                if manager:
+                    clientes = manager.listar_clientes()
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "listar_clientes()",
+                        "Resultado": "✅ OK",
+                        "Detalhe": f"{len(clientes)} cliente(s)"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "listar_clientes()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Manager não disponível"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "listar_clientes()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.3: listar_filiais
+            atualizar_progresso("listar_filiais()")
+            try:
+                if manager and st.session_state.get('cliente_id'):
+                    filiais = manager.listar_filiais(st.session_state.cliente_id)
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "listar_filiais()",
+                        "Resultado": "✅ OK",
+                        "Detalhe": f"{len(filiais)} filial(is) no cliente atual"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "listar_filiais()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Selecione um cliente primeiro"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "listar_filiais()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.4: carregar_cliente
+            atualizar_progresso("carregar_cliente()")
+            try:
+                if manager and st.session_state.get('cliente_id'):
+                    cliente = manager.carregar_cliente(st.session_state.cliente_id)
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "carregar_cliente()",
+                        "Resultado": "✅ OK" if cliente else "⚠️ Vazio",
+                        "Detalhe": f"Cliente: {cliente.nome if cliente else 'N/A'}"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "carregar_cliente()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Selecione um cliente primeiro"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "carregar_cliente()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.5: carregar_filial
+            atualizar_progresso("carregar_filial()")
+            try:
+                if manager and st.session_state.get('cliente_id') and st.session_state.get('filial_id'):
+                    filial_id = st.session_state.filial_id
+                    if filial_id != "consolidado":
+                        motor_filial = manager.carregar_filial(st.session_state.cliente_id, filial_id)
+                        testes_avancados.append({
+                            "Categoria": "Clientes/Filiais",
+                            "Teste": "carregar_filial()",
+                            "Resultado": "✅ OK" if motor_filial else "⚠️ Vazio",
+                            "Detalhe": f"Filial: {filial_id}"
+                        })
+                    else:
+                        testes_avancados.append({
+                            "Categoria": "Clientes/Filiais",
+                            "Teste": "carregar_filial()",
+                            "Resultado": "⚠️ N/A",
+                            "Detalhe": "Modo consolidado selecionado"
+                        })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "carregar_filial()",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Selecione cliente e filial primeiro"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "carregar_filial()",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.6: Estrutura de diretórios
+            atualizar_progresso("Estrutura de diretórios")
+            try:
+                import os
+                data_dir = "data/clientes"
+                if os.path.exists(data_dir):
+                    num_pastas = len([d for d in os.listdir(data_dir) if os.path.isdir(os.path.join(data_dir, d))])
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "Estrutura de diretórios",
+                        "Resultado": "✅ OK",
+                        "Detalhe": f"{num_pastas} pasta(s) de clientes"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "Estrutura de diretórios",
+                        "Resultado": "⚠️ Aviso",
+                        "Detalhe": "Diretório data/clientes não existe"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "Estrutura de diretórios",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 12.7: Estrutura de arquivos de filial
+            atualizar_progresso("Arquivos de filial")
+            try:
+                import os
+                if st.session_state.get('cliente_id') and st.session_state.get('filial_id'):
+                    cliente_id = st.session_state.cliente_id
+                    filial_id = st.session_state.filial_id
+                    if filial_id != "consolidado":
+                        filial_path = f"data/clientes/{cliente_id}/{filial_id}.json"
+                        if os.path.exists(filial_path):
+                            with open(filial_path, 'r', encoding='utf-8') as f:
+                                filial_data = json.load(f)
+                            
+                            # Verificar formato v2 (cenários) ou v1 (macro/operacional)
+                            is_v2 = filial_data.get('_version') == '2.0' and 'cenarios' in filial_data
+                            is_v1 = 'macro' in filial_data and 'operacional' in filial_data
+                            
+                            if is_v2:
+                                testes_avancados.append({
+                                    "Categoria": "Clientes/Filiais",
+                                    "Teste": "Arquivo de filial",
+                                    "Resultado": "✅ OK",
+                                    "Detalhe": f"Formato v2.0 (3 cenários) - {filial_id}"
+                                })
+                            elif is_v1:
+                                testes_avancados.append({
+                                    "Categoria": "Clientes/Filiais",
+                                    "Teste": "Arquivo de filial",
+                                    "Resultado": "✅ OK",
+                                    "Detalhe": f"Formato v1 (será migrado) - {filial_id}"
+                                })
+                            else:
+                                testes_avancados.append({
+                                    "Categoria": "Clientes/Filiais",
+                                    "Teste": "Arquivo de filial",
+                                    "Resultado": "⚠️ Formato desconhecido",
+                                    "Detalhe": f"Chaves: {list(filial_data.keys())[:3]}..."
+                                })
+                        else:
+                            testes_avancados.append({
+                                "Categoria": "Clientes/Filiais",
+                                "Teste": "Arquivo de filial",
+                                "Resultado": "⚠️ Aviso",
+                                "Detalhe": f"Arquivo não encontrado: {filial_path}"
+                            })
+                    else:
+                        testes_avancados.append({
+                            "Categoria": "Clientes/Filiais",
+                            "Teste": "Arquivo de filial",
+                            "Resultado": "⚠️ N/A",
+                            "Detalhe": "Modo consolidado selecionado"
+                        })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Clientes/Filiais",
+                        "Teste": "Arquivo de filial",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Selecione cliente e filial primeiro"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Clientes/Filiais",
+                    "Teste": "Arquivo de filial",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # CATEGORIA 13: SISTEMA DE CENÁRIOS
+            # ========================================
+            st.markdown("#### 🎯 13. Sistema de Cenários (3 Motores)")
+            
+            # Teste 13.1: motores_cenarios no session_state
+            atualizar_progresso("motores_cenarios")
+            try:
+                motores_cenarios = st.session_state.get('motores_cenarios')
+                if motores_cenarios:
+                    tem_3 = len(motores_cenarios) == 3
+                    cenarios_presentes = list(motores_cenarios.keys())
+                    testes_avancados.append({
+                        "Categoria": "Cenários",
+                        "Teste": "motores_cenarios",
+                        "Resultado": "✅ OK" if tem_3 else "⚠️ Incompleto",
+                        "Detalhe": f"Cenários: {', '.join(cenarios_presentes)}"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Cenários",
+                        "Teste": "motores_cenarios",
+                        "Resultado": "❌ FALHA",
+                        "Detalhe": "Não carregado no session_state"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "motores_cenarios",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 13.2: cenario_ativo
+            atualizar_progresso("cenario_ativo")
+            try:
+                cenario_ativo = st.session_state.get('cenario_ativo', 'N/A')
+                cenarios_validos = ["Conservador", "Pessimista", "Otimista"]
+                valido = cenario_ativo in cenarios_validos
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "cenario_ativo",
+                    "Resultado": "✅ OK" if valido else "⚠️ Inválido",
+                    "Detalhe": f"Ativo: {cenario_ativo}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "cenario_ativo",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 13.3: usar_cenarios flag
+            atualizar_progresso("usar_cenarios")
+            try:
+                usar_cenarios = getattr(motor, 'usar_cenarios', None)
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "usar_cenarios (flag)",
+                    "Resultado": "✅ OK" if usar_cenarios is not None else "⚠️ Não definido",
+                    "Detalhe": f"Habilitado: {'Sim' if usar_cenarios else 'Não'}"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "usar_cenarios",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 13.4: Independência dos motores
+            atualizar_progresso("Independência dos motores")
+            try:
+                motores_cenarios = st.session_state.get('motores_cenarios', {})
+                if len(motores_cenarios) == 3:
+                    # Verifica se os motores são objetos diferentes (não compartilham referência)
+                    m_cons = motores_cenarios.get("Conservador")
+                    m_pess = motores_cenarios.get("Pessimista")
+                    m_otim = motores_cenarios.get("Otimista")
+                    
+                    # Verifica IDs únicos (objetos diferentes)
+                    ids_unicos = len(set([id(m_cons), id(m_pess), id(m_otim)])) == 3
+                    
+                    testes_avancados.append({
+                        "Categoria": "Cenários",
+                        "Teste": "Independência dos motores",
+                        "Resultado": "✅ OK" if ids_unicos else "❌ FALHA",
+                        "Detalhe": "Motores independentes" if ids_unicos else "Motores compartilham referência!"
+                    })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Cenários",
+                        "Teste": "Independência dos motores",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "motores_cenarios não tem 3 cenários"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "Independência dos motores",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 13.5: Funções de cenário importáveis
+            atualizar_progresso("Funções de cenário")
+            try:
+                from modules.cliente_manager import (
+                    carregar_motores_cenarios,
+                    salvar_motores_cenarios,
+                    copiar_cenario,
+                    criar_estrutura_cenarios,
+                    migrar_formato_antigo
+                )
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "Funções de cenário",
+                    "Resultado": "✅ OK",
+                    "Detalhe": "5 funções importadas com sucesso"
+                })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "Funções de cenário",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # Teste 13.6: Formato de dados no arquivo
+            atualizar_progresso("Formato de dados cenários")
+            try:
+                import os
+                if st.session_state.get('cliente_id') and st.session_state.get('filial_id'):
+                    cliente_id = st.session_state.cliente_id
+                    filial_id = st.session_state.filial_id
+                    if filial_id != "consolidado":
+                        filial_path = f"data/clientes/{cliente_id}/{filial_id}.json"
+                        if os.path.exists(filial_path):
+                            with open(filial_path, 'r', encoding='utf-8') as f:
+                                filial_data = json.load(f)
+                            
+                            is_v2 = filial_data.get('_version') == '2.0'
+                            tem_cenarios = 'cenarios' in filial_data
+                            
+                            if is_v2 and tem_cenarios:
+                                cenarios_salvos = list(filial_data.get('cenarios', {}).keys())
+                                testes_avancados.append({
+                                    "Categoria": "Cenários",
+                                    "Teste": "Formato de dados (v2.0)",
+                                    "Resultado": "✅ OK",
+                                    "Detalhe": f"Cenários: {', '.join(cenarios_salvos)}"
+                                })
+                            else:
+                                testes_avancados.append({
+                                    "Categoria": "Cenários",
+                                    "Teste": "Formato de dados",
+                                    "Resultado": "⚠️ Formato antigo",
+                                    "Detalhe": "Será migrado ao salvar"
+                                })
+                        else:
+                            testes_avancados.append({
+                                "Categoria": "Cenários",
+                                "Teste": "Formato de dados",
+                                "Resultado": "⚠️ N/A",
+                                "Detalhe": "Arquivo não encontrado"
+                            })
+                    else:
+                        testes_avancados.append({
+                            "Categoria": "Cenários",
+                            "Teste": "Formato de dados",
+                            "Resultado": "⚠️ N/A",
+                            "Detalhe": "Consolidado não tem arquivo"
+                        })
+                else:
+                    testes_avancados.append({
+                        "Categoria": "Cenários",
+                        "Teste": "Formato de dados",
+                        "Resultado": "⚠️ N/A",
+                        "Detalhe": "Selecione cliente/filial"
+                    })
+            except Exception as e:
+                testes_avancados.append({
+                    "Categoria": "Cenários",
+                    "Teste": "Formato de dados",
+                    "Resultado": "❌ ERRO",
+                    "Detalhe": str(e)[:60]
+                })
+            
+            # ========================================
+            # FINALIZAÇÃO
+            # ========================================
+            progress_bar.progress(1.0)
+            status_text.text("✅ Varredura completa!")
+            
+            # Mostrar resultados
+            st.markdown("---")
+            st.markdown("### 📋 Resultados da Varredura Completa")
+            
+            df_avancados = pd.DataFrame(testes_avancados)
+            
+            # Agrupar por categoria
+            for categoria in df_avancados['Categoria'].unique():
+                with st.expander(f"📁 {categoria}", expanded=True):
+                    df_cat = df_avancados[df_avancados['Categoria'] == categoria][['Teste', 'Resultado', 'Detalhe']]
+                    st.dataframe(df_cat, use_container_width=True, hide_index=True)
+            
+            # Resumo geral
+            st.markdown("---")
+            st.markdown("### 📊 Resumo Geral")
+            
+            total = len(testes_avancados)
+            ok = len([t for t in testes_avancados if "✅" in t["Resultado"]])
+            erros = len([t for t in testes_avancados if "❌" in t["Resultado"]])
+            avisos = len([t for t in testes_avancados if "⚠️" in t["Resultado"]])
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            with col1:
+                st.metric("Total Testes", total)
+            with col2:
+                st.metric("✅ OK", ok)
+            with col3:
+                st.metric("⚠️ Avisos", avisos)
+            with col4:
+                st.metric("❌ Erros", erros)
+            with col5:
+                pct_ok = (ok / total * 100) if total > 0 else 0
+                st.metric("% Sucesso", f"{pct_ok:.0f}%")
+            
+            # ========================================
+            # SEÇÃO DE PROBLEMAS ENCONTRADOS
+            # ========================================
+            if erros > 0 or avisos > 0:
+                st.markdown("---")
+                st.markdown("### 🔧 Problemas Encontrados e Como Resolver")
+                
+                # Filtrar erros e avisos
+                problemas = [t for t in testes_avancados if "❌" in t["Resultado"] or "⚠️" in t["Resultado"]]
+                
+                for prob in problemas:
+                    categoria = prob["Categoria"]
+                    teste = prob["Teste"]
+                    resultado = prob["Resultado"]
+                    detalhe = prob["Detalhe"]
+                    
+                    # Determinar cor e ícone
+                    if "❌" in resultado:
+                        cor = "red"
+                        titulo = f"❌ ERRO: {teste}"
+                    else:
+                        cor = "orange"
+                        titulo = f"⚠️ AVISO: {teste}"
+                    
+                    with st.expander(titulo, expanded=True):
+                        st.write(f"**Categoria:** {categoria}")
+                        st.write(f"**Detalhe:** {detalhe}")
+                        
+                        # Sugestões de correção baseadas no tipo de problema
+                        st.markdown("**💡 Possível Solução:**")
+                        
+                        if "Sem salas" in detalhe or "salas cadastradas" in detalhe:
+                            st.info("""
+                            1. Vá em **⚙️ Premissas → Operacionais**
+                            2. Configure o **Nº de Salas** (ex: 4)
+                            3. Clique em **💾 Salvar**
+                            4. Vá em **🎯 Custeio ABC → Cadastro de Salas**
+                            5. Configure os m² de cada sala
+                            """)
+                        elif "Simples" in teste or "Carnê" in teste:
+                            st.info("""
+                            1. Vá em **⚙️ Premissas → Operacionais**
+                            2. Configure o **Modelo Tributário** (PJ-Simples ou PF-Carnê Leão)
+                            3. Clique em **💾 Salvar**
+                            """)
+                        elif "Folha" in teste or "CLT" in teste:
+                            st.info("""
+                            1. Vá em **👔 Folha Funcionários**
+                            2. Cadastre os funcionários CLT
+                            3. Configure salários e benefícios
+                            """)
+                        elif "Fisio" in teste:
+                            st.info("""
+                            1. Vá em **🏥 Folha Fisioterapeutas**
+                            2. Cadastre os fisioterapeutas
+                            3. Configure níveis de remuneração
+                            """)
+                        elif "Fluxo" in teste or "FC" in teste:
+                            st.info("""
+                            1. Vá em **💰 Financeiro**
+                            2. Configure as premissas de fluxo de caixa
+                            3. Defina caixa inicial e prazos
+                            """)
+                        elif "Dividendos" in teste:
+                            st.info("""
+                            1. Vá em **📊 Dividendos**
+                            2. Configure o % de distribuição
+                            3. Configure os sócios
+                            """)
+                        elif "Clientes" in categoria or "Filiais" in categoria:
+                            st.info("""
+                            1. Vá em **👥 Clientes**
+                            2. Crie um novo cliente ou selecione um existente
+                            3. Crie uma filial para o cliente
+                            4. Selecione a filial para começar a configurar
+                            """)
+                        elif "Páginas" in categoria:
+                            st.info("""
+                            Algumas páginas podem não estar definidas.
+                            Verifique se todos os arquivos foram atualizados corretamente.
+                            """)
+                        else:
+                            st.info("""
+                            Verifique as configurações relacionadas e tente salvar novamente.
+                            Se o problema persistir, entre em contato com o suporte.
+                            """)
+            
+            # Mensagem final
+            if erros == 0 and avisos == 0:
+                st.success("🎉 VARREDURA COMPLETA: Todos os testes passaram com sucesso!")
+                st.balloons()
+            elif erros == 0:
+                st.warning(f"⚠️ VARREDURA COMPLETA: {avisos} aviso(s), mas sem erros críticos.")
+            else:
+                st.error(f"❌ VARREDURA COMPLETA: {erros} erro(s) encontrado(s). Veja as sugestões acima.")
+    
+    # ===== TAB 7: CHANGELOG =====
+    with tab7:
+        st.markdown("### 📋 Histórico de Modificações (Changelog)")
+        st.info("Registro de todas as alterações feitas no sistema por versão.")
+        
+        # Filtros
+        col_filter1, col_filter2 = st.columns([1, 3])
+        with col_filter1:
+            filtro_tipo = st.selectbox(
+                "Filtrar por tipo:",
+                ["Todos", "feature", "bugfix", "breaking"],
+                index=0
+            )
+        
+        # Exibir changelog
+        for item in CHANGELOG:
+            # Aplicar filtro
+            if filtro_tipo != "Todos" and item.get("tipo") != filtro_tipo:
+                continue
+            
+            # Ícone por tipo
+            if item.get("tipo") == "feature":
+                icone = "🆕"
+                cor = "green"
+            elif item.get("tipo") == "bugfix":
+                icone = "🔧"
+                cor = "orange"
+            elif item.get("tipo") == "breaking":
+                icone = "⚠️"
+                cor = "red"
+            else:
+                icone = "📝"
+                cor = "blue"
+            
+            with st.expander(f"{icone} **v{item['versao']}** - {item['descricao']} ({item['data']})", expanded=False):
+                st.markdown(f"**Tipo:** {item.get('tipo', 'N/A').upper()}")
+                st.markdown("**Detalhes:**")
+                for detalhe in item.get("detalhes", []):
+                    st.markdown(f"  • {detalhe}")
+        
+        # Estatísticas
+        st.markdown("---")
+        st.markdown("### 📊 Estatísticas")
+        
+        total_versoes = len(CHANGELOG)
+        total_features = len([c for c in CHANGELOG if c.get("tipo") == "feature"])
+        total_bugfixes = len([c for c in CHANGELOG if c.get("tipo") == "bugfix"])
+        
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.metric("Total Versões", total_versoes)
+        with col_s2:
+            st.metric("🆕 Features", total_features)
+        with col_s3:
+            st.metric("🔧 Bugfixes", total_bugfixes)
+    
+    # ===== TAB 8: LOG DE ERROS =====
+    with tab8:
+        st.markdown("### 🚨 Log de Erros do Sistema")
+        st.info("Registro de erros que ocorreram durante o uso do sistema.")
+        
+        # Botões de ação
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 2])
+        with col_btn1:
+            if st.button("🔄 Atualizar", use_container_width=True):
+                st.rerun()
+        with col_btn2:
+            if st.button("🗑️ Limpar Log", use_container_width=True):
+                if limpar_log_erros():
+                    st.success("Log limpo com sucesso!")
+                    st.rerun()
+                else:
+                    st.error("Erro ao limpar log")
+        
+        # Exibir códigos de erro disponíveis
+        with st.expander("📖 Códigos de Erro (Referência)", expanded=False):
+            # Agrupar por categoria
+            categorias = {
+                "Motor e Cálculos (BE-1XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-1")],
+                "Clientes e Filiais (BE-2XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-2")],
+                "Persistência (BE-3XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-3")],
+                "Premissas (BE-4XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-4")],
+                "Interface (BE-5XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-5")],
+                "Importação/Exportação (BE-6XX)": [(k, v) for k, v in CODIGOS_ERRO.items() if k.startswith("BE-6")],
+            }
+            
+            for cat_nome, codigos in categorias.items():
+                st.markdown(f"**{cat_nome}**")
+                for cod, desc in codigos:
+                    st.markdown(f"  `{cod}`: {desc}")
+                st.markdown("")
+        
+        # Obter e exibir log
+        st.markdown("---")
+        st.markdown("### 📜 Erros Recentes")
+        
+        erros_log = obter_log_erros(limite=100)
+        
+        if not erros_log:
+            st.success("✅ Nenhum erro registrado! O sistema está funcionando normalmente.")
+        else:
+            st.warning(f"⚠️ {len(erros_log)} erro(s) registrado(s)")
+            
+            # Filtro por código
+            codigos_unicos = list(set([e.split("]")[1].split(":")[0].strip() if "]" in e else "" for e in erros_log]))
+            codigos_unicos = [c for c in codigos_unicos if c.startswith("BE-")]
+            
+            if codigos_unicos:
+                filtro_codigo = st.selectbox(
+                    "Filtrar por código:",
+                    ["Todos"] + sorted(codigos_unicos),
+                    index=0
+                )
+            else:
+                filtro_codigo = "Todos"
+            
+            # Exibir erros
+            for erro in erros_log:
+                # Aplicar filtro
+                if filtro_codigo != "Todos" and filtro_codigo not in erro:
+                    continue
+                
+                # Extrair partes do erro
+                try:
+                    timestamp = erro.split("]")[0].replace("[", "")
+                    resto = erro.split("]")[1].strip()
+                    codigo = resto.split(":")[0].strip()
+                    descricao = ":".join(resto.split(":")[1:]).strip()
+                    
+                    # Cor baseada no código
+                    if codigo.startswith("BE-1"):
+                        st.error(f"🔴 **{codigo}** | {timestamp}")
+                    elif codigo.startswith("BE-2"):
+                        st.warning(f"🟠 **{codigo}** | {timestamp}")
+                    elif codigo.startswith("BE-3"):
+                        st.info(f"🔵 **{codigo}** | {timestamp}")
+                    else:
+                        st.write(f"⚪ **{codigo}** | {timestamp}")
+                    
+                    st.caption(f"   {descricao}")
+                except:
+                    st.text(erro)
+            
+            # Exportar log
+            st.markdown("---")
+            if st.button("📥 Exportar Log Completo"):
+                log_text = "\n".join(erros_log)
+                st.download_button(
+                    label="💾 Baixar erros.log",
+                    data=log_text,
+                    file_name="budget_engine_erros.log",
+                    mime="text/plain"
+                )
+
 if pagina == "🏠 Dashboard":
     pagina_dashboard()
+elif pagina == "🎯 Cenários":
+    pagina_cenarios()
 elif pagina == "🤖 Consultor IA":
     pagina_consultor_ia()
 elif pagina == "⚙️ Premissas":
@@ -11613,6 +18061,12 @@ elif pagina == "⚖️ Ponto Equilíbrio":
     pagina_ponto_equilibrio()
 elif pagina == "🎯 Custeio ABC":
     pagina_custeio_abc()
+elif pagina == "✅ Lançar Realizado":
+    pagina_lancar_realizado()
+elif pagina == "📊 Orçado x Realizado":
+    pagina_orcado_realizado()
+elif pagina == "📋 DRE Comparativo":
+    pagina_dre_comparativo()
 elif pagina == "👥 Clientes":
     pagina_clientes()
 elif pagina == "📥 Importar Dados":
@@ -11621,3 +18075,9 @@ elif pagina == "📄 DRE (Excel)":
     pagina_dre()
 elif pagina == "📄 FC (Excel)":
     pagina_fluxo_caixa()
+elif pagina == "🔧 Admin":
+    pagina_admin()
+elif pagina == "🛠️ Diagnóstico Dev":
+    pagina_diagnostico_dev()
+
+
