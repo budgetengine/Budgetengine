@@ -690,6 +690,14 @@ def motor_para_dict(motor) -> Dict:
             "ativo": fin.ativo,
         })
     
+    # NOVO: Cenários e Faturamento Anterior
+    dados["usar_cenarios"] = getattr(motor, 'usar_cenarios', True)
+    dados["cenario_oficial"] = getattr(motor, 'cenario_oficial', 'Conservador')
+    dados["ajustes_cenarios"] = getattr(motor, 'ajustes_cenarios', {})
+    dados["usar_comparativo_anterior"] = getattr(motor, 'usar_comparativo_anterior', False)
+    dados["faturamento_anterior"] = getattr(motor, 'faturamento_anterior', [0.0] * 12)
+    dados["ano_anterior"] = getattr(motor, 'ano_anterior', 2025)
+    
     return dados
 
 
@@ -1013,6 +1021,20 @@ def dict_para_motor(dados: Dict, motor):
     except Exception as e:
         pass  # Ignora erro se função não existir ou falhar
     
+    # NOVO: Carrega Cenários e Faturamento Anterior
+    if "usar_cenarios" in dados:
+        motor.usar_cenarios = dados["usar_cenarios"]
+    if "cenario_oficial" in dados:
+        motor.cenario_oficial = dados["cenario_oficial"]
+    if "ajustes_cenarios" in dados:
+        motor.ajustes_cenarios = dados["ajustes_cenarios"]
+    if "usar_comparativo_anterior" in dados:
+        motor.usar_comparativo_anterior = dados["usar_comparativo_anterior"]
+    if "faturamento_anterior" in dados:
+        motor.faturamento_anterior = dados["faturamento_anterior"]
+    if "ano_anterior" in dados:
+        motor.ano_anterior = dados["ano_anterior"]
+    
     return motor
 
 
@@ -1208,3 +1230,192 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
     motor_consolidado.premissas_operacionais.num_fisioterapeutas = len(fisioterapeutas_consolidados)
     
     return motor_consolidado
+
+
+# ============================================
+# SISTEMA DE 3 MOTORES POR CENÁRIO
+# ============================================
+
+def criar_estrutura_cenarios(motor_base) -> Dict:
+    """
+    Cria estrutura com 3 motores (um para cada cenário).
+    Usado na migração de dados antigos e criação de novas filiais.
+    
+    Args:
+        motor_base: Motor existente que será usado como base (Conservador)
+    
+    Returns:
+        Dict com estrutura de 3 cenários
+    """
+    import copy
+    
+    # Serializa o motor base
+    dados_base = motor_para_dict(motor_base)
+    
+    # Cria cópias para cada cenário
+    return {
+        "_version": "2.0",
+        "_format": "multi_cenario",
+        "cenario_ativo": "Conservador",
+        "usar_cenarios": getattr(motor_base, 'usar_cenarios', True),
+        "cenarios": {
+            "Conservador": copy.deepcopy(dados_base),
+            "Pessimista": copy.deepcopy(dados_base),
+            "Otimista": copy.deepcopy(dados_base)
+        }
+    }
+
+
+def migrar_formato_antigo(dados_antigos: Dict) -> Dict:
+    """
+    Migra dados do formato antigo (1 motor) para novo (3 motores).
+    
+    Args:
+        dados_antigos: Dict no formato antigo
+    
+    Returns:
+        Dict no formato novo com 3 cenários
+    """
+    import copy
+    
+    # Se já está no formato novo, retorna como está
+    if dados_antigos.get("_version") == "2.0" and "cenarios" in dados_antigos:
+        return dados_antigos
+    
+    # Migra para formato novo
+    return {
+        "_version": "2.0",
+        "_format": "multi_cenario",
+        "cenario_ativo": dados_antigos.get("cenario_oficial", "Conservador"),
+        "usar_cenarios": dados_antigos.get("usar_cenarios", True),
+        "cenarios": {
+            "Conservador": copy.deepcopy(dados_antigos),
+            "Pessimista": copy.deepcopy(dados_antigos),
+            "Otimista": copy.deepcopy(dados_antigos)
+        }
+    }
+
+
+def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str) -> Dict:
+    """
+    Carrega os 3 motores de uma filial.
+    Faz migração automática se dados estiverem no formato antigo.
+    
+    Args:
+        manager: ClienteManager
+        cliente_id: ID do cliente
+        filial_id: ID da filial
+    
+    Returns:
+        Dict com estrutura: {
+            "cenario_ativo": str,
+            "usar_cenarios": bool,
+            "motores": {
+                "Conservador": MotorCalculo,
+                "Pessimista": MotorCalculo,
+                "Otimista": MotorCalculo
+            }
+        }
+    """
+    try:
+        from motor_calculo import criar_motor_padrao
+    except ImportError:
+        from .motor_calculo import criar_motor_padrao
+    
+    # Carrega dados brutos da filial
+    dados_brutos = manager.carregar_filial(cliente_id, filial_id)
+    
+    if not dados_brutos:
+        # Filial não existe, cria estrutura padrão
+        motor_padrao = criar_motor_padrao()
+        return {
+            "cenario_ativo": "Conservador",
+            "usar_cenarios": True,
+            "motores": {
+                "Conservador": motor_padrao,
+                "Pessimista": criar_motor_padrao(),
+                "Otimista": criar_motor_padrao()
+            },
+            "_migrado": True
+        }
+    
+    # Verifica se é formato novo ou antigo
+    if dados_brutos.get("_version") == "2.0" and "cenarios" in dados_brutos:
+        # Formato novo - carrega os 3 motores
+        motores = {}
+        for cenario_nome in ["Conservador", "Pessimista", "Otimista"]:
+            motor = criar_motor_padrao()
+            dados_cenario = dados_brutos["cenarios"].get(cenario_nome, {})
+            if dados_cenario:
+                dict_para_motor(dados_cenario, motor)
+            motores[cenario_nome] = motor
+        
+        return {
+            "cenario_ativo": dados_brutos.get("cenario_ativo", "Conservador"),
+            "usar_cenarios": dados_brutos.get("usar_cenarios", True),
+            "motores": motores,
+            "_migrado": False
+        }
+    else:
+        # Formato antigo - migra para novo
+        motor_base = criar_motor_padrao()
+        dict_para_motor(dados_brutos, motor_base)
+        
+        # Cria cópias para os outros cenários
+        motor_pess = criar_motor_padrao()
+        dict_para_motor(dados_brutos, motor_pess)
+        
+        motor_otim = criar_motor_padrao()
+        dict_para_motor(dados_brutos, motor_otim)
+        
+        return {
+            "cenario_ativo": dados_brutos.get("cenario_oficial", "Conservador"),
+            "usar_cenarios": dados_brutos.get("usar_cenarios", True),
+            "motores": {
+                "Conservador": motor_base,
+                "Pessimista": motor_pess,
+                "Otimista": motor_otim
+            },
+            "_migrado": True
+        }
+
+
+def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str, 
+                            motores: Dict, cenario_ativo: str = "Conservador", 
+                            usar_cenarios: bool = True):
+    """
+    Salva os 3 motores de uma filial no novo formato.
+    
+    Args:
+        manager: ClienteManager
+        cliente_id: ID do cliente
+        filial_id: ID da filial
+        motores: Dict com {"Conservador": motor, "Pessimista": motor, "Otimista": motor}
+        cenario_ativo: Qual cenário estava ativo
+        usar_cenarios: Se o módulo de cenários está habilitado
+    """
+    dados = {
+        "_version": "2.0",
+        "_format": "multi_cenario",
+        "cenario_ativo": cenario_ativo,
+        "usar_cenarios": usar_cenarios,
+        "cenarios": {}
+    }
+    
+    for cenario_nome, motor in motores.items():
+        dados["cenarios"][cenario_nome] = motor_para_dict(motor)
+    
+    manager.salvar_filial(cliente_id, filial_id, dados)
+
+
+def copiar_cenario(motor_origem, motor_destino):
+    """
+    Copia todas as premissas de um motor para outro.
+    
+    Args:
+        motor_origem: Motor de onde copiar
+        motor_destino: Motor para onde copiar
+    """
+    dados = motor_para_dict(motor_origem)
+    dict_para_motor(dados, motor_destino)
+

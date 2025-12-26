@@ -1285,6 +1285,77 @@ class Sazonalidade:
     ])
 
 # ============================================
+# CENÁRIOS DE ORÇAMENTO
+# ============================================
+
+@dataclass
+class Cenario:
+    """Configuração de cenário orçamentário"""
+    nome: str = "Base"
+    descricao: str = "Cenário base sem ajustes"
+    
+    # Multiplicadores (1.0 = sem alteração)
+    fator_receita: float = 1.0      # Impacta sessões e valores
+    fator_despesas: float = 1.0     # Impacta despesas fixas e variáveis
+    fator_crescimento: float = 1.0  # Impacta crescimento de sessões
+    fator_inflacao: float = 1.0     # Impacta reajustes
+    
+    # Cenários pré-definidos
+    @classmethod
+    def pessimista(cls) -> 'Cenario':
+        return cls(
+            nome="Pessimista",
+            descricao="Cenário de crise: queda na demanda, aumento de custos",
+            fator_receita=0.75,
+            fator_despesas=1.15,
+            fator_crescimento=0.50,
+            fator_inflacao=1.20
+        )
+    
+    @classmethod
+    def conservador(cls) -> 'Cenario':
+        return cls(
+            nome="Conservador",
+            descricao="Cenário cauteloso: leve redução na demanda",
+            fator_receita=0.90,
+            fator_despesas=1.05,
+            fator_crescimento=0.75,
+            fator_inflacao=1.08
+        )
+    
+    @classmethod
+    def base(cls) -> 'Cenario':
+        return cls(
+            nome="Base",
+            descricao="Cenário base: projeção realista",
+            fator_receita=1.0,
+            fator_despesas=1.0,
+            fator_crescimento=1.0,
+            fator_inflacao=1.0
+        )
+    
+    @classmethod
+    def otimista(cls) -> 'Cenario':
+        return cls(
+            nome="Otimista",
+            descricao="Cenário favorável: crescimento acelerado",
+            fator_receita=1.15,
+            fator_despesas=0.95,
+            fator_crescimento=1.30,
+            fator_inflacao=0.95
+        )
+    
+    @classmethod
+    def get_cenarios(cls) -> Dict[str, 'Cenario']:
+        """Retorna dicionário com todos os cenários pré-definidos"""
+        return {
+            "Pessimista": cls.pessimista(),
+            "Conservador": cls.conservador(),
+            "Base": cls.base(),
+            "Otimista": cls.otimista()
+        }
+
+# ============================================
 # ESTRUTURAS DO MÓDULO FINANCEIRO
 # ============================================
 
@@ -1759,6 +1830,36 @@ class MotorCalculo:
         self.pagamento = FormaPagamento()
         self.operacional = PremissasOperacionais()
         self.sazonalidade = Sazonalidade()
+        self.cenario = Cenario.base()  # Cenário padrão
+        
+        # Configuração dos cenários
+        # CONSERVADOR = Base (premissas cadastradas)
+        # PESSIMISTA = Ajustes negativos sobre a base
+        # OTIMISTA = Ajustes positivos sobre a base
+        self.usar_cenarios = True  # Flag para habilitar/desabilitar módulo de cenários
+        self.cenario_oficial = "Conservador"  # Cenário padrão para relatórios
+        
+        # Comparativo com exercício anterior
+        self.usar_comparativo_anterior = False  # Habilita/desabilita por cliente
+        self.faturamento_anterior = [0.0] * 12  # Faturamento mensal do ano anterior
+        self.ano_anterior = 2025  # Ano de referência
+        
+        # Ajustes por cenário (valores que SOMAM às premissas base)
+        # Formato: {servico/despesa: valor_ajuste}
+        self.ajustes_cenarios = {
+            "Pessimista": {
+                "sessoes": {},      # {servico: ajuste_qtd}
+                "valores": {},      # {servico: ajuste_valor}
+                "despesas": {},     # {despesa: ajuste_valor}
+                "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+            },
+            "Otimista": {
+                "sessoes": {},
+                "valores": {},
+                "despesas": {},
+                "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+            }
+        }
         
         # Serviços (valores diferenciados para proprietários e profissionais)
         self.servicos: Dict[str, Servico] = {}
@@ -3584,6 +3685,30 @@ class MotorCalculo:
         valor_prof = self.calcular_valor_servico_mes(servico, mes, "profissional")
         receita += sessoes_prof * valor_prof
         
+        # Aplicar ajustes do cenário (Pessimista/Otimista)
+        cenario_nome = self.cenario.nome if hasattr(self, 'cenario') else "Conservador"
+        
+        if cenario_nome != "Conservador" and hasattr(self, 'ajustes_cenarios'):
+            # Ajuste de sessões (soma às sessões base)
+            ajuste_sessoes = self.get_ajuste_sessoes(cenario_nome, servico)
+            # Ajuste de valor (soma ao valor base)
+            ajuste_valor = self.get_ajuste_valor(cenario_nome, servico)
+            
+            if ajuste_sessoes != 0:
+                # Calcular valor médio ponderado para as sessões adicionais
+                total_sessoes = sessoes_prop + sessoes_prof
+                if total_sessoes > 0:
+                    valor_medio = receita / total_sessoes
+                else:
+                    valor_medio = (valor_prop + valor_prof) / 2 if (valor_prop + valor_prof) > 0 else 0
+                # Adicionar receita das sessões extras
+                receita += ajuste_sessoes * valor_medio
+            
+            if ajuste_valor != 0:
+                # Aplicar ajuste de valor em todas as sessões
+                total_sessoes = sessoes_prop + sessoes_prof + ajuste_sessoes
+                receita += ajuste_valor * total_sessoes
+        
         return receita
     
     def calcular_receita_bruta_total(self) -> Dict[str, List[float]]:
@@ -4413,6 +4538,9 @@ class MotorCalculo:
         """
         resultado = {}
         
+        # Nome do cenário atual
+        cenario_nome = self.cenario.nome if hasattr(self, 'cenario') else "Conservador"
+        
         # Índices para cálculo
         indices = {
             "ipca": self.macro.ipca,
@@ -4432,6 +4560,9 @@ class MotorCalculo:
                 
             valores_mes = []
             
+            # Ajuste do cenário para esta despesa
+            ajuste_despesa = self.get_ajuste_despesa(cenario_nome, nome) if hasattr(self, 'get_ajuste_despesa') else 0
+            
             for mes in range(12):
                 # Usa o método calcular_valor_mes que já trata sazonalidade e reajustes
                 valor = desp.calcular_valor_mes(
@@ -4440,7 +4571,8 @@ class MotorCalculo:
                     receita_mes=0,  # Não usado para despesas fixas
                     sessoes_mes=0   # Não usado para despesas fixas
                 )
-                valores_mes.append(valor)
+                # Aplica ajuste do cenário (soma ao valor base)
+                valores_mes.append(valor + ajuste_despesa)
             
             resultado[nome] = valores_mes
         
@@ -5601,6 +5733,61 @@ class MotorCalculo:
         return indicadores
     
     # ============================================
+    # CONFIGURAÇÃO DE CENÁRIOS
+    # ============================================
+    
+    def aplicar_cenario(self, nome_cenario: str):
+        """Aplica um cenário - guarda o nome para usar nos ajustes"""
+        cenarios_validos = ["Conservador", "Pessimista", "Otimista"]
+        if nome_cenario in cenarios_validos:
+            self.cenario = Cenario(nome=nome_cenario)
+        else:
+            # Fallback para cenário Conservador (base)
+            self.cenario = Cenario(nome="Conservador")
+    
+    def restaurar_ajustes_padrao(self):
+        """Restaura ajustes padrão dos cenários"""
+        self.ajustes_cenarios = {
+            "Pessimista": {
+                "sessoes": {},
+                "valores": {},
+                "despesas": {},
+                "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+            },
+            "Otimista": {
+                "sessoes": {},
+                "valores": {},
+                "despesas": {},
+                "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+            }
+        }
+        self.cenario_oficial = "Conservador"
+    
+    def get_ajuste_sessoes(self, cenario: str, servico: str) -> float:
+        """Retorna o ajuste de sessões para um serviço em um cenário"""
+        if cenario == "Conservador":
+            return 0  # Base não tem ajuste
+        if cenario in self.ajustes_cenarios:
+            return self.ajustes_cenarios[cenario].get("sessoes", {}).get(servico, 0)
+        return 0
+    
+    def get_ajuste_valor(self, cenario: str, servico: str) -> float:
+        """Retorna o ajuste de valor para um serviço em um cenário"""
+        if cenario == "Conservador":
+            return 0
+        if cenario in self.ajustes_cenarios:
+            return self.ajustes_cenarios[cenario].get("valores", {}).get(servico, 0)
+        return 0
+    
+    def get_ajuste_despesa(self, cenario: str, despesa: str) -> float:
+        """Retorna o ajuste de despesa em um cenário"""
+        if cenario == "Conservador":
+            return 0
+        if cenario in self.ajustes_cenarios:
+            return self.ajustes_cenarios[cenario].get("despesas", {}).get(despesa, 0)
+        return 0
+    
+    # ============================================
     # SERIALIZAÇÃO (salvar/carregar)
     # ============================================
     
@@ -5611,6 +5798,19 @@ class MotorCalculo:
             "pagamento": self.pagamento.__dict__,
             "operacional": self.operacional.__dict__,
             "sazonalidade": self.sazonalidade.fatores,
+            "cenario": {
+                "nome": self.cenario.nome,
+                "fator_receita": self.cenario.fator_receita,
+                "fator_despesas": self.cenario.fator_despesas,
+                "fator_crescimento": self.cenario.fator_crescimento,
+                "fator_inflacao": self.cenario.fator_inflacao
+            },
+            "usar_cenarios": getattr(self, 'usar_cenarios', True),
+            "cenario_oficial": getattr(self, 'cenario_oficial', 'Conservador'),
+            "ajustes_cenarios": getattr(self, 'ajustes_cenarios', {}),
+            "usar_comparativo_anterior": getattr(self, 'usar_comparativo_anterior', False),
+            "faturamento_anterior": getattr(self, 'faturamento_anterior', [0.0] * 12),
+            "ano_anterior": getattr(self, 'ano_anterior', 2025),
             "servicos": {k: v.__dict__ for k, v in self.servicos.items()},
         }
     
@@ -5624,6 +5824,27 @@ class MotorCalculo:
             self.operacional = PremissasOperacionais(**data["operacional"])
         if "sazonalidade" in data:
             self.sazonalidade = Sazonalidade(fatores=data["sazonalidade"])
+        if "cenario" in data:
+            cenario_data = data["cenario"]
+            self.cenario = Cenario(
+                nome=cenario_data.get("nome", "Conservador"),
+                fator_receita=cenario_data.get("fator_receita", 1.0),
+                fator_despesas=cenario_data.get("fator_despesas", 1.0),
+                fator_crescimento=cenario_data.get("fator_crescimento", 1.0),
+                fator_inflacao=cenario_data.get("fator_inflacao", 1.0)
+            )
+        if "usar_cenarios" in data:
+            self.usar_cenarios = data["usar_cenarios"]
+        if "cenario_oficial" in data:
+            self.cenario_oficial = data["cenario_oficial"]
+        if "ajustes_cenarios" in data:
+            self.ajustes_cenarios = data["ajustes_cenarios"]
+        if "usar_comparativo_anterior" in data:
+            self.usar_comparativo_anterior = data["usar_comparativo_anterior"]
+        if "faturamento_anterior" in data:
+            self.faturamento_anterior = data["faturamento_anterior"]
+        if "ano_anterior" in data:
+            self.ano_anterior = data["ano_anterior"]
         if "servicos" in data:
             for nome, srv_data in data["servicos"].items():
                 self.servicos[nome] = Servico(**srv_data)
