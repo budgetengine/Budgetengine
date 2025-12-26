@@ -1257,6 +1257,7 @@ def criar_estrutura_cenarios(motor_base) -> Dict:
         "_version": "2.0",
         "_format": "multi_cenario",
         "cenario_ativo": "Conservador",
+        "cenario_aprovado": None,  # None = não aprovado, ou "Pessimista"/"Conservador"/"Otimista"
         "usar_cenarios": getattr(motor_base, 'usar_cenarios', True),
         "cenarios": {
             "Conservador": copy.deepcopy(dados_base),
@@ -1287,6 +1288,7 @@ def migrar_formato_antigo(dados_antigos: Dict) -> Dict:
         "_version": "2.0",
         "_format": "multi_cenario",
         "cenario_ativo": dados_antigos.get("cenario_oficial", "Conservador"),
+        "cenario_aprovado": dados_antigos.get("cenario_aprovado", None),
         "usar_cenarios": dados_antigos.get("usar_cenarios", True),
         "cenarios": {
             "Conservador": copy.deepcopy(dados_antigos),
@@ -1330,6 +1332,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         motor_padrao = criar_motor_padrao()
         return {
             "cenario_ativo": "Conservador",
+            "cenario_aprovado": None,
             "usar_cenarios": True,
             "motores": {
                 "Conservador": motor_padrao,
@@ -1352,6 +1355,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         
         return {
             "cenario_ativo": dados_brutos.get("cenario_ativo", "Conservador"),
+            "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
             "usar_cenarios": dados_brutos.get("usar_cenarios", True),
             "motores": motores,
             "_migrado": False
@@ -1370,6 +1374,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         
         return {
             "cenario_ativo": dados_brutos.get("cenario_oficial", "Conservador"),
+            "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
             "usar_cenarios": dados_brutos.get("usar_cenarios", True),
             "motores": {
                 "Conservador": motor_base,
@@ -1382,7 +1387,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
 
 def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str, 
                             motores: Dict, cenario_ativo: str = "Conservador", 
-                            usar_cenarios: bool = True):
+                            usar_cenarios: bool = True, cenario_aprovado: str = None):
     """
     Salva os 3 motores de uma filial no novo formato.
     
@@ -1393,11 +1398,13 @@ def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id:
         motores: Dict com {"Conservador": motor, "Pessimista": motor, "Otimista": motor}
         cenario_ativo: Qual cenário estava ativo
         usar_cenarios: Se o módulo de cenários está habilitado
+        cenario_aprovado: Qual cenário foi aprovado (None se nenhum)
     """
     dados = {
         "_version": "2.0",
         "_format": "multi_cenario",
         "cenario_ativo": cenario_ativo,
+        "cenario_aprovado": cenario_aprovado,
         "usar_cenarios": usar_cenarios,
         "cenarios": {}
     }
