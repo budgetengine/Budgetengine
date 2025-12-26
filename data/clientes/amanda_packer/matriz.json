@@ -1,0 +1,4878 @@
+{
+  "_version": "2.0",
+  "_format": "multi_cenario",
+  "cenario_ativo": "Pessimista",
+  "cenario_aprovado": null,
+  "usar_cenarios": true,
+  "cenarios": {
+    "Conservador": {
+      "servicos": {
+        "Domiciliar ": {
+          "nome": "Domiciliar ",
+          "duracao_minutos": 90,
+          "valor_2026": 250.0,
+          "sessoes_mes_base": 1,
+          "pct_reajuste": 0.08,
+          "mes_reajuste": 3,
+          "pct_crescimento": 0.0,
+          "usa_sala": false
+        },
+        "Fisioterapia ": {
+          "nome": "Fisioterapia ",
+          "duracao_minutos": 60,
+          "valor_2026": 220.0,
+          "sessoes_mes_base": 83,
+          "pct_reajuste": 0.14,
+          "mes_reajuste": 1,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        }
+      },
+      "valores_proprietario": {},
+      "valores_profissional": {},
+      "proprietarios": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "tipo": "proprietario",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {}
+        }
+      },
+      "profissionais": {},
+      "despesas": {
+        "MKT": {
+          "nome": "MKT",
+          "categoria": "Marketing",
+          "valor_mensal": 1000.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "cursos ": {
+          "nome": "cursos ",
+          "categoria": "Marketing",
+          "valor_mensal": 1150.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Aluguel ": {
+          "nome": "Aluguel ",
+          "categoria": "Ocupação",
+          "valor_mensal": 352.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Compras ": {
+          "nome": "Compras ",
+          "categoria": "Utilidades",
+          "valor_mensal": 258.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Condominio ": {
+          "nome": "Condominio ",
+          "categoria": "Ocupação",
+          "valor_mensal": 350.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Manutenção ": {
+          "nome": "Manutenção ",
+          "categoria": "Utilidades",
+          "valor_mensal": 98.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "TV/Telefone/Internet ": {
+          "nome": "TV/Telefone/Internet ",
+          "categoria": "Ocupação",
+          "valor_mensal": 80.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 5,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        }
+      },
+      "custo_pessoal_mensal": 0.0,
+      "mes_dissidio": 5,
+      "sazonalidade": [
+        1.0,
+        0.9,
+        0.85,
+        1.0,
+        1.0,
+        0.95,
+        1.1,
+        1.05,
+        1.1,
+        1.1,
+        1.05,
+        0.85
+      ],
+      "operacional": {
+        "num_fisioterapeutas": 1,
+        "num_salas": 1,
+        "horas_atendimento_dia": 6,
+        "dias_uteis_mes": 20,
+        "modelo_tributario": "PF - Carnê Leão",
+        "modo_calculo_sessoes": "servico"
+      },
+      "cadastro_salas": {
+        "horas_funcionamento_dia": 6,
+        "dias_uteis_mes": 20,
+        "salas": [
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          }
+        ]
+      },
+      "macro": {
+        "ipca": 0.045,
+        "igpm": 0.05,
+        "dissidio": 0.06,
+        "reajuste_tarifas": 0.09,
+        "reajuste_contratos": 0.08,
+        "taxa_cartao_credito": 0.037000000000000005,
+        "taxa_cartao_debito": 0.021,
+        "taxa_antecipacao": 0.0
+      },
+      "pagamento": {
+        "dinheiro_pix": 0.65,
+        "cartao_credito": 0.3,
+        "cartao_debito": 0.05,
+        "outros": 0.0,
+        "pct_antecipacao": 0.0
+      },
+      "premissas_folha": {
+        "regime_tributario": "PF - Carnê Leão",
+        "deducao_dependente_ir": 0.0,
+        "aliquota_fgts": 0.08,
+        "desconto_vt_pct": 0.06,
+        "dias_uteis_mes": 22,
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "prolabore": 0.0,
+          "dependentes_ir": 0,
+          "mes_reajuste": 5,
+          "pct_aumento": 0.0,
+          "ativo": true
+        }
+      },
+      "fisioterapeutas": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "cargo": "Proprietário",
+          "nivel": 0,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {},
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 6.0,
+            "terca": 6.0,
+            "quarta": 6.0,
+            "quinta": 6.0,
+            "sabado": 0.0,
+            "segunda": 6.0
+          }
+        }
+      },
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.25,
+          "2": 0.25,
+          "3": 0.25,
+          "4": 0.25
+        },
+        "pct_producao_propria": 0.5,
+        "pct_faturamento_total": 0.0,
+        "pct_base_remuneracao_prop": 0.75,
+        "pct_gerencia_equipe": 0.01,
+        "pct_base_remuneracao_ger": 0.75
+      },
+      "premissas_simples": {
+        "faturamento_pf_anual": 75000.0,
+        "aliquota_inss_pf": 0.0,
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28
+      },
+      "premissas_dividendos": {
+        "distribuir": true,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2,
+        "frequencia": "Mensal",
+        "pct_distribuir": 0.3,
+        "mostrar_no_dre": true
+      },
+      "premissas_fc": {
+        "caixa_inicial": 2000.0,
+        "cp_impostos": 0.0,
+        "cp_folha_colaboradores": 11000.0,
+        "cp_folha_fisioterapeutas": 0.0,
+        "cp_retirada_proprietarios": 20000.0,
+        "cp_encargos_clt": 750.0,
+        "cp_fornecedores": 0.0,
+        "usar_cp_folha_auto": true,
+        "receita_out_ano_anterior": 19462.926422768825,
+        "receita_nov_ano_anterior": 19462.926422768825,
+        "receita_dez_ano_anterior": 19462.926422768825,
+        "usar_receita_auto": true,
+        "recebimento_avista_no_mes": true,
+        "saldo_minimo": 2000.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0
+      },
+      "aplicacoes": {
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225,
+        "pct_cdi": 1.0
+      },
+      "investimentos": [],
+      "financiamentos": [
+        {
+          "descricao": "Novo Financiamento",
+          "saldo_devedor": 0.0,
+          "taxa_mensal": 0.02,
+          "parcelas_total": 60,
+          "parcelas_pagas": 0,
+          "mes_inicio_2026": 1,
+          "valor_parcela": 0.0,
+          "ativo": false
+        }
+      ],
+      "usar_cenarios": true,
+      "cenario_oficial": "Conservador",
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "usar_comparativo_anterior": false,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ano_anterior": 2025
+    },
+    "Pessimista": {
+      "servicos": {
+        "Domiciliar ": {
+          "nome": "Domiciliar ",
+          "duracao_minutos": 90,
+          "valor_2026": 250.0,
+          "sessoes_mes_base": 1,
+          "pct_reajuste": 0.08,
+          "mes_reajuste": 3,
+          "pct_crescimento": 0.0,
+          "usa_sala": false
+        },
+        "Fisioterapia ": {
+          "nome": "Fisioterapia ",
+          "duracao_minutos": 60,
+          "valor_2026": 220.0,
+          "sessoes_mes_base": 83,
+          "pct_reajuste": 0.14,
+          "mes_reajuste": 1,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        }
+      },
+      "valores_proprietario": {},
+      "valores_profissional": {},
+      "proprietarios": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "tipo": "proprietario",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {}
+        }
+      },
+      "profissionais": {},
+      "despesas": {
+        "MKT": {
+          "nome": "MKT",
+          "categoria": "Marketing",
+          "valor_mensal": 1000.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "cursos ": {
+          "nome": "cursos ",
+          "categoria": "Marketing",
+          "valor_mensal": 1150.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Aluguel ": {
+          "nome": "Aluguel ",
+          "categoria": "Ocupação",
+          "valor_mensal": 352.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Compras ": {
+          "nome": "Compras ",
+          "categoria": "Utilidades",
+          "valor_mensal": 258.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Condominio ": {
+          "nome": "Condominio ",
+          "categoria": "Ocupação",
+          "valor_mensal": 350.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Manutenção ": {
+          "nome": "Manutenção ",
+          "categoria": "Utilidades",
+          "valor_mensal": 98.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "TV/Telefone/Internet ": {
+          "nome": "TV/Telefone/Internet ",
+          "categoria": "Ocupação",
+          "valor_mensal": 80.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 5,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        }
+      },
+      "custo_pessoal_mensal": 0.0,
+      "mes_dissidio": 5,
+      "sazonalidade": [
+        1.0,
+        0.9,
+        0.85,
+        1.0,
+        1.0,
+        0.95,
+        1.1,
+        1.05,
+        1.1,
+        1.1,
+        1.05,
+        0.85
+      ],
+      "operacional": {
+        "num_fisioterapeutas": 1,
+        "num_salas": 1,
+        "horas_atendimento_dia": 6,
+        "dias_uteis_mes": 20,
+        "modelo_tributario": "PF - Carnê Leão",
+        "modo_calculo_sessoes": "servico"
+      },
+      "cadastro_salas": {
+        "horas_funcionamento_dia": 6,
+        "dias_uteis_mes": 20,
+        "salas": [
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          }
+        ]
+      },
+      "macro": {
+        "ipca": 0.045,
+        "igpm": 0.05,
+        "dissidio": 0.06,
+        "reajuste_tarifas": 0.09,
+        "reajuste_contratos": 0.08,
+        "taxa_cartao_credito": 0.037000000000000005,
+        "taxa_cartao_debito": 0.021,
+        "taxa_antecipacao": 0.0
+      },
+      "pagamento": {
+        "dinheiro_pix": 0.65,
+        "cartao_credito": 0.3,
+        "cartao_debito": 0.05,
+        "outros": 0.0,
+        "pct_antecipacao": 0.0
+      },
+      "premissas_folha": {
+        "regime_tributario": "PF - Carnê Leão",
+        "deducao_dependente_ir": 0.0,
+        "aliquota_fgts": 0.08,
+        "desconto_vt_pct": 0.06,
+        "dias_uteis_mes": 22,
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "prolabore": 0.0,
+          "dependentes_ir": 0,
+          "mes_reajuste": 5,
+          "pct_aumento": 0.0,
+          "ativo": true
+        }
+      },
+      "fisioterapeutas": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "cargo": "Proprietário",
+          "nivel": 0,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {},
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 6.0,
+            "terca": 6.0,
+            "quarta": 6.0,
+            "quinta": 6.0,
+            "sabado": 0.0,
+            "segunda": 6.0
+          }
+        }
+      },
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.25,
+          "2": 0.25,
+          "3": 0.25,
+          "4": 0.25
+        },
+        "pct_producao_propria": 0.5,
+        "pct_faturamento_total": 0.0,
+        "pct_base_remuneracao_prop": 0.75,
+        "pct_gerencia_equipe": 0.01,
+        "pct_base_remuneracao_ger": 0.75
+      },
+      "premissas_simples": {
+        "faturamento_pf_anual": 75000.0,
+        "aliquota_inss_pf": 0.0,
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28
+      },
+      "premissas_dividendos": {
+        "distribuir": true,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2,
+        "frequencia": "Mensal",
+        "pct_distribuir": 0.3,
+        "mostrar_no_dre": true
+      },
+      "premissas_fc": {
+        "caixa_inicial": 2000.0,
+        "cp_impostos": 0.0,
+        "cp_folha_colaboradores": 11000.0,
+        "cp_folha_fisioterapeutas": 0.0,
+        "cp_retirada_proprietarios": 20000.0,
+        "cp_encargos_clt": 750.0,
+        "cp_fornecedores": 0.0,
+        "usar_cp_folha_auto": true,
+        "receita_out_ano_anterior": 19462.926422768825,
+        "receita_nov_ano_anterior": 19462.926422768825,
+        "receita_dez_ano_anterior": 19462.926422768825,
+        "usar_receita_auto": true,
+        "recebimento_avista_no_mes": true,
+        "saldo_minimo": 2000.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0
+      },
+      "aplicacoes": {
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225,
+        "pct_cdi": 1.0
+      },
+      "investimentos": [],
+      "financiamentos": [
+        {
+          "descricao": "Novo Financiamento",
+          "saldo_devedor": 0.0,
+          "taxa_mensal": 0.02,
+          "parcelas_total": 60,
+          "parcelas_pagas": 0,
+          "mes_inicio_2026": 1,
+          "valor_parcela": 0.0,
+          "ativo": false
+        }
+      ],
+      "usar_cenarios": true,
+      "cenario_oficial": "Conservador",
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "usar_comparativo_anterior": false,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ano_anterior": 2025
+    },
+    "Otimista": {
+      "servicos": {
+        "Domiciliar ": {
+          "nome": "Domiciliar ",
+          "duracao_minutos": 90,
+          "valor_2026": 250.0,
+          "sessoes_mes_base": 1,
+          "pct_reajuste": 0.08,
+          "mes_reajuste": 3,
+          "pct_crescimento": 0.0,
+          "usa_sala": false
+        },
+        "Fisioterapia ": {
+          "nome": "Fisioterapia ",
+          "duracao_minutos": 60,
+          "valor_2026": 220.0,
+          "sessoes_mes_base": 83,
+          "pct_reajuste": 0.14,
+          "mes_reajuste": 1,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        }
+      },
+      "valores_proprietario": {},
+      "valores_profissional": {},
+      "proprietarios": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "tipo": "proprietario",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {}
+        }
+      },
+      "profissionais": {},
+      "despesas": {
+        "MKT": {
+          "nome": "MKT",
+          "categoria": "Marketing",
+          "valor_mensal": 1000.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0,
+            1000.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "cursos ": {
+          "nome": "cursos ",
+          "categoria": "Marketing",
+          "valor_mensal": 1150.0,
+          "tipo_reajuste": "nenhum",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0,
+            1150.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Aluguel ": {
+          "nome": "Aluguel ",
+          "categoria": "Ocupação",
+          "valor_mensal": 352.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0,
+            352.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Compras ": {
+          "nome": "Compras ",
+          "categoria": "Utilidades",
+          "valor_mensal": 258.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33,
+            258.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Condominio ": {
+          "nome": "Condominio ",
+          "categoria": "Ocupação",
+          "valor_mensal": 350.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Manutenção ": {
+          "nome": "Manutenção ",
+          "categoria": "Utilidades",
+          "valor_mensal": 98.33,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33,
+            98.33
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "TV/Telefone/Internet ": {
+          "nome": "TV/Telefone/Internet ",
+          "categoria": "Ocupação",
+          "valor_mensal": 80.0,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 5,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0,
+            80.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        }
+      },
+      "custo_pessoal_mensal": 0.0,
+      "mes_dissidio": 5,
+      "sazonalidade": [
+        1.0,
+        0.9,
+        0.85,
+        1.0,
+        1.0,
+        0.95,
+        1.1,
+        1.05,
+        1.1,
+        1.1,
+        1.05,
+        0.85
+      ],
+      "operacional": {
+        "num_fisioterapeutas": 1,
+        "num_salas": 1,
+        "horas_atendimento_dia": 6,
+        "dias_uteis_mes": 20,
+        "modelo_tributario": "PF - Carnê Leão",
+        "modo_calculo_sessoes": "servico"
+      },
+      "cadastro_salas": {
+        "horas_funcionamento_dia": 6,
+        "dias_uteis_mes": 20,
+        "salas": [
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 11.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 10.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Fisioterapia "
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 1,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 9.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [
+              "Osteopatia",
+              "Individual",
+              "Consultório",
+              "Personalizado"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 40.0,
+            "tipo": "Compartilhado",
+            "servicos_atendidos": [
+              "Ginásio"
+            ],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Reserva",
+            "servicos_atendidos": [],
+            "ativa": false
+          }
+        ]
+      },
+      "macro": {
+        "ipca": 0.045,
+        "igpm": 0.05,
+        "dissidio": 0.06,
+        "reajuste_tarifas": 0.09,
+        "reajuste_contratos": 0.08,
+        "taxa_cartao_credito": 0.037000000000000005,
+        "taxa_cartao_debito": 0.021,
+        "taxa_antecipacao": 0.0
+      },
+      "pagamento": {
+        "dinheiro_pix": 0.65,
+        "cartao_credito": 0.3,
+        "cartao_debito": 0.05,
+        "outros": 0.0,
+        "pct_antecipacao": 0.0
+      },
+      "premissas_folha": {
+        "regime_tributario": "PF - Carnê Leão",
+        "deducao_dependente_ir": 0.0,
+        "aliquota_fgts": 0.08,
+        "desconto_vt_pct": 0.06,
+        "dias_uteis_mes": 22,
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "prolabore": 0.0,
+          "dependentes_ir": 0,
+          "mes_reajuste": 5,
+          "pct_aumento": 0.0,
+          "ativo": true
+        }
+      },
+      "fisioterapeutas": {
+        "Amanda Packer Canalle ": {
+          "nome": "Amanda Packer Canalle ",
+          "cargo": "Proprietário",
+          "nivel": 0,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Fisioterapia ": 83
+          },
+          "pct_crescimento_por_servico": {},
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 6.0,
+            "terca": 6.0,
+            "quarta": 6.0,
+            "quinta": 6.0,
+            "sabado": 0.0,
+            "segunda": 6.0
+          }
+        }
+      },
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.25,
+          "2": 0.25,
+          "3": 0.25,
+          "4": 0.25
+        },
+        "pct_producao_propria": 0.5,
+        "pct_faturamento_total": 0.0,
+        "pct_base_remuneracao_prop": 0.75,
+        "pct_gerencia_equipe": 0.01,
+        "pct_base_remuneracao_ger": 0.75
+      },
+      "premissas_simples": {
+        "faturamento_pf_anual": 75000.0,
+        "aliquota_inss_pf": 0.0,
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28
+      },
+      "premissas_dividendos": {
+        "distribuir": true,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2,
+        "frequencia": "Mensal",
+        "pct_distribuir": 0.3,
+        "mostrar_no_dre": true
+      },
+      "premissas_fc": {
+        "caixa_inicial": 2000.0,
+        "cp_impostos": 0.0,
+        "cp_folha_colaboradores": 11000.0,
+        "cp_folha_fisioterapeutas": 0.0,
+        "cp_retirada_proprietarios": 20000.0,
+        "cp_encargos_clt": 750.0,
+        "cp_fornecedores": 0.0,
+        "usar_cp_folha_auto": true,
+        "receita_out_ano_anterior": 19462.926422768825,
+        "receita_nov_ano_anterior": 19462.926422768825,
+        "receita_dez_ano_anterior": 19462.926422768825,
+        "usar_receita_auto": true,
+        "recebimento_avista_no_mes": true,
+        "saldo_minimo": 2000.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0
+      },
+      "aplicacoes": {
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225,
+        "pct_cdi": 1.0
+      },
+      "investimentos": [],
+      "financiamentos": [
+        {
+          "descricao": "Novo Financiamento",
+          "saldo_devedor": 0.0,
+          "taxa_mensal": 0.02,
+          "parcelas_total": 60,
+          "parcelas_pagas": 0,
+          "mes_inicio_2026": 1,
+          "valor_parcela": 0.0,
+          "ativo": false
+        }
+      ],
+      "usar_cenarios": true,
+      "cenario_oficial": "Conservador",
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "usar_comparativo_anterior": false,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "ano_anterior": 2025
+    }
+  }
+}
