@@ -2387,13 +2387,9 @@ class MotorCalculo:
         if pct_crescimento > 0:
             crescimento_qtd = sessoes_base * pct_crescimento
             cresc_mensal = crescimento_qtd / 13.1
-            sessoes = sessoes_base + cresc_mensal * (mes + 0.944)
-        else:
-            sessoes = sessoes_base
+            return sessoes_base + cresc_mensal * (mes + 0.944)
         
-        # APLICA SAZONALIDADE
-        fator_sazonalidade = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-        return sessoes * fator_sazonalidade
+        return sessoes_base
     
     def validar_sessoes(self) -> dict:
         """
@@ -3359,13 +3355,9 @@ class MotorCalculo:
             if pct_crescimento > 0:
                 crescimento_qtd = sessoes_base * pct_crescimento
                 cresc_mensal = crescimento_qtd / 13.1
-                sessoes = sessoes_base + cresc_mensal * (mes + 0.944)
+                return sessoes_base + cresc_mensal * (mes + 0.944)
             else:
-                sessoes = sessoes_base
-            
-            # APLICA SAZONALIDADE
-            fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-            return sessoes * fator
+                return sessoes_base
         
         # ========================================
         # MODO PROFISSIONAL: Soma dos cadastros com crescimento individual
@@ -3406,9 +3398,7 @@ class MotorCalculo:
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
         
-        # APLICA SAZONALIDADE no total
-        fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-        return total * fator
+        return total
     
     def calcular_sessoes_mes_por_tipo(self, servico: str, mes: int, tipo: str = "todos") -> float:
         """
@@ -3519,9 +3509,7 @@ class MotorCalculo:
                     else:
                         total += sessoes_base
         
-        # APLICA SAZONALIDADE
-        fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-        return total * fator
+        return total
     
     def calcular_valor_servico_mes(self, servico: str, mes: int, tipo: str = "profissional") -> float:
         """

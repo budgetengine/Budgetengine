@@ -1474,19 +1474,11 @@ def render_seletor_cliente_filial():
         else:
             # Usuário comum vê apenas clientes da sua empresa
             empresa_nome = user.get("companies", {}).get("name", "") if user else ""
+            clientes = [c for c in todos_clientes if c["nome"].lower() == empresa_nome.lower()]
             
-            # CORREÇÃO: Busca mais flexível
-            clientes = []
-            for c in todos_clientes:
-                nome_cliente = c["nome"].lower().replace(" ", "").replace("_", "")
-                nome_empresa = empresa_nome.lower().replace(" ", "").replace("_", "")
-                if nome_cliente == nome_empresa or nome_empresa in nome_cliente or nome_cliente in nome_empresa:
-                    clientes.append(c)
-            
-            # AUTO-SELEÇÃO: Se só tem 1 cliente, seleciona automaticamente
-            if len(clientes) == 1 and not st.session_state.cliente_id:
-                st.session_state.cliente_id = clientes[0]["id"]
-                st.session_state.cliente_atual = manager.carregar_cliente(clientes[0]["id"])
+            # Se não encontrar cliente com nome exato, tenta busca parcial
+            if not clientes and empresa_nome:
+                clientes = [c for c in todos_clientes if empresa_nome.lower() in c["nome"].lower() or c["nome"].lower() in empresa_nome.lower()]
         
         opcoes_clientes = ["Selecione um cliente..."] + [c["nome"] for c in clientes]
         ids_clientes = [None] + [c["id"] for c in clientes]
@@ -11399,9 +11391,6 @@ def pagina_atendimentos():
                     crescimento_qtd = qtd_base * pct_cresc
                     cresc_mensal = crescimento_qtd / 13.1
                     sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                    # APLICA SAZONALIDADE
-                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                    sessoes = sessoes * fator_saz
                     valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                     faturamento_mes += sessoes * valor
             row_prop[mes] = faturamento_mes
@@ -11420,9 +11409,6 @@ def pagina_atendimentos():
                     crescimento_qtd = qtd_base * pct_cresc
                     cresc_mensal = crescimento_qtd / 13.1
                     sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                    # APLICA SAZONALIDADE
-                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                    sessoes = sessoes * fator_saz
                     valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
                     faturamento_mes += sessoes * valor
             row_prof[mes] = faturamento_mes
