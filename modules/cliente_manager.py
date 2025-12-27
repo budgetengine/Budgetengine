@@ -780,9 +780,10 @@ def dict_para_motor(dados: Dict, motor):
             usa_sala=srv_data.get("usa_sala", True)
         )
     
-    # Valores
-    motor.valores_proprietario = dados.get("valores_proprietario", {})
-    motor.valores_profissional = dados.get("valores_profissional", {})
+    # Valores - IMPORTANTE: usar deepcopy para evitar referências compartilhadas
+    import copy
+    motor.valores_proprietario = copy.deepcopy(dados.get("valores_proprietario", {}))
+    motor.valores_profissional = copy.deepcopy(dados.get("valores_profissional", {}))
     
     # Proprietários
     for nome, prop_data in dados.get("proprietarios", {}).items():
@@ -790,8 +791,8 @@ def dict_para_motor(dados: Dict, motor):
             nome=prop_data["nome"],
             tipo="proprietario",
             ativo=prop_data.get("ativo", True),
-            sessoes_por_servico=prop_data.get("sessoes_por_servico", {}),
-            pct_crescimento_por_servico=prop_data.get("pct_crescimento_por_servico", {})
+            sessoes_por_servico=copy.deepcopy(prop_data.get("sessoes_por_servico", {})),
+            pct_crescimento_por_servico=copy.deepcopy(prop_data.get("pct_crescimento_por_servico", {}))
         )
     
     # Profissionais
@@ -800,8 +801,8 @@ def dict_para_motor(dados: Dict, motor):
             nome=prof_data["nome"],
             tipo="profissional",
             ativo=prof_data.get("ativo", True),
-            sessoes_por_servico=prof_data.get("sessoes_por_servico", {}),
-            pct_crescimento_por_servico=prof_data.get("pct_crescimento_por_servico", {})
+            sessoes_por_servico=copy.deepcopy(prof_data.get("sessoes_por_servico", {})),
+            pct_crescimento_por_servico=copy.deepcopy(prof_data.get("pct_crescimento_por_servico", {}))
         )
     
     # Despesas (é um dicionário)
@@ -815,7 +816,7 @@ def dict_para_motor(dados: Dict, motor):
             pct_adicional=desp_data.get("pct_adicional", 0),
             aplicar_reajuste=desp_data.get("aplicar_reajuste", True),
             tipo_sazonalidade=desp_data.get("tipo_sazonalidade", "uniforme"),
-            valores_2025=desp_data.get("valores_2025", [0.0] * 12),
+            valores_2025=copy.deepcopy(desp_data.get("valores_2025", [0.0] * 12)),
             ativa=desp_data.get("ativa", True),
             # Campos de despesas variáveis
             tipo_despesa=desp_data.get("tipo_despesa", "fixa"),
@@ -828,8 +829,8 @@ def dict_para_motor(dados: Dict, motor):
     motor.custo_pessoal_mensal = dados.get("custo_pessoal_mensal", 0)
     motor.mes_dissidio = dados.get("mes_dissidio", 5)
     
-    # Sazonalidade
-    fatores = dados.get("sazonalidade", [1.0] * 12)
+    # Sazonalidade - usar deepcopy para evitar referências compartilhadas
+    fatores = copy.deepcopy(dados.get("sazonalidade", [1.0] * 12))
     motor.sazonalidade = Sazonalidade(fatores=fatores)
     
     # Premissas Folha
@@ -902,19 +903,19 @@ def dict_para_motor(dados: Dict, motor):
                 nivel=fisio_data.get("nivel", 2),
                 filial=fisio_data.get("filial", "Copacabana"),
                 ativo=fisio_data.get("ativo", True),
-                sessoes_por_servico=fisio_data.get("sessoes_por_servico", {}),
-                pct_crescimento_por_servico=fisio_data.get("pct_crescimento_por_servico", {}),
+                sessoes_por_servico=copy.deepcopy(fisio_data.get("sessoes_por_servico", {})),
+                pct_crescimento_por_servico=copy.deepcopy(fisio_data.get("pct_crescimento_por_servico", {})),
                 tipo_remuneracao=fisio_data.get("tipo_remuneracao", "percentual"),
-                valores_fixos_por_servico=fisio_data.get("valores_fixos_por_servico", {}),
+                valores_fixos_por_servico=copy.deepcopy(fisio_data.get("valores_fixos_por_servico", {})),
                 pct_customizado=fisio_data.get("pct_customizado", 0.0),
-                escala_semanal=escala_salva
+                escala_semanal=copy.deepcopy(escala_salva)
             )
     
     # Premissas Fisioterapeutas
     if "premissas_fisio" in dados:
         pf_data = dados["premissas_fisio"]
         motor.premissas_fisio = PremissasFisioterapeutas(
-            niveis_remuneracao=pf_data.get("niveis_remuneracao", {1: 0.35, 2: 0.30, 3: 0.25, 4: 0.20}),
+            niveis_remuneracao=copy.deepcopy(pf_data.get("niveis_remuneracao", {1: 0.35, 2: 0.30, 3: 0.25, 4: 0.20})),
             pct_producao_propria=pf_data.get("pct_producao_propria", 0.60),
             pct_faturamento_total=pf_data.get("pct_faturamento_total", 0.20),
             pct_base_remuneracao_prop=pf_data.get("pct_base_remuneracao_prop", 0.75),
@@ -1027,11 +1028,11 @@ def dict_para_motor(dados: Dict, motor):
     if "cenario_oficial" in dados:
         motor.cenario_oficial = dados["cenario_oficial"]
     if "ajustes_cenarios" in dados:
-        motor.ajustes_cenarios = dados["ajustes_cenarios"]
+        motor.ajustes_cenarios = copy.deepcopy(dados["ajustes_cenarios"])
     if "usar_comparativo_anterior" in dados:
         motor.usar_comparativo_anterior = dados["usar_comparativo_anterior"]
     if "faturamento_anterior" in dados:
-        motor.faturamento_anterior = dados["faturamento_anterior"]
+        motor.faturamento_anterior = copy.deepcopy(dados["faturamento_anterior"])
     if "ano_anterior" in dados:
         motor.ano_anterior = dados["ano_anterior"]
     
