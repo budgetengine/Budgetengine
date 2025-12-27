@@ -950,6 +950,12 @@ def mostrar_tela_login():
         
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
+        
+        /* Esconde toolbar com GitHub, Fork, etc */
+        [data-testid="stToolbar"] {visibility: hidden;}
+        .stDeployButton {display: none;}
+        header[data-testid="stHeader"] {background: transparent;}
+        [data-testid="stDecoration"] {display: none;}
     </style>
     """, unsafe_allow_html=True)
     
@@ -1179,6 +1185,12 @@ st.markdown("""
     /* Oculta elementos padrão do Streamlit (exceto header para manter sidebar toggle) */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    /* Esconde toolbar com GitHub, Fork, etc */
+    [data-testid="stToolbar"] {visibility: hidden;}
+    .stDeployButton {display: none;}
+    header[data-testid="stHeader"] {background: transparent;}
+    [data-testid="stDecoration"] {display: none;}
 </style>
 """, unsafe_allow_html=True)
 
