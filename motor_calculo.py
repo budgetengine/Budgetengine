@@ -2709,17 +2709,42 @@ class MotorCalculo:
         # Dois modelos:
         # 1. COM EQUIPE: Folha = faturamento equipe × 20% × 75% (como na planilha FVS)
         # 2. SOLO (PF/autônomo): Folha = produção própria × pct_producao_propria (retirada do profissional)
+        
+        # Fator de sazonalidade do mês
+        fator_sazonalidade = self.sazonalidade.fatores[mes_idx] if hasattr(self, 'sazonalidade') else 1.0
+        
         for nome, fisio in self.fisioterapeutas.items():
             if fisio.cargo != "Proprietário":
                 continue
             if not fisio.ativo:
                 continue
             
-            # Calcula sessões do proprietário (soma de todos os serviços dele)
-            sessoes_prop = sum(
-                self.get_sessoes_servico_mes(srv, mes_idx) 
-                for srv in fisio.sessoes_por_servico.keys()
-            )
+            # CORRIGIDO v1.87: Calcula sessões COM crescimento individual do proprietário
+            sessoes_prop = 0
+            faturamento_prop = 0
+            
+            for srv, qtd_base in fisio.sessoes_por_servico.items():
+                if qtd_base > 0:
+                    # APLICA CRESCIMENTO INDIVIDUAL do proprietário
+                    pct_crescimento = fisio.pct_crescimento_por_servico.get(srv, 0.0)
+                    
+                    if pct_crescimento > 0:
+                        crescimento_qtd = qtd_base * pct_crescimento
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes_com_crescimento = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    else:
+                        sessoes_com_crescimento = qtd_base
+                    
+                    # APLICA SAZONALIDADE
+                    sessoes_srv = sessoes_com_crescimento * fator_sazonalidade
+                    sessoes_prop += sessoes_srv
+                    
+                    # Calcula faturamento do proprietário
+                    valor = self.get_valor_servico(srv, mes_idx, "proprietario")
+                    faturamento_prop += sessoes_srv * valor
+            
+            # Recalcula produção própria com crescimento
+            producao_propria = faturamento_prop
             
             rem_producao = producao_propria * pf.pct_producao_propria  # 60% da produção própria
             rem_faturamento = faturamento_equipe * pf.pct_faturamento_total * pf.pct_base_remuneracao_prop
@@ -2745,13 +2770,10 @@ class MotorCalculo:
         
         # === FISIOTERAPEUTAS ===
         # Fórmula: Remuneração = Faturamento × % Nível × 75%
-        # Total sessões base por serviço - CALCULA DINAMICAMENTE
-        total_sessoes_base = {}
-        for fisio in self.fisioterapeutas.values():
-            if not fisio.ativo or fisio.cargo == "Proprietário":
-                continue
-            for srv, qtd in fisio.sessoes_por_servico.items():
-                total_sessoes_base[srv] = total_sessoes_base.get(srv, 0) + qtd
+        # CORRIGIDO v1.87: Calcula sessões COM crescimento individual de cada fisioterapeuta
+        
+        # Fator de sazonalidade do mês
+        fator_sazonalidade = self.sazonalidade.fatores[mes_idx] if hasattr(self, 'sazonalidade') else 1.0
         
         faturamento_outros = 0  # Para cálculo de bônus de gerência
         
@@ -2759,22 +2781,31 @@ class MotorCalculo:
             if not fisio.ativo or fisio.cargo == "Proprietário":
                 continue
             
-            # Calcula faturamento proporcional do profissional
+            # Calcula faturamento do profissional COM CRESCIMENTO INDIVIDUAL
             faturamento_prof = 0
             sessoes_prof = 0
             sessoes_por_servico_mes = {}  # Para cálculo de valor fixo
             
             for srv, qtd_base in fisio.sessoes_por_servico.items():
-                total_srv = total_sessoes_base.get(srv, 0)
-                if qtd_base > 0 and total_srv > 0:
-                    # Proporção das sessões base deste fisio no total do serviço
-                    proporcao = qtd_base / total_srv
-                    # Sessões do mês
-                    sessoes_mes = self.get_sessoes_servico_mes(srv, mes_idx)
-                    sessoes_srv = sessoes_mes * proporcao
+                if qtd_base > 0:
+                    # APLICA CRESCIMENTO INDIVIDUAL do fisioterapeuta
+                    pct_crescimento = fisio.pct_crescimento_por_servico.get(srv, 0.0)
+                    
+                    if pct_crescimento > 0:
+                        # Fórmula: sessoes = base + (base × pct_cresc / 13.1) × (mes + 0.944)
+                        crescimento_qtd = qtd_base * pct_crescimento
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes_com_crescimento = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    else:
+                        sessoes_com_crescimento = qtd_base
+                    
+                    # APLICA SAZONALIDADE
+                    sessoes_srv = sessoes_com_crescimento * fator_sazonalidade
                     sessoes_por_servico_mes[srv] = sessoes_srv
+                    
                     # Valor do serviço
                     valor = self.get_valor_servico(srv, mes_idx, "profissional")
+                    
                     # Faturamento
                     faturamento_prof += sessoes_srv * valor
                     sessoes_prof += sessoes_srv
@@ -3154,12 +3185,15 @@ class MotorCalculo:
                     cargo="Proprietário",
                     nivel=0,
                     filial="Copacabana",
-                    sessoes_por_servico=dict(prop.sessoes_por_servico) if prop.sessoes_por_servico else {}
+                    sessoes_por_servico=dict(prop.sessoes_por_servico) if prop.sessoes_por_servico else {},
+                    pct_crescimento_por_servico=dict(prop.pct_crescimento_por_servico) if prop.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões se já existe
+                # Atualiza sessões e crescimento se já existe
                 if prop.sessoes_por_servico:
                     self.fisioterapeutas[nome].sessoes_por_servico.update(prop.sessoes_por_servico)
+                if prop.pct_crescimento_por_servico:
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prop.pct_crescimento_por_servico)
         
         # ========== PROFISSIONAIS ==========
         # 3. Sincroniza de profissionais (Atendimentos) -> fisioterapeutas
@@ -3171,14 +3205,17 @@ class MotorCalculo:
                     cargo="Fisioterapeuta",
                     nivel=2,  # Nível padrão
                     filial="Copacabana",
-                    sessoes_por_servico=dict(prof.sessoes_por_servico) if prof.sessoes_por_servico else {}
+                    sessoes_por_servico=dict(prof.sessoes_por_servico) if prof.sessoes_por_servico else {},
+                    pct_crescimento_por_servico=dict(prof.pct_crescimento_por_servico) if prof.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões se já existe
+                # Atualiza sessões e crescimento se já existe
                 if prof.sessoes_por_servico:
                     self.fisioterapeutas[nome].sessoes_por_servico.update(prof.sessoes_por_servico)
+                if prof.pct_crescimento_por_servico:
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prof.pct_crescimento_por_servico)
         
-        # 4. Sincroniza de fisioterapeutas -> profissionais (sessões)
+        # 4. Sincroniza de fisioterapeutas -> profissionais (sessões e crescimento)
         for nome, fisio in self.fisioterapeutas.items():
             if fisio.cargo in ["Fisioterapeuta", "Gerente"]:
                 if nome not in self.profissionais:
@@ -3186,12 +3223,15 @@ class MotorCalculo:
                     self.profissionais[nome] = Profissional(
                         nome=nome,
                         tipo="profissional",
-                        sessoes_por_servico=dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {}
+                        sessoes_por_servico=dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {},
+                        pct_crescimento_por_servico=dict(fisio.pct_crescimento_por_servico) if fisio.pct_crescimento_por_servico else {}
                     )
                 else:
-                    # Atualiza sessões
+                    # Atualiza sessões e crescimento
                     if fisio.sessoes_por_servico:
                         self.profissionais[nome].sessoes_por_servico.update(fisio.sessoes_por_servico)
+                    if fisio.pct_crescimento_por_servico:
+                        self.profissionais[nome].pct_crescimento_por_servico.update(fisio.pct_crescimento_por_servico)
     
     def get_proprietarios(self) -> list:
         """Retorna lista de nomes dos proprietários cadastrados (de todas as fontes)"""
