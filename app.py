@@ -4017,6 +4017,91 @@ def pagina_cenarios():
                 hovermode='x unified'
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # === TABELA COMPARATIVA MÊS A MÊS ===
+            st.markdown(f"### 📊 Comparativo Mês a Mês: {ano_ant} vs 2026")
+            
+            # Seletor de cenário para comparação
+            cenario_comp = st.selectbox(
+                "Selecione o cenário para comparar:",
+                ["⚠️ Conservador", "📉 Pessimista", "🚀 Otimista"],
+                key="cenario_comp_vs_ant"
+            )
+            
+            # Definir receitas baseado no cenário selecionado
+            if cenario_comp == "📉 Pessimista":
+                receitas_selecionadas = receitas_pess
+            elif cenario_comp == "🚀 Otimista":
+                receitas_selecionadas = receitas_otim
+            else:
+                receitas_selecionadas = receitas_cons
+            
+            # Criar dados da tabela
+            dados_comparativo = []
+            for m in range(12):
+                real_ant = fat_anterior[m] if m < len(fat_anterior) else 0
+                proj_2026 = receitas_selecionadas[m]
+                var_rs = proj_2026 - real_ant
+                var_pct = ((proj_2026 / real_ant) - 1) * 100 if real_ant > 0 else 0
+                
+                dados_comparativo.append({
+                    "Mês": meses_nomes[m],
+                    f"Real {ano_ant}": f"R$ {real_ant:,.0f}",
+                    "Proj. 2026": f"R$ {proj_2026:,.0f}",
+                    "Var (R$)": f"R$ {var_rs:+,.0f}",
+                    "Var (%)": f"{var_pct:+.1f}%"
+                })
+            
+            # Adicionar linha de total
+            total_proj = sum(receitas_selecionadas)
+            var_total_rs = total_proj - total_anterior
+            var_total_pct = ((total_proj / total_anterior) - 1) * 100 if total_anterior > 0 else 0
+            
+            dados_comparativo.append({
+                "Mês": "📊 TOTAL",
+                f"Real {ano_ant}": f"R$ {total_anterior:,.0f}",
+                "Proj. 2026": f"R$ {total_proj:,.0f}",
+                "Var (R$)": f"R$ {var_total_rs:+,.0f}",
+                "Var (%)": f"{var_total_pct:+.1f}%"
+            })
+            
+            df_comp = pd.DataFrame(dados_comparativo)
+            
+            # Estilizar a tabela
+            def highlight_var(val):
+                if isinstance(val, str):
+                    if val.startswith('R$ +') or val.startswith('+'):
+                        return 'color: #28a745; font-weight: bold'
+                    elif val.startswith('R$ -') or (val.startswith('-') and '%' in val):
+                        return 'color: #dc3545; font-weight: bold'
+                return ''
+            
+            st.dataframe(
+                df_comp.style.applymap(highlight_var, subset=["Var (R$)", "Var (%)"]),
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+            
+            # Resumo
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; color: white; margin-top: 10px;">
+                <div style="display: flex; justify-content: space-around; text-align: center;">
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8;">Real {ano_ant}</div>
+                        <div style="font-size: 20px; font-weight: bold;">R$ {total_anterior/1000:,.0f}k</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8;">Projetado 2026</div>
+                        <div style="font-size: 20px; font-weight: bold;">R$ {total_proj/1000:,.0f}k</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8;">Crescimento</div>
+                        <div style="font-size: 20px; font-weight: bold;">{var_total_pct:+.1f}%</div>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         elif usar_comp and total_anterior == 0:
             st.warning(f"⚠️ Preencha o faturamento de {ano_ant} em **Premissas → Cenários** e clique em **Salvar**")
