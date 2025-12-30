@@ -14647,7 +14647,12 @@ def pagina_premissas():
             
             # Calcula projeção anual
             projecao = motor.projetar_folha_anual()
-            
+
+            # Proteção caso projeção seja None ou vazia
+            if not projecao or len(projecao) == 0:
+                st.warning("⚠️ Nenhuma projeção de folha disponível. Configure os sócios e funcionários na aba 'Cadastros'.")
+                st.stop()
+
             # RESUMO GERAL
             st.markdown("##### Resumo Geral (CLT + Sócios)")
             
