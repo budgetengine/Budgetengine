@@ -331,43 +331,64 @@ class ClienteManager:
         if self.supabase:
             try:
                 # Busca company_id pelo nome do cliente
+                print(f"[LOAD] Buscando company: {cliente_id}")
                 resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
                 
                 if resp_company.data:
                     company_id = resp_company.data[0]["id"]
+                    print(f"[LOAD] Company encontrada: {company_id}")
                     
                     # Busca filial
                     resp_branch = self.supabase.table("branches").select("data").eq("company_id", company_id).eq("slug", filial_id).execute()
                     
                     if resp_branch.data and resp_branch.data[0].get("data"):
+                        print(f"[LOAD] ✅ Dados carregados do Supabase para {filial_id}")
                         return resp_branch.data[0]["data"]
+                    else:
+                        print(f"[LOAD] ⚠️ Branch {filial_id} não encontrada no Supabase")
+                else:
+                    print(f"[LOAD] ⚠️ Company {cliente_id} não encontrada no Supabase")
             except Exception as e:
-                print(f"Aviso: Erro ao carregar do Supabase: {e}")
+                print(f"[LOAD] ❌ Erro ao carregar do Supabase: {e}")
+        else:
+            print(f"[LOAD] ⚠️ Supabase não configurado")
         
         # ============================================
         # FALLBACK: JSON LOCAL
         # ============================================
         path_filial = self._path_filial(cliente_id, filial_id)
+        print(f"[LOAD] Tentando JSON local: {path_filial}")
         
         if not os.path.exists(path_filial):
+            print(f"[LOAD] ❌ Arquivo local não existe")
             return None
         
         try:
             with open(path_filial, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
+                dados = json.load(f)
+                print(f"[LOAD] ✅ Dados carregados do JSON local")
+                return dados
+        except Exception as e:
+            print(f"[LOAD] ❌ Erro ao carregar JSON local: {e}")
             return None
     
-    def salvar_filial(self, cliente_id: str, filial_id: str, dados: Dict):
-        """Salva dados de uma filial (JSON local + Supabase)"""
+    def salvar_filial(self, cliente_id: str, filial_id: str, dados: Dict) -> bool:
+        """Salva dados de uma filial (JSON local + Supabase). Retorna True se sucesso."""
         path_filial = self._path_filial(cliente_id, filial_id)
+        sucesso_local = False
+        sucesso_supabase = False
         
         # CORREÇÃO: Garantir que o diretório existe antes de salvar
         os.makedirs(os.path.dirname(path_filial), exist_ok=True)
         
         # Salva JSON local (backup)
-        with open(path_filial, 'w', encoding='utf-8') as f:
-            json.dump(dados, f, ensure_ascii=False, indent=2)
+        try:
+            with open(path_filial, 'w', encoding='utf-8') as f:
+                json.dump(dados, f, ensure_ascii=False, indent=2)
+            sucesso_local = True
+            print(f"[SAVE] JSON local salvo: {path_filial}")
+        except Exception as e:
+            print(f"[SAVE] Erro ao salvar localmente: {e}")
         
         # ============================================
         # SALVA NO SUPABASE
@@ -375,22 +396,28 @@ class ClienteManager:
         if self.supabase:
             try:
                 # Busca company_id pelo nome do cliente
+                print(f"[SAVE] Buscando company: {cliente_id}")
                 resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
                 
                 if resp_company.data:
                     company_id = resp_company.data[0]["id"]
+                    print(f"[SAVE] Company encontrada: {company_id}")
                     
                     # Verifica se filial já existe
                     resp_branch = self.supabase.table("branches").select("id").eq("company_id", company_id).eq("slug", filial_id).execute()
                     
                     if resp_branch.data:
                         # UPDATE
+                        print(f"[SAVE] Atualizando branch: {resp_branch.data[0]['id']}")
                         self.supabase.table("branches").update({
                             "data": dados,
                             "updated_at": datetime.now().isoformat()
                         }).eq("id", resp_branch.data[0]["id"]).execute()
+                        sucesso_supabase = True
+                        print(f"[SAVE] Branch atualizada com sucesso!")
                     else:
                         # INSERT
+                        print(f"[SAVE] Inserindo nova branch: {filial_id}")
                         self.supabase.table("branches").insert({
                             "company_id": company_id,
                             "name": filial_id.replace("_", " ").title(),
@@ -398,8 +425,20 @@ class ClienteManager:
                             "is_active": True,
                             "data": dados
                         }).execute()
+                        sucesso_supabase = True
+                        print(f"[SAVE] Branch inserida com sucesso!")
+                else:
+                    print(f"[SAVE] ⚠️ Cliente '{cliente_id}' NÃO encontrado no Supabase!")
             except Exception as e:
-                print(f"Aviso: Erro ao salvar no Supabase: {e}")
+                print(f"[SAVE] ❌ Erro ao salvar no Supabase: {e}")
+        else:
+            print(f"[SAVE] ⚠️ Supabase não configurado")
+            # Sem Supabase, considera sucesso se salvou localmente
+            sucesso_supabase = sucesso_local
+        
+        resultado = sucesso_local or sucesso_supabase
+        print(f"[SAVE] Resultado final: local={sucesso_local}, supabase={sucesso_supabase}, final={resultado}")
+        return resultado
     
     def excluir_filial(self, cliente_id: str, filial_id: str):
         """Exclui uma filial"""
@@ -754,9 +793,9 @@ def dict_para_motor(dados: Dict, motor):
         motor.macro.dissidio = mc.get("dissidio", 0.0)
         motor.macro.reajuste_tarifas = mc.get("reajuste_tarifas", 0.0)
         motor.macro.reajuste_contratos = mc.get("reajuste_contratos", 0.0)
-        motor.macro.taxa_cartao_credito = mc.get("taxa_cartao_credito", 0.0354)  # 3.54% padrão
-        motor.macro.taxa_cartao_debito = mc.get("taxa_cartao_debito", 0.0211)   # 2.11% padrão
-        motor.macro.taxa_antecipacao = mc.get("taxa_antecipacao", 0.05)          # 5% padrão
+        motor.macro.taxa_cartao_credito = mc.get("taxa_cartao_credito", 0.0354)
+        motor.macro.taxa_cartao_debito = mc.get("taxa_cartao_debito", 0.0211)
+        motor.macro.taxa_antecipacao = mc.get("taxa_antecipacao", 0.05)
     
     # NOVO: Carrega Formas de Pagamento
     if "pagamento" in dados:
@@ -780,9 +819,10 @@ def dict_para_motor(dados: Dict, motor):
             usa_sala=srv_data.get("usa_sala", True)
         )
     
-    # Valores
-    motor.valores_proprietario = dados.get("valores_proprietario", {})
-    motor.valores_profissional = dados.get("valores_profissional", {})
+    # Valores - IMPORTANTE: usar deepcopy para evitar referências compartilhadas
+    import copy
+    motor.valores_proprietario = copy.deepcopy(dados.get("valores_proprietario", {}))
+    motor.valores_profissional = copy.deepcopy(dados.get("valores_profissional", {}))
     
     # Proprietários
     for nome, prop_data in dados.get("proprietarios", {}).items():
@@ -790,8 +830,8 @@ def dict_para_motor(dados: Dict, motor):
             nome=prop_data["nome"],
             tipo="proprietario",
             ativo=prop_data.get("ativo", True),
-            sessoes_por_servico=prop_data.get("sessoes_por_servico", {}),
-            pct_crescimento_por_servico=prop_data.get("pct_crescimento_por_servico", {})
+            sessoes_por_servico=copy.deepcopy(prop_data.get("sessoes_por_servico", {})),
+            pct_crescimento_por_servico=copy.deepcopy(prop_data.get("pct_crescimento_por_servico", {}))
         )
     
     # Profissionais
@@ -800,8 +840,8 @@ def dict_para_motor(dados: Dict, motor):
             nome=prof_data["nome"],
             tipo="profissional",
             ativo=prof_data.get("ativo", True),
-            sessoes_por_servico=prof_data.get("sessoes_por_servico", {}),
-            pct_crescimento_por_servico=prof_data.get("pct_crescimento_por_servico", {})
+            sessoes_por_servico=copy.deepcopy(prof_data.get("sessoes_por_servico", {})),
+            pct_crescimento_por_servico=copy.deepcopy(prof_data.get("pct_crescimento_por_servico", {}))
         )
     
     # Despesas (é um dicionário)
@@ -815,7 +855,7 @@ def dict_para_motor(dados: Dict, motor):
             pct_adicional=desp_data.get("pct_adicional", 0),
             aplicar_reajuste=desp_data.get("aplicar_reajuste", True),
             tipo_sazonalidade=desp_data.get("tipo_sazonalidade", "uniforme"),
-            valores_2025=desp_data.get("valores_2025", [0.0] * 12),
+            valores_2025=copy.deepcopy(desp_data.get("valores_2025", [0.0] * 12)),
             ativa=desp_data.get("ativa", True),
             # Campos de despesas variáveis
             tipo_despesa=desp_data.get("tipo_despesa", "fixa"),
@@ -828,8 +868,8 @@ def dict_para_motor(dados: Dict, motor):
     motor.custo_pessoal_mensal = dados.get("custo_pessoal_mensal", 0)
     motor.mes_dissidio = dados.get("mes_dissidio", 5)
     
-    # Sazonalidade
-    fatores = dados.get("sazonalidade", [1.0] * 12)
+    # Sazonalidade - usar deepcopy para evitar referências compartilhadas
+    fatores = copy.deepcopy(dados.get("sazonalidade", [1.0] * 12))
     motor.sazonalidade = Sazonalidade(fatores=fatores)
     
     # Premissas Folha
@@ -902,19 +942,19 @@ def dict_para_motor(dados: Dict, motor):
                 nivel=fisio_data.get("nivel", 2),
                 filial=fisio_data.get("filial", "Copacabana"),
                 ativo=fisio_data.get("ativo", True),
-                sessoes_por_servico=fisio_data.get("sessoes_por_servico", {}),
-                pct_crescimento_por_servico=fisio_data.get("pct_crescimento_por_servico", {}),
+                sessoes_por_servico=copy.deepcopy(fisio_data.get("sessoes_por_servico", {})),
+                pct_crescimento_por_servico=copy.deepcopy(fisio_data.get("pct_crescimento_por_servico", {})),
                 tipo_remuneracao=fisio_data.get("tipo_remuneracao", "percentual"),
-                valores_fixos_por_servico=fisio_data.get("valores_fixos_por_servico", {}),
+                valores_fixos_por_servico=copy.deepcopy(fisio_data.get("valores_fixos_por_servico", {})),
                 pct_customizado=fisio_data.get("pct_customizado", 0.0),
-                escala_semanal=escala_salva
+                escala_semanal=copy.deepcopy(escala_salva)
             )
     
     # Premissas Fisioterapeutas
     if "premissas_fisio" in dados:
         pf_data = dados["premissas_fisio"]
         motor.premissas_fisio = PremissasFisioterapeutas(
-            niveis_remuneracao=pf_data.get("niveis_remuneracao", {1: 0.35, 2: 0.30, 3: 0.25, 4: 0.20}),
+            niveis_remuneracao=copy.deepcopy(pf_data.get("niveis_remuneracao", {1: 0.35, 2: 0.30, 3: 0.25, 4: 0.20})),
             pct_producao_propria=pf_data.get("pct_producao_propria", 0.60),
             pct_faturamento_total=pf_data.get("pct_faturamento_total", 0.20),
             pct_base_remuneracao_prop=pf_data.get("pct_base_remuneracao_prop", 0.75),
@@ -1027,11 +1067,11 @@ def dict_para_motor(dados: Dict, motor):
     if "cenario_oficial" in dados:
         motor.cenario_oficial = dados["cenario_oficial"]
     if "ajustes_cenarios" in dados:
-        motor.ajustes_cenarios = dados["ajustes_cenarios"]
+        motor.ajustes_cenarios = copy.deepcopy(dados["ajustes_cenarios"])
     if "usar_comparativo_anterior" in dados:
         motor.usar_comparativo_anterior = dados["usar_comparativo_anterior"]
     if "faturamento_anterior" in dados:
-        motor.faturamento_anterior = dados["faturamento_anterior"]
+        motor.faturamento_anterior = copy.deepcopy(dados["faturamento_anterior"])
     if "ano_anterior" in dados:
         motor.ano_anterior = dados["ano_anterior"]
     
@@ -1334,6 +1374,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
             "cenario_ativo": "Conservador",
             "cenario_aprovado": None,
             "usar_cenarios": True,
+            "modelo_eficiencia": "profissional",
             "motores": {
                 "Conservador": motor_padrao,
                 "Pessimista": criar_motor_padrao(),
@@ -1346,17 +1387,26 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
     if dados_brutos.get("_version") == "2.0" and "cenarios" in dados_brutos:
         # Formato novo - carrega os 3 motores
         motores = {}
+        print(f"[LOAD-CENARIOS] Carregando formato 2.0 para {filial_id}")
         for cenario_nome in ["Conservador", "Pessimista", "Otimista"]:
             motor = criar_motor_padrao()
             dados_cenario = dados_brutos["cenarios"].get(cenario_nome, {})
             if dados_cenario:
                 dict_para_motor(dados_cenario, motor)
+                # LOG: Contagem de sessões
+                total_sessoes = sum(
+                    sum(f.get("sessoes_por_servico", {}).values())
+                    for f in dados_cenario.get("fisioterapeutas", {}).values()
+                )
+                ipca = dados_cenario.get("macro", {}).get("ipca", 0)
+                print(f"[LOAD-CENARIOS] {cenario_nome}: sessões={total_sessoes:.0f}, IPCA={ipca*100:.1f}%")
             motores[cenario_nome] = motor
         
         return {
             "cenario_ativo": dados_brutos.get("cenario_ativo", "Conservador"),
             "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
             "usar_cenarios": dados_brutos.get("usar_cenarios", True),
+            "modelo_eficiencia": dados_brutos.get("modelo_eficiencia", "profissional"),
             "motores": motores,
             "_migrado": False
         }
@@ -1376,6 +1426,7 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
             "cenario_ativo": dados_brutos.get("cenario_oficial", "Conservador"),
             "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
             "usar_cenarios": dados_brutos.get("usar_cenarios", True),
+            "modelo_eficiencia": dados_brutos.get("modelo_eficiencia", "profissional"),
             "motores": {
                 "Conservador": motor_base,
                 "Pessimista": motor_pess,
@@ -1387,7 +1438,8 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
 
 def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str, 
                             motores: Dict, cenario_ativo: str = "Conservador", 
-                            usar_cenarios: bool = True, cenario_aprovado: str = None):
+                            usar_cenarios: bool = True, cenario_aprovado: str = None,
+                            modelo_eficiencia: str = "profissional"):
     """
     Salva os 3 motores de uma filial no novo formato.
     
@@ -1399,6 +1451,7 @@ def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id:
         cenario_ativo: Qual cenário estava ativo
         usar_cenarios: Se o módulo de cenários está habilitado
         cenario_aprovado: Qual cenário foi aprovado (None se nenhum)
+        modelo_eficiencia: Modelo de eficiência selecionado (profissional/infraestrutura)
     """
     dados = {
         "_version": "2.0",
@@ -1406,13 +1459,22 @@ def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id:
         "cenario_ativo": cenario_ativo,
         "cenario_aprovado": cenario_aprovado,
         "usar_cenarios": usar_cenarios,
+        "modelo_eficiencia": modelo_eficiencia,
         "cenarios": {}
     }
     
+    print(f"[SAVE-CENARIOS] Salvando {filial_id} com cenario_ativo={cenario_ativo}")
     for cenario_nome, motor in motores.items():
         dados["cenarios"][cenario_nome] = motor_para_dict(motor)
+        # LOG: Contagem de sessões ao salvar
+        total_sessoes = sum(
+            sum(f.sessoes_por_servico.values())
+            for f in motor.fisioterapeutas.values()
+        )
+        ipca = motor.macro.ipca if hasattr(motor, 'macro') else 0
+        print(f"[SAVE-CENARIOS] {cenario_nome}: sessões={total_sessoes:.0f}, IPCA={ipca*100:.1f}%")
     
-    manager.salvar_filial(cliente_id, filial_id, dados)
+    return manager.salvar_filial(cliente_id, filial_id, dados)
 
 
 def copiar_cenario(motor_origem, motor_destino):

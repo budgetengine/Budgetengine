@@ -1216,6 +1216,17 @@ class DespesaFixa:
         # Pega valor base
         if self.tipo_sazonalidade == "sazonal" and self.valores_2025:
             valor_base = self.valores_2025[mes]
+            
+            # FALLBACK ROBUSTO: Se valores_2025 estiver zerado OU com valores residuais
+            # (muito menores que valor_mensal), usa valor_mensal como base
+            # Isso cobre casos onde valores_2025 tem dados inválidos/residuais
+            soma_valores_2025 = sum(self.valores_2025)
+            valor_esperado_anual = self.valor_mensal * 12
+            
+            # Se soma de valores_2025 é menor que 10% do esperado, considerar inválido
+            if valor_esperado_anual > 0 and soma_valores_2025 < valor_esperado_anual * 0.1:
+                valor_base = self.valor_mensal
+            
             # Para sazonal, aplica reajuste em todos os meses se habilitado
             if self.aplicar_reajuste:
                 indice = indices.get(self.tipo_reajuste, 0)
@@ -1305,9 +1316,9 @@ class Cenario:
     def pessimista(cls) -> 'Cenario':
         return cls(
             nome="Pessimista",
-            descricao="Cenário de crise: queda na demanda, aumento de custos",
+            descricao="Cenário de crise: queda na demanda",
             fator_receita=0.75,
-            fator_despesas=1.15,
+            fator_despesas=1.0,  # Inflação já aplicada via Premissas Macro
             fator_crescimento=0.50,
             fator_inflacao=1.20
         )
@@ -1318,7 +1329,7 @@ class Cenario:
             nome="Conservador",
             descricao="Cenário cauteloso: leve redução na demanda",
             fator_receita=0.90,
-            fator_despesas=1.05,
+            fator_despesas=1.0,  # Inflação já aplicada via Premissas Macro
             fator_crescimento=0.75,
             fator_inflacao=1.08
         )
@@ -1340,7 +1351,7 @@ class Cenario:
             nome="Otimista",
             descricao="Cenário favorável: crescimento acelerado",
             fator_receita=1.15,
-            fator_despesas=0.95,
+            fator_despesas=1.0,  # Inflação já aplicada via Premissas Macro
             fator_crescimento=1.30,
             fator_inflacao=0.95
         )
@@ -2709,17 +2720,42 @@ class MotorCalculo:
         # Dois modelos:
         # 1. COM EQUIPE: Folha = faturamento equipe × 20% × 75% (como na planilha FVS)
         # 2. SOLO (PF/autônomo): Folha = produção própria × pct_producao_propria (retirada do profissional)
+        
+        # Fator de sazonalidade do mês
+        fator_sazonalidade = self.sazonalidade.fatores[mes_idx] if hasattr(self, 'sazonalidade') else 1.0
+        
         for nome, fisio in self.fisioterapeutas.items():
             if fisio.cargo != "Proprietário":
                 continue
             if not fisio.ativo:
                 continue
             
-            # Calcula sessões do proprietário (soma de todos os serviços dele)
-            sessoes_prop = sum(
-                self.get_sessoes_servico_mes(srv, mes_idx) 
-                for srv in fisio.sessoes_por_servico.keys()
-            )
+            # CORRIGIDO v1.87: Calcula sessões COM crescimento individual do proprietário
+            sessoes_prop = 0
+            faturamento_prop = 0
+            
+            for srv, qtd_base in fisio.sessoes_por_servico.items():
+                if qtd_base > 0:
+                    # APLICA CRESCIMENTO INDIVIDUAL do proprietário
+                    pct_crescimento = fisio.pct_crescimento_por_servico.get(srv, 0.0)
+                    
+                    if pct_crescimento > 0:
+                        crescimento_qtd = qtd_base * pct_crescimento
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes_com_crescimento = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    else:
+                        sessoes_com_crescimento = qtd_base
+                    
+                    # APLICA SAZONALIDADE
+                    sessoes_srv = sessoes_com_crescimento * fator_sazonalidade
+                    sessoes_prop += sessoes_srv
+                    
+                    # Calcula faturamento do proprietário
+                    valor = self.get_valor_servico(srv, mes_idx, "proprietario")
+                    faturamento_prop += sessoes_srv * valor
+            
+            # Recalcula produção própria com crescimento
+            producao_propria = faturamento_prop
             
             rem_producao = producao_propria * pf.pct_producao_propria  # 60% da produção própria
             rem_faturamento = faturamento_equipe * pf.pct_faturamento_total * pf.pct_base_remuneracao_prop
@@ -2745,13 +2781,10 @@ class MotorCalculo:
         
         # === FISIOTERAPEUTAS ===
         # Fórmula: Remuneração = Faturamento × % Nível × 75%
-        # Total sessões base por serviço - CALCULA DINAMICAMENTE
-        total_sessoes_base = {}
-        for fisio in self.fisioterapeutas.values():
-            if not fisio.ativo or fisio.cargo == "Proprietário":
-                continue
-            for srv, qtd in fisio.sessoes_por_servico.items():
-                total_sessoes_base[srv] = total_sessoes_base.get(srv, 0) + qtd
+        # CORRIGIDO v1.87: Calcula sessões COM crescimento individual de cada fisioterapeuta
+        
+        # Fator de sazonalidade do mês
+        fator_sazonalidade = self.sazonalidade.fatores[mes_idx] if hasattr(self, 'sazonalidade') else 1.0
         
         faturamento_outros = 0  # Para cálculo de bônus de gerência
         
@@ -2759,22 +2792,31 @@ class MotorCalculo:
             if not fisio.ativo or fisio.cargo == "Proprietário":
                 continue
             
-            # Calcula faturamento proporcional do profissional
+            # Calcula faturamento do profissional COM CRESCIMENTO INDIVIDUAL
             faturamento_prof = 0
             sessoes_prof = 0
             sessoes_por_servico_mes = {}  # Para cálculo de valor fixo
             
             for srv, qtd_base in fisio.sessoes_por_servico.items():
-                total_srv = total_sessoes_base.get(srv, 0)
-                if qtd_base > 0 and total_srv > 0:
-                    # Proporção das sessões base deste fisio no total do serviço
-                    proporcao = qtd_base / total_srv
-                    # Sessões do mês
-                    sessoes_mes = self.get_sessoes_servico_mes(srv, mes_idx)
-                    sessoes_srv = sessoes_mes * proporcao
+                if qtd_base > 0:
+                    # APLICA CRESCIMENTO INDIVIDUAL do fisioterapeuta
+                    pct_crescimento = fisio.pct_crescimento_por_servico.get(srv, 0.0)
+                    
+                    if pct_crescimento > 0:
+                        # Fórmula: sessoes = base + (base × pct_cresc / 13.1) × (mes + 0.944)
+                        crescimento_qtd = qtd_base * pct_crescimento
+                        cresc_mensal = crescimento_qtd / 13.1
+                        sessoes_com_crescimento = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                    else:
+                        sessoes_com_crescimento = qtd_base
+                    
+                    # APLICA SAZONALIDADE
+                    sessoes_srv = sessoes_com_crescimento * fator_sazonalidade
                     sessoes_por_servico_mes[srv] = sessoes_srv
+                    
                     # Valor do serviço
                     valor = self.get_valor_servico(srv, mes_idx, "profissional")
+                    
                     # Faturamento
                     faturamento_prof += sessoes_srv * valor
                     sessoes_prof += sessoes_srv
@@ -2859,6 +2901,846 @@ class MotorCalculo:
     def projetar_folha_fisioterapeutas_anual(self) -> list:
         """Projeta folha de fisioterapeutas para todos os meses do ano"""
         return [self.calcular_folha_fisioterapeutas_mes(mes) for mes in range(1, 13)]
+    
+    # ============================================
+    # SIMULADOR DE METAS (CÁLCULO REVERSO)
+    # ============================================
+    
+    def simular_meta_faturamento(self, pct_crescimento_meta: float, mes_referencia: int = 1, 
+                                  modo_distribuicao: str = "proporcional",
+                                  usar_faturamento_anterior: bool = True) -> dict:
+        """
+        Simula quantas sessões adicionais cada fisioterapeuta precisa fazer
+        para atingir uma meta de crescimento no faturamento.
+        
+        MODO SOMENTE LEITURA - não altera dados do motor.
+        
+        Args:
+            pct_crescimento_meta: % de crescimento desejado (ex: 0.12 para 12%)
+            mes_referencia: Mês base para cálculo (1-12), default=1 (Janeiro)
+            modo_distribuicao: Como distribuir o gap entre fisios
+                - "proporcional": Distribui proporcionalmente ao faturamento atual
+                - "igual": Distribui igualmente entre todos
+                - "capacidade": Distribui por capacidade disponível
+            usar_faturamento_anterior: Se True, usa faturamento_anterior (2025) como base
+                                       Se False, usa faturamento calculado atual
+        
+        Returns:
+            dict com:
+                - faturamento_base: Faturamento base (2025 ou calculado)
+                - faturamento_meta: Faturamento alvo
+                - gap_faturamento: Diferença a ser coberta
+                - fisioterapeutas: Lista com detalhes de cada fisio
+                - resumo: Resumo executivo
+                - viavel: Se a meta é viável com a equipe atual
+        """
+        pf = self.premissas_fisio
+        
+        # 1. Calcula situação atual usando função existente
+        folha_atual = self.calcular_folha_fisioterapeutas_mes(mes_referencia)
+        
+        # 2. Extrai dados atuais dos fisioterapeutas
+        faturamento_fisios_atual = sum(f["faturamento"] for f in folha_atual["fisioterapeutas"])
+        sessoes_atual = sum(f["sessoes"] for f in folha_atual["fisioterapeutas"])
+        remuneracao_atual = folha_atual["total_fisioterapeutas"]
+        
+        # 3. Define faturamento base para cálculo da meta
+        if usar_faturamento_anterior and hasattr(self, 'faturamento_anterior'):
+            # Usa faturamento total de 2025 (ano anterior)
+            faturamento_base = sum(self.faturamento_anterior) / 12  # Média mensal
+            faturamento_base_anual = sum(self.faturamento_anterior)
+            fonte_base = "Faturamento 2025 (média mensal)"
+        else:
+            # Usa faturamento calculado atual
+            faturamento_base = faturamento_fisios_atual
+            faturamento_base_anual = faturamento_fisios_atual * 12
+            fonte_base = "Faturamento calculado (fisioterapeutas)"
+        
+        # 4. Calcula metas
+        faturamento_meta = faturamento_base * (1 + pct_crescimento_meta)
+        gap_faturamento = faturamento_meta - faturamento_fisios_atual  # Gap real a cobrir
+        
+        # Se usando faturamento anterior, o gap é a diferença entre meta e atual dos fisios
+        # Isso porque queremos que os fisios cubram a diferença
+        
+        # 5. Calcula valor médio por sessão (para estimar sessões necessárias)
+        valor_medio_sessao = faturamento_fisios_atual / sessoes_atual if sessoes_atual > 0 else 0
+        sessoes_adicionais_total = gap_faturamento / valor_medio_sessao if valor_medio_sessao > 0 else 0
+        
+        # 6. Distribui entre fisios
+        resultado_fisios = []
+        total_sessoes_novas = 0
+        total_remuneracao_nova = 0
+        
+        for fisio_atual in folha_atual["fisioterapeutas"]:
+            nome = fisio_atual["nome"]
+            fisio_obj = self.fisioterapeutas.get(nome)
+            
+            if not fisio_obj or not fisio_obj.ativo:
+                continue
+            
+            # Dados atuais do fisio
+            sessoes_fisio = fisio_atual["sessoes"]
+            faturamento_fisio = fisio_atual["faturamento"]
+            remuneracao_fisio = fisio_atual["remuneracao"]
+            nivel = fisio_atual["nivel"]
+            pct_nivel = fisio_atual["pct_nivel"]
+            
+            # Calcula participação no faturamento total dos fisios
+            participacao = faturamento_fisio / faturamento_fisios_atual if faturamento_fisios_atual > 0 else 0
+            
+            # Distribui gap conforme modo
+            if modo_distribuicao == "proporcional":
+                gap_fisio = gap_faturamento * participacao
+            elif modo_distribuicao == "igual":
+                qtd_fisios = len([f for f in folha_atual["fisioterapeutas"] if f["sessoes"] > 0])
+                gap_fisio = gap_faturamento / qtd_fisios if qtd_fisios > 0 else 0
+            else:  # capacidade
+                gap_fisio = gap_faturamento * participacao  # Por enquanto igual a proporcional
+            
+            # Calcula sessões adicionais para este fisio
+            valor_sessao_fisio = faturamento_fisio / sessoes_fisio if sessoes_fisio > 0 else valor_medio_sessao
+            sessoes_adicionais = gap_fisio / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
+            
+            # Novos valores
+            sessoes_nova = sessoes_fisio + sessoes_adicionais
+            faturamento_novo = faturamento_fisio + gap_fisio
+            
+            # Calcula nova remuneração usando mesma lógica do motor
+            tipo_rem = fisio_obj.tipo_remuneracao if fisio_obj else "percentual"
+            
+            if tipo_rem == "valor_fixo":
+                # Valor fixo por sessão
+                valor_fixo_medio = remuneracao_fisio / sessoes_fisio if sessoes_fisio > 0 else 0
+                remuneracao_nova = sessoes_nova * valor_fixo_medio
+            elif tipo_rem == "misto":
+                # Parte percentual + parte fixa
+                remuneracao_nova = faturamento_novo * pct_nivel * 0.75
+                # Adiciona parte fixa proporcional
+                parte_fixa = remuneracao_fisio - (faturamento_fisio * pct_nivel * 0.75)
+                if parte_fixa > 0 and sessoes_fisio > 0:
+                    remuneracao_nova += (sessoes_nova / sessoes_fisio) * parte_fixa
+            else:
+                # Percentual padrão
+                remuneracao_nova = faturamento_novo * pct_nivel * 0.75
+            
+            # Delta
+            delta_sessoes = sessoes_nova - sessoes_fisio
+            delta_faturamento = faturamento_novo - faturamento_fisio
+            delta_remuneracao = remuneracao_nova - remuneracao_fisio
+            
+            resultado_fisios.append({
+                "nome": nome,
+                "cargo": fisio_atual["cargo"],
+                "nivel": nivel,
+                "tipo_remuneracao": tipo_rem,
+                # Atual
+                "sessoes_atual": sessoes_fisio,
+                "faturamento_atual": faturamento_fisio,
+                "remuneracao_atual": remuneracao_fisio,
+                # Meta
+                "sessoes_meta": sessoes_nova,
+                "faturamento_meta": faturamento_novo,
+                "remuneracao_meta": remuneracao_nova,
+                # Deltas
+                "delta_sessoes": delta_sessoes,
+                "delta_faturamento": delta_faturamento,
+                "delta_remuneracao": delta_remuneracao,
+                # Percentuais
+                "pct_crescimento_sessoes": (delta_sessoes / sessoes_fisio * 100) if sessoes_fisio > 0 else 0,
+                "pct_crescimento_faturamento": (delta_faturamento / faturamento_fisio * 100) if faturamento_fisio > 0 else 0,
+                "pct_crescimento_remuneracao": (delta_remuneracao / remuneracao_fisio * 100) if remuneracao_fisio > 0 else 0,
+            })
+            
+            total_sessoes_novas += sessoes_nova
+            total_remuneracao_nova += remuneracao_nova
+        
+        # 7. Análise de viabilidade
+        # Verifica se sessões adicionais são razoáveis (< 50% de aumento por fisio)
+        viavel = True
+        alertas = []
+        
+        for f in resultado_fisios:
+            if f["pct_crescimento_sessoes"] > 50:
+                viavel = False
+                alertas.append(f"{f['nome']}: +{f['pct_crescimento_sessoes']:.0f}% sessões é muito alto")
+            elif f["pct_crescimento_sessoes"] > 30:
+                alertas.append(f"{f['nome']}: +{f['pct_crescimento_sessoes']:.0f}% sessões pode ser desafiador")
+        
+        # Alerta se faturamento anterior não está preenchido
+        if usar_faturamento_anterior:
+            if not hasattr(self, 'faturamento_anterior') or sum(self.faturamento_anterior) == 0:
+                alertas.insert(0, "⚠️ Faturamento 2025 não preenchido! Vá em Premissas → Cenários para preencher.")
+        
+        # 8. Resumo
+        faturamento_meta_total = sum(f["faturamento_meta"] for f in resultado_fisios)
+        
+        resumo = {
+            "fonte_base": fonte_base,
+            "faturamento_base": faturamento_base,
+            "faturamento_base_anual": faturamento_base_anual,
+            "faturamento_atual_fisios": faturamento_fisios_atual,
+            "faturamento_meta": faturamento_meta,
+            "faturamento_meta_total": faturamento_meta_total,
+            "gap_faturamento": gap_faturamento,
+            "sessoes_atual": sessoes_atual,
+            "sessoes_meta": total_sessoes_novas,
+            "sessoes_adicionais": total_sessoes_novas - sessoes_atual,
+            "remuneracao_atual": remuneracao_atual,
+            "remuneracao_meta": total_remuneracao_nova,
+            "delta_remuneracao": total_remuneracao_nova - remuneracao_atual,
+            "margem_atual": faturamento_fisios_atual - remuneracao_atual,
+            "margem_meta": faturamento_meta_total - total_remuneracao_nova,
+            "qtd_fisios": len(resultado_fisios),
+            "viavel": viavel,
+            "alertas": alertas,
+        }
+        
+        return {
+            "meta_input": {
+                "pct_crescimento": pct_crescimento_meta,
+                "mes_referencia": mes_referencia,
+                "modo_distribuicao": modo_distribuicao,
+                "usar_faturamento_anterior": usar_faturamento_anterior,
+            },
+            "fisioterapeutas": resultado_fisios,
+            "resumo": resumo,
+            "viavel": viavel,
+            "alertas": alertas,
+        }
+    
+    def simular_meta_faturamento_anual(self, pct_crescimento_meta: float,
+                                        modo_distribuicao: str = "proporcional",
+                                        usar_faturamento_anterior: bool = True) -> dict:
+        """
+        Simula metas de crescimento considerando o ANO INTEIRO.
+        USA A SAZONALIDADE DO FATURAMENTO 2025 para distribuir metas mensais.
+        
+        MODO SOMENTE LEITURA - não altera dados do motor.
+        
+        Args:
+            pct_crescimento_meta: % de crescimento desejado (ex: 0.12 para 12%)
+            modo_distribuicao: Como distribuir o gap entre fisios
+            usar_faturamento_anterior: Se True, usa faturamento 2025 como base
+        
+        Returns:
+            dict com dados anuais e mensais detalhados
+        """
+        pf = self.premissas_fisio
+        
+        # 1. Pega faturamento 2025 e calcula proporção de cada mês
+        fat_2025 = getattr(self, 'faturamento_anterior', [0.0] * 12)
+        fat_2025_total = sum(fat_2025)
+        
+        # Proporção de cada mês no faturamento 2025 (sazonalidade real)
+        prop_mes_2025 = []
+        for i in range(12):
+            if fat_2025_total > 0:
+                prop_mes_2025.append(fat_2025[i] / fat_2025_total)
+            else:
+                prop_mes_2025.append(1/12)  # Distribuição uniforme se não tem dados
+        
+        # 2. Calcula totais anuais ATUAIS dos fisioterapeutas
+        totais_anuais = {
+            "faturamento_fisios": 0,
+            "sessoes": 0,
+            "remuneracao": 0,
+        }
+        
+        # Dados mensais para cada fisio
+        dados_mensais_fisios = {}  # {nome: {mes: dados}}
+        
+        for mes in range(1, 13):
+            folha_mes = self.calcular_folha_fisioterapeutas_mes(mes)
+            
+            for fisio in folha_mes["fisioterapeutas"]:
+                nome = fisio["nome"]
+                if nome not in dados_mensais_fisios:
+                    dados_mensais_fisios[nome] = {
+                        "meses": {},
+                        "total_sessoes": 0,
+                        "total_faturamento": 0,
+                        "total_remuneracao": 0,
+                        "cargo": fisio["cargo"],
+                        "nivel": fisio["nivel"],
+                        "tipo_remuneracao": fisio.get("tipo_remuneracao", "percentual"),
+                        "pct_nivel": fisio.get("pct_nivel", 0.25),
+                    }
+                
+                dados_mensais_fisios[nome]["meses"][mes] = {
+                    "sessoes": fisio["sessoes"],
+                    "faturamento": fisio["faturamento"],
+                    "remuneracao": fisio["remuneracao"],
+                }
+                dados_mensais_fisios[nome]["total_sessoes"] += fisio["sessoes"]
+                dados_mensais_fisios[nome]["total_faturamento"] += fisio["faturamento"]
+                dados_mensais_fisios[nome]["total_remuneracao"] += fisio["remuneracao"]
+            
+            totais_anuais["faturamento_fisios"] += sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+            totais_anuais["sessoes"] += sum(f["sessoes"] for f in folha_mes["fisioterapeutas"])
+            totais_anuais["remuneracao"] += folha_mes["total_fisioterapeutas"]
+        
+        # 3. Define base para cálculo da meta
+        if usar_faturamento_anterior and fat_2025_total > 0:
+            faturamento_base_anual = fat_2025_total
+            fonte_base = "Faturamento 2025 (anual)"
+        else:
+            faturamento_base_anual = totais_anuais["faturamento_fisios"]
+            fonte_base = "Faturamento calculado (anual)"
+        
+        # 4. Calcula metas anuais
+        faturamento_meta_anual = faturamento_base_anual * (1 + pct_crescimento_meta)
+        gap_anual = faturamento_meta_anual - totais_anuais["faturamento_fisios"]
+        
+        # 5. Calcula META MENSAL usando proporção do faturamento 2025
+        # Cada mês terá exatamente +X% sobre o faturamento de 2025 daquele mês
+        metas_mensais_2026 = []
+        for i in range(12):
+            meta_mes = fat_2025[i] * (1 + pct_crescimento_meta)
+            metas_mensais_2026.append(meta_mes)
+        
+        # 6. Valor médio por sessão (anual)
+        valor_medio_sessao = totais_anuais["faturamento_fisios"] / totais_anuais["sessoes"] if totais_anuais["sessoes"] > 0 else 0
+        sessoes_adicionais_total = gap_anual / valor_medio_sessao if valor_medio_sessao > 0 else 0
+        
+        # 7. Distribui gap entre fisios (anual)
+        resultado_fisios = []
+        total_sessoes_meta = 0
+        total_remuneracao_meta = 0
+        
+        for nome, dados in dados_mensais_fisios.items():
+            fisio_obj = self.fisioterapeutas.get(nome)
+            if not fisio_obj or not fisio_obj.ativo:
+                continue
+            
+            # Participação proporcional no faturamento total dos fisios
+            participacao = dados["total_faturamento"] / totais_anuais["faturamento_fisios"] if totais_anuais["faturamento_fisios"] > 0 else 0
+            
+            # Distribui gap anual
+            if modo_distribuicao == "proporcional":
+                gap_fisio = gap_anual * participacao
+            else:  # igual
+                qtd_fisios = len(dados_mensais_fisios)
+                gap_fisio = gap_anual / qtd_fisios if qtd_fisios > 0 else 0
+            
+            # Sessões adicionais anuais
+            valor_sessao_fisio = dados["total_faturamento"] / dados["total_sessoes"] if dados["total_sessoes"] > 0 else valor_medio_sessao
+            sessoes_adicionais = gap_fisio / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
+            
+            # Novos totais anuais
+            sessoes_meta = dados["total_sessoes"] + sessoes_adicionais
+            faturamento_meta = dados["total_faturamento"] + gap_fisio
+            
+            # Calcula nova remuneração
+            tipo_rem = dados["tipo_remuneracao"]
+            pct_nivel = dados["pct_nivel"]
+            
+            if tipo_rem == "valor_fixo":
+                valor_fixo_medio = dados["total_remuneracao"] / dados["total_sessoes"] if dados["total_sessoes"] > 0 else 0
+                remuneracao_meta = sessoes_meta * valor_fixo_medio
+            elif tipo_rem == "misto":
+                remuneracao_meta = faturamento_meta * pct_nivel * 0.75
+                parte_fixa = dados["total_remuneracao"] - (dados["total_faturamento"] * pct_nivel * 0.75)
+                if parte_fixa > 0 and dados["total_sessoes"] > 0:
+                    remuneracao_meta += (sessoes_meta / dados["total_sessoes"]) * parte_fixa
+            else:
+                remuneracao_meta = faturamento_meta * pct_nivel * 0.75
+            
+            # Deltas anuais
+            delta_sessoes = sessoes_adicionais
+            delta_faturamento = gap_fisio
+            delta_remuneracao = remuneracao_meta - dados["total_remuneracao"]
+            
+            # 8. Calcula dados mensais META - CRESCIMENTO UNIFORME sobre 2025
+            # Para cada mês: meta = fat_2025_mes * (1 + pct_meta)
+            # E depois distribui o gap daquele mês específico entre os fisios
+            meses_meta = {}
+            for mes in range(1, 13):
+                dados_mes = dados["meses"].get(mes, {"sessoes": 0, "faturamento": 0, "remuneracao": 0})
+                
+                # Meta deste mês específico: 2025_mes * (1 + pct_meta)
+                fat_2025_mes = fat_2025[mes - 1]
+                meta_fat_mes = fat_2025_mes * (1 + pct_crescimento_meta)
+                
+                # Quanto o fisio produz atualmente neste mês
+                fat_atual_mes = dados_mes["faturamento"]
+                
+                # Participação do fisio no total dos fisios neste mês
+                folha_mes = self.calcular_folha_fisioterapeutas_mes(mes)
+                fat_total_fisios_mes = sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+                participacao_mes = fat_atual_mes / fat_total_fisios_mes if fat_total_fisios_mes > 0 else 0
+                
+                # Gap deste mês que todos os fisios precisam cobrir
+                gap_mes_total = meta_fat_mes - fat_total_fisios_mes
+                
+                # Gap deste fisio neste mês (proporcional à sua participação)
+                if modo_distribuicao == "proporcional":
+                    gap_fisio_mes = gap_mes_total * participacao_mes
+                else:
+                    qtd_fisios = len(dados_mensais_fisios)
+                    gap_fisio_mes = gap_mes_total / qtd_fisios if qtd_fisios > 0 else 0
+                
+                # Meta de faturamento do fisio neste mês
+                fat_meta_fisio_mes = fat_atual_mes + gap_fisio_mes
+                
+                # Sessões adicionais para este mês (calculadas após verificar faturamento)
+                valor_sessao_fisio = fat_atual_mes / dados_mes["sessoes"] if dados_mes["sessoes"] > 0 else valor_medio_sessao
+                
+                # Faturamento meta nunca pode ser menor que atual
+                if fat_meta_fisio_mes < fat_atual_mes:
+                    fat_meta_fisio_mes = fat_atual_mes
+                
+                # Agora calcula gap REAL de faturamento (após proteção)
+                gap_fisio_mes_real = fat_meta_fisio_mes - fat_atual_mes
+                
+                # Sessões adicionais baseadas no gap REAL
+                sessoes_add_mes = gap_fisio_mes_real / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
+                
+                # Sessões meta
+                sessoes_meta_mes = dados_mes["sessoes"] + sessoes_add_mes
+                
+                # IMPORTANTE: Sessões meta nunca pode ser menor que atual
+                if sessoes_meta_mes < dados_mes["sessoes"]:
+                    sessoes_meta_mes = dados_mes["sessoes"]
+                
+                # Remuneração proporcional às NOVAS sessões
+                if tipo_rem == "valor_fixo":
+                    rem_meta_mes = sessoes_meta_mes * (dados_mes["remuneracao"] / dados_mes["sessoes"]) if dados_mes["sessoes"] > 0 else 0
+                else:
+                    rem_meta_mes = fat_meta_fisio_mes * pct_nivel * 0.75
+                
+                # IMPORTANTE: Remuneração nunca pode cair
+                if rem_meta_mes < dados_mes["remuneracao"]:
+                    rem_meta_mes = dados_mes["remuneracao"]
+                
+                meses_meta[mes] = {
+                    "sessoes_atual": dados_mes["sessoes"],
+                    "sessoes_meta": sessoes_meta_mes,
+                    "faturamento_atual": dados_mes["faturamento"],
+                    "faturamento_meta": fat_meta_fisio_mes,
+                    "remuneracao_atual": dados_mes["remuneracao"],
+                    "remuneracao_meta": rem_meta_mes,
+                }
+            
+            # Recalcula totais anuais baseado nos dados mensais
+            sessoes_meta = sum(m["sessoes_meta"] for m in meses_meta.values())
+            faturamento_meta = sum(m["faturamento_meta"] for m in meses_meta.values())
+            remuneracao_meta = sum(m["remuneracao_meta"] for m in meses_meta.values())
+            
+            delta_sessoes = sessoes_meta - dados["total_sessoes"]
+            delta_faturamento = faturamento_meta - dados["total_faturamento"]
+            delta_remuneracao = remuneracao_meta - dados["total_remuneracao"]
+            
+            resultado_fisios.append({
+                "nome": nome,
+                "cargo": dados["cargo"],
+                "nivel": dados["nivel"],
+                "tipo_remuneracao": tipo_rem,
+                # Totais anuais - Atual
+                "sessoes_atual": dados["total_sessoes"],
+                "faturamento_atual": dados["total_faturamento"],
+                "remuneracao_atual": dados["total_remuneracao"],
+                # Totais anuais - Meta (recalculados dos mensais)
+                "sessoes_meta": sessoes_meta,
+                "faturamento_meta": faturamento_meta,
+                "remuneracao_meta": remuneracao_meta,
+                # Deltas anuais
+                "delta_sessoes": delta_sessoes,
+                "delta_faturamento": delta_faturamento,
+                "delta_remuneracao": delta_remuneracao,
+                # Percentuais
+                "pct_crescimento_sessoes": (delta_sessoes / dados["total_sessoes"] * 100) if dados["total_sessoes"] > 0 else 0,
+                "pct_crescimento_faturamento": (delta_faturamento / dados["total_faturamento"] * 100) if dados["total_faturamento"] > 0 else 0,
+                "pct_crescimento_remuneracao": (delta_remuneracao / dados["total_remuneracao"] * 100) if dados["total_remuneracao"] > 0 else 0,
+                # Dados mensais
+                "meses": meses_meta,
+            })
+            
+            total_sessoes_meta += sessoes_meta
+            total_remuneracao_meta += remuneracao_meta
+        
+        # 8.5. Adiciona bônus de gerência à remuneração meta dos gerentes
+        # O bônus = 1% × faturamento_outros_meta × 0.75
+        # pf já foi definido no início como self.premissas_fisio
+        
+        for f in resultado_fisios:
+            if f["cargo"] == "Gerente":
+                # Calcula faturamento meta de outros (não-gerentes) para cada mês
+                for mes in range(1, 13):
+                    fat_outros_meta_mes = sum(
+                        fisio["meses"][mes]["faturamento_meta"] 
+                        for fisio in resultado_fisios 
+                        if fisio["cargo"] != "Gerente"
+                    )
+                    
+                    # Bônus de gerência meta
+                    bonus_gerencia_meta = fat_outros_meta_mes * pf.pct_gerencia_equipe * 0.75
+                    
+                    # Adiciona ao remuneração meta do mês
+                    f["meses"][mes]["remuneracao_meta"] += bonus_gerencia_meta
+                
+                # Recalcula totais anuais do gerente
+                f["remuneracao_meta"] = sum(m["remuneracao_meta"] for m in f["meses"].values())
+                f["delta_remuneracao"] = f["remuneracao_meta"] - f["remuneracao_atual"]
+                f["pct_crescimento_remuneracao"] = (f["delta_remuneracao"] / f["remuneracao_atual"] * 100) if f["remuneracao_atual"] > 0 else 0
+        
+        # 9. Análise de viabilidade
+        viavel = True
+        alertas = []
+        
+        for f in resultado_fisios:
+            if f["pct_crescimento_sessoes"] > 50:
+                viavel = False
+                alertas.append(f"{f['nome']}: +{f['pct_crescimento_sessoes']:.0f}% sessões/ano é muito alto")
+            elif f["pct_crescimento_sessoes"] > 30:
+                alertas.append(f"{f['nome']}: +{f['pct_crescimento_sessoes']:.0f}% sessões/ano pode ser desafiador")
+        
+        if usar_faturamento_anterior:
+            if not hasattr(self, 'faturamento_anterior') or sum(self.faturamento_anterior) == 0:
+                alertas.insert(0, "⚠️ Faturamento 2025 não preenchido! Vá em Premissas → Cenários para preencher.")
+        
+        # 10. Dados mensais consolidados (com meta baseada em 2025)
+        dados_mensais = []
+        for mes in range(1, 13):
+            fat_2025_mes = fat_2025[mes-1]
+            fat_meta_2025 = fat_2025_mes * (1 + pct_crescimento_meta)  # Meta direta sobre 2025
+            
+            sessoes_atual_mes = sum(f["meses"][mes]["sessoes_atual"] for f in resultado_fisios)
+            sessoes_meta_mes = sum(f["meses"][mes]["sessoes_meta"] for f in resultado_fisios)
+            fat_atual_mes = sum(f["meses"][mes]["faturamento_atual"] for f in resultado_fisios)
+            fat_meta_mes = sum(f["meses"][mes]["faturamento_meta"] for f in resultado_fisios)
+            rem_atual_mes = sum(f["meses"][mes]["remuneracao_atual"] for f in resultado_fisios)
+            rem_meta_mes = sum(f["meses"][mes]["remuneracao_meta"] for f in resultado_fisios)
+            
+            # Crescimento % real vs 2025
+            crescimento_vs_2025 = ((fat_meta_mes - fat_2025_mes) / fat_2025_mes * 100) if fat_2025_mes > 0 else 0
+            
+            dados_mensais.append({
+                "mes": mes,
+                "faturamento_2025": fat_2025_mes,
+                "faturamento_meta_2025": fat_meta_2025,  # Meta ideal (+X% exato sobre 2025)
+                "faturamento_2026_atual": fat_atual_mes,
+                "faturamento_2026_meta": fat_meta_mes,
+                "crescimento_vs_2025": crescimento_vs_2025,
+                "sessoes_atual": sessoes_atual_mes,
+                "sessoes_meta": sessoes_meta_mes,
+                "remuneracao_atual": rem_atual_mes,
+                "remuneracao_meta": rem_meta_mes,
+            })
+        
+        # 11. Resumo
+        resumo = {
+            "fonte_base": fonte_base,
+            "modo_calculo": "anual",
+            "faturamento_base_anual": faturamento_base_anual,
+            "faturamento_base": faturamento_base_anual / 12,  # média mensal para compatibilidade
+            "faturamento_atual_fisios": totais_anuais["faturamento_fisios"],
+            "faturamento_meta_anual": faturamento_meta_anual,
+            "faturamento_meta": faturamento_meta_anual / 12,  # média mensal
+            "faturamento_meta_total": sum(f["faturamento_meta"] for f in resultado_fisios),
+            "gap_faturamento_anual": gap_anual,
+            "gap_faturamento": gap_anual / 12,  # média mensal
+            "sessoes_atual": totais_anuais["sessoes"],
+            "sessoes_meta": total_sessoes_meta,
+            "sessoes_adicionais": total_sessoes_meta - totais_anuais["sessoes"],
+            "remuneracao_atual": totais_anuais["remuneracao"],
+            "remuneracao_meta": total_remuneracao_meta,
+            "delta_remuneracao": total_remuneracao_meta - totais_anuais["remuneracao"],
+            "margem_atual": totais_anuais["faturamento_fisios"] - totais_anuais["remuneracao"],
+            "margem_meta": sum(f["faturamento_meta"] for f in resultado_fisios) - total_remuneracao_meta,
+            "qtd_fisios": len(resultado_fisios),
+            "viavel": viavel,
+            "alertas": alertas,
+        }
+        
+        return {
+            "meta_input": {
+                "pct_crescimento": pct_crescimento_meta,
+                "mes_referencia": None,  # Indica cálculo anual
+                "modo_distribuicao": modo_distribuicao,
+                "usar_faturamento_anterior": usar_faturamento_anterior,
+                "modo_calculo": "anual",
+            },
+            "fisioterapeutas": resultado_fisios,
+            "dados_mensais": dados_mensais,
+            "resumo": resumo,
+            "viavel": viavel,
+            "alertas": alertas,
+        }
+    
+    def aplicar_simulacao_metas(self, resultado_simulacao: dict) -> dict:
+        """
+        Aplica os resultados de uma simulação de metas ao motor.
+        
+        LÓGICA:
+        1. Calcula faturamento meta: Fat_2025 × (1 + pct_meta)
+        2. Calcula faturamento atual do motor
+        3. Calcula fator de ajuste
+        4. Ajusta sessoes_mes_base de cada serviço proporcionalmente
+        5. Resultado: Motor produz EXATAMENTE o valor da meta
+        
+        Args:
+            resultado_simulacao: Dict retornado por simular_meta_faturamento()
+        
+        Returns:
+            dict com:
+                - sucesso: bool
+                - alteracoes: Lista de alterações feitas
+                - snapshot_anterior: Dados antes da alteração (para desfazer)
+        """
+        if not resultado_simulacao:
+            return {"sucesso": False, "erro": "Simulação inválida"}
+        
+        pct_meta = resultado_simulacao["meta_input"]["pct_crescimento"]
+        
+        # 1. Calcula faturamento 2025 e meta
+        fat_2025 = sum(getattr(self, 'faturamento_anterior', [0.0] * 12))
+        if fat_2025 == 0:
+            return {"sucesso": False, "erro": "Faturamento 2025 não preenchido"}
+        
+        fat_meta = fat_2025 * (1 + pct_meta)
+        
+        # 2. Calcula faturamento BASE (sem crescimento) para determinar o fator
+        # CORREÇÃO v1.99.7: A meta é relativa a Fat_2025, então:
+        #   Fat_meta = Fat_2025 × (1 + pct_meta)
+        #   Como zeramos crescimento, sessões_novas × valor × 12 = Fat_meta
+        #   Então fator = Fat_meta / Fat_base = (1 + pct_meta) se Fat_base ≈ Fat_2025
+        
+        # Primeiro, tenta calcular Fat_base (sessões atuais × valor × 12, sem crescimento)
+        fat_base = 0
+        
+        for srv_nome, srv in self.servicos.items():
+            sessoes_base_total = 0
+            valor = 0
+            
+            # ===== CALCULA SESSÕES BASE =====
+            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
+            
+            if modo == "servico":
+                sessoes_base_total = srv.sessoes_mes_base
+            else:
+                # Modo profissional - soma sessões de fisioterapeutas
+                for fisio in self.fisioterapeutas.values():
+                    if fisio.ativo:
+                        sessoes_base_total += fisio.sessoes_por_servico.get(srv_nome, 0)
+                
+                # Fallback: proprietarios + profissionais
+                if sessoes_base_total == 0:
+                    for prop in self.proprietarios.values():
+                        if getattr(prop, 'ativo', True):
+                            sessoes_base_total += prop.sessoes_por_servico.get(srv_nome, 0)
+                    for prof in self.profissionais.values():
+                        if getattr(prof, 'ativo', True):
+                            sessoes_base_total += prof.sessoes_por_servico.get(srv_nome, 0)
+            
+            # ===== CALCULA VALOR DO SERVIÇO =====
+            valor = getattr(srv, 'valor_2025', 0) or 0
+            if valor == 0:
+                valor = self.valores_proprietario.get(srv_nome, 0)
+            if valor == 0:
+                valor = self.valores_profissional.get(srv_nome, 0)
+            if valor == 0:
+                valor = getattr(srv, 'valor_2026', 0) or 0
+            
+            fat_base += sessoes_base_total * valor * 12
+        
+        # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
+        if fat_base == 0 or abs(fat_base - fat_2025) / fat_2025 > 0.5:
+            # Fallback: usa fator direto (1 + pct_meta)
+            # Isso garante que o resultado será Fat_2025 × (1 + pct_meta)
+            fator_ajuste = 1 + pct_meta
+            fat_atual = fat_2025
+        else:
+            fat_atual = fat_base
+            fator_ajuste = fat_meta / fat_atual
+        
+        # 3. Guarda snapshot para possível rollback
+        snapshot = {
+            "fisioterapeutas": {},
+            "servicos": {},
+            "proprietarios": {},
+            "profissionais": {}
+        }
+        
+        for nome, fisio in self.fisioterapeutas.items():
+            snapshot["fisioterapeutas"][nome] = {
+                "sessoes_por_servico": dict(fisio.sessoes_por_servico),
+                "pct_crescimento_por_servico": dict(fisio.pct_crescimento_por_servico),
+            }
+        
+        for nome, srv in self.servicos.items():
+            snapshot["servicos"][nome] = {
+                "sessoes_mes_base": srv.sessoes_mes_base,
+                "pct_crescimento": srv.pct_crescimento,
+            }
+        
+        for nome, prop in self.proprietarios.items():
+            snapshot["proprietarios"][nome] = {
+                "sessoes_por_servico": dict(prop.sessoes_por_servico),
+                "pct_crescimento_por_servico": dict(prop.pct_crescimento_por_servico),
+            }
+        
+        for nome, prof in self.profissionais.items():
+            snapshot["profissionais"][nome] = {
+                "sessoes_por_servico": dict(prof.sessoes_por_servico),
+                "pct_crescimento_por_servico": dict(prof.pct_crescimento_por_servico),
+            }
+        
+        # 5. Aplica ajustes
+        alteracoes = []
+        
+        # 5a. Ajusta SERVIÇOS - sessoes_mes_base
+        for nome_srv, srv in self.servicos.items():
+            sessoes_anterior = srv.sessoes_mes_base
+            srv.sessoes_mes_base = round(srv.sessoes_mes_base * fator_ajuste, 1)
+            
+            # Zera crescimento (já está embutido nas sessões)
+            cresc_anterior = srv.pct_crescimento
+            srv.pct_crescimento = 0.0
+            
+            alteracoes.append({
+                "tipo": "SERVIÇO",
+                "nome": nome_srv,
+                "campo": "sessoes_mes_base",
+                "anterior": sessoes_anterior,
+                "novo": srv.sessoes_mes_base,
+            })
+            alteracoes.append({
+                "tipo": "SERVIÇO",
+                "nome": nome_srv,
+                "campo": "pct_crescimento",
+                "anterior": cresc_anterior,
+                "novo": 0.0,
+            })
+        
+        # 5b. Ajusta FISIOTERAPEUTAS - sessoes_por_servico
+        for nome, fisio in self.fisioterapeutas.items():
+            for servico in list(fisio.sessoes_por_servico.keys()):
+                sessoes_anterior = fisio.sessoes_por_servico[servico]
+                fisio.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
+                
+                # Zera crescimento
+                fisio.pct_crescimento_por_servico[servico] = 0.0
+                
+                alteracoes.append({
+                    "tipo": "FISIO",
+                    "nome": nome,
+                    "servico": servico,
+                    "campo": "sessoes",
+                    "anterior": sessoes_anterior,
+                    "novo": fisio.sessoes_por_servico[servico],
+                })
+        
+        # 5c. Ajusta PROPRIETÁRIOS - sessoes_por_servico
+        for nome, prop in self.proprietarios.items():
+            for servico in list(prop.sessoes_por_servico.keys()):
+                sessoes_anterior = prop.sessoes_por_servico[servico]
+                prop.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
+                prop.pct_crescimento_por_servico[servico] = 0.0
+                
+                alteracoes.append({
+                    "tipo": "PROPRIETÁRIO",
+                    "nome": nome,
+                    "servico": servico,
+                    "campo": "sessoes",
+                    "anterior": sessoes_anterior,
+                    "novo": prop.sessoes_por_servico[servico],
+                })
+        
+        # 5d. Ajusta PROFISSIONAIS - sessoes_por_servico
+        for nome, prof in self.profissionais.items():
+            for servico in list(prof.sessoes_por_servico.keys()):
+                sessoes_anterior = prof.sessoes_por_servico[servico]
+                prof.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
+                prof.pct_crescimento_por_servico[servico] = 0.0
+                
+                alteracoes.append({
+                    "tipo": "PROFISSIONAL",
+                    "nome": nome,
+                    "servico": servico,
+                    "campo": "sessoes",
+                    "anterior": sessoes_anterior,
+                    "novo": prof.sessoes_por_servico[servico],
+                })
+        
+        # 6. Sincroniza estruturas
+        self.sincronizar_proprietarios()
+        
+        # 7. Verifica resultado
+        fat_novo = 0
+        for srv in self.servicos:
+            for mes in range(12):
+                fat_novo += self.calcular_receita_servico_mes(srv, mes)
+        
+        return {
+            "sucesso": True,
+            "alteracoes": alteracoes,
+            "snapshot_anterior": snapshot,
+            "qtd_alteracoes": len(alteracoes),
+            "fat_2025": fat_2025,
+            "fat_meta": fat_meta,
+            "fat_anterior": fat_atual,
+            "fat_novo": fat_novo,
+            "fator_ajuste": fator_ajuste,
+        }
+    
+    def desfazer_simulacao_metas(self, snapshot: dict) -> bool:
+        """
+        Desfaz uma simulação de metas aplicada, restaurando estado anterior.
+        
+        Args:
+            snapshot: Dict de snapshot retornado por aplicar_simulacao_metas()
+        
+        Returns:
+            bool: True se desfez com sucesso
+        """
+        if not snapshot:
+            return False
+        
+        try:
+            # Restaura fisioterapeutas
+            fisios_data = snapshot.get("fisioterapeutas", {})
+            for nome, dados in fisios_data.items():
+                if nome in self.fisioterapeutas and isinstance(dados, dict):
+                    fisio = self.fisioterapeutas[nome]
+                    if "sessoes_por_servico" in dados:
+                        fisio.sessoes_por_servico = dict(dados["sessoes_por_servico"])
+                    if "pct_crescimento_por_servico" in dados:
+                        fisio.pct_crescimento_por_servico = dict(dados["pct_crescimento_por_servico"])
+            
+            # Restaura serviços (incluindo sessoes_mes_base)
+            servicos_data = snapshot.get("servicos", {})
+            for nome, dados in servicos_data.items():
+                if nome in self.servicos and isinstance(dados, dict):
+                    if "sessoes_mes_base" in dados:
+                        self.servicos[nome].sessoes_mes_base = dados["sessoes_mes_base"]
+                    if "pct_crescimento" in dados:
+                        self.servicos[nome].pct_crescimento = dados["pct_crescimento"]
+            
+            # Restaura proprietários
+            props_data = snapshot.get("proprietarios", {})
+            for nome, dados in props_data.items():
+                if nome in self.proprietarios and isinstance(dados, dict):
+                    prop = self.proprietarios[nome]
+                    if "sessoes_por_servico" in dados:
+                        prop.sessoes_por_servico = dict(dados["sessoes_por_servico"])
+                    if "pct_crescimento_por_servico" in dados:
+                        prop.pct_crescimento_por_servico = dict(dados["pct_crescimento_por_servico"])
+            
+            # Restaura profissionais
+            profs_data = snapshot.get("profissionais", {})
+            for nome, dados in profs_data.items():
+                if nome in self.profissionais and isinstance(dados, dict):
+                    prof = self.profissionais[nome]
+                    if "sessoes_por_servico" in dados:
+                        prof.sessoes_por_servico = dict(dados["sessoes_por_servico"])
+                    if "pct_crescimento_por_servico" in dados:
+                        prof.pct_crescimento_por_servico = dict(dados["pct_crescimento_por_servico"])
+            
+            self.sincronizar_proprietarios()
+            return True
+        except Exception:
+            return False
     
     # ============================================
     # CÁLCULO SIMPLES NACIONAL / CARNÊ LEÃO
@@ -3154,12 +4036,15 @@ class MotorCalculo:
                     cargo="Proprietário",
                     nivel=0,
                     filial="Copacabana",
-                    sessoes_por_servico=dict(prop.sessoes_por_servico) if prop.sessoes_por_servico else {}
+                    sessoes_por_servico=dict(prop.sessoes_por_servico) if prop.sessoes_por_servico else {},
+                    pct_crescimento_por_servico=dict(prop.pct_crescimento_por_servico) if prop.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões se já existe
+                # Atualiza sessões e crescimento se já existe
                 if prop.sessoes_por_servico:
                     self.fisioterapeutas[nome].sessoes_por_servico.update(prop.sessoes_por_servico)
+                if prop.pct_crescimento_por_servico:
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prop.pct_crescimento_por_servico)
         
         # ========== PROFISSIONAIS ==========
         # 3. Sincroniza de profissionais (Atendimentos) -> fisioterapeutas
@@ -3171,14 +4056,17 @@ class MotorCalculo:
                     cargo="Fisioterapeuta",
                     nivel=2,  # Nível padrão
                     filial="Copacabana",
-                    sessoes_por_servico=dict(prof.sessoes_por_servico) if prof.sessoes_por_servico else {}
+                    sessoes_por_servico=dict(prof.sessoes_por_servico) if prof.sessoes_por_servico else {},
+                    pct_crescimento_por_servico=dict(prof.pct_crescimento_por_servico) if prof.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões se já existe
+                # Atualiza sessões e crescimento se já existe
                 if prof.sessoes_por_servico:
                     self.fisioterapeutas[nome].sessoes_por_servico.update(prof.sessoes_por_servico)
+                if prof.pct_crescimento_por_servico:
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prof.pct_crescimento_por_servico)
         
-        # 4. Sincroniza de fisioterapeutas -> profissionais (sessões)
+        # 4. Sincroniza de fisioterapeutas -> profissionais (sessões e crescimento)
         for nome, fisio in self.fisioterapeutas.items():
             if fisio.cargo in ["Fisioterapeuta", "Gerente"]:
                 if nome not in self.profissionais:
@@ -3186,12 +4074,15 @@ class MotorCalculo:
                     self.profissionais[nome] = Profissional(
                         nome=nome,
                         tipo="profissional",
-                        sessoes_por_servico=dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {}
+                        sessoes_por_servico=dict(fisio.sessoes_por_servico) if fisio.sessoes_por_servico else {},
+                        pct_crescimento_por_servico=dict(fisio.pct_crescimento_por_servico) if fisio.pct_crescimento_por_servico else {}
                     )
                 else:
-                    # Atualiza sessões
+                    # Atualiza sessões e crescimento
                     if fisio.sessoes_por_servico:
                         self.profissionais[nome].sessoes_por_servico.update(fisio.sessoes_por_servico)
+                    if fisio.pct_crescimento_por_servico:
+                        self.profissionais[nome].pct_crescimento_por_servico.update(fisio.pct_crescimento_por_servico)
     
     def get_proprietarios(self) -> list:
         """Retorna lista de nomes dos proprietários cadastrados (de todas as fontes)"""
@@ -3493,7 +4384,7 @@ class MotorCalculo:
             for prop in self.proprietarios.values():
                 sessoes_base = prop.sessoes_por_servico.get(servico, 0)
                 if sessoes_base > 0:
-                    pct_crescimento = prop.pct_crescimento_por_servico.get(servico, 0.105)
+                    pct_crescimento = prop.pct_crescimento_por_servico.get(servico, 0.0)
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
@@ -3502,7 +4393,7 @@ class MotorCalculo:
             for prof in self.profissionais.values():
                 sessoes_base = prof.sessoes_por_servico.get(servico, 0)
                 if sessoes_base > 0:
-                    pct_crescimento = prof.pct_crescimento_por_servico.get(servico, 0.05)
+                    pct_crescimento = prof.pct_crescimento_por_servico.get(servico, 0.0)
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
@@ -3585,7 +4476,7 @@ class MotorCalculo:
             for prop in self.proprietarios.values():
                 sessoes_base = prop.sessoes_por_servico.get(servico, 0)
                 if sessoes_base > 0:
-                    pct_crescimento = prop.pct_crescimento_por_servico.get(servico, 0.105)
+                    pct_crescimento = prop.pct_crescimento_por_servico.get(servico, 0.0)
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
@@ -3594,7 +4485,7 @@ class MotorCalculo:
             for prof in self.profissionais.values():
                 sessoes_base = prof.sessoes_por_servico.get(servico, 0)
                 if sessoes_base > 0:
-                    pct_crescimento = prof.pct_crescimento_por_servico.get(servico, 0.05)
+                    pct_crescimento = prof.pct_crescimento_por_servico.get(servico, 0.0)
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
@@ -4500,6 +5391,7 @@ class MotorCalculo:
             "igpm": self.macro.igpm,
             "tarifas": self.macro.reajuste_tarifas,
             "contratos": self.macro.reajuste_contratos,
+            "dissidio": self.macro.dissidio,
             "nenhum": 0
         }
         
@@ -4547,6 +5439,7 @@ class MotorCalculo:
             "igpm": self.macro.igpm,
             "tarifas": self.macro.reajuste_tarifas,
             "contratos": self.macro.reajuste_contratos,
+            "dissidio": self.macro.dissidio,
             "nenhum": 0
         }
         
@@ -4560,8 +5453,11 @@ class MotorCalculo:
                 
             valores_mes = []
             
-            # Ajuste do cenário para esta despesa
+            # Ajuste do cenário para esta despesa (valor absoluto configurado pelo usuário)
             ajuste_despesa = self.get_ajuste_despesa(cenario_nome, nome) if hasattr(self, 'get_ajuste_despesa') else 0
+            
+            # Fator global do cenário (multiplicador: 1.15 para Pessimista, 0.95 para Otimista)
+            fator_cenario = self.cenario.fator_despesas if hasattr(self, 'cenario') else 1.0
             
             for mes in range(12):
                 # Usa o método calcular_valor_mes que já trata sazonalidade e reajustes
@@ -4571,8 +5467,9 @@ class MotorCalculo:
                     receita_mes=0,  # Não usado para despesas fixas
                     sessoes_mes=0   # Não usado para despesas fixas
                 )
-                # Aplica ajuste do cenário (soma ao valor base)
-                valores_mes.append(valor + ajuste_despesa)
+                # Aplica fator do cenário (multiplicador) + ajuste individual (absoluto)
+                valor_ajustado = (valor * fator_cenario) + ajuste_despesa
+                valores_mes.append(valor_ajustado)
             
             resultado[nome] = valores_mes
         
@@ -4768,6 +5665,9 @@ class MotorCalculo:
         """
         Calcula resultado financeiro mensal consolidando todas as fontes.
         
+        IMPORTANTE: Os rendimentos de aplicações são calculados de forma independente
+        usando a mesma lógica do Fluxo de Caixa, mas sem criar dependência circular.
+        
         Returns:
             Dict com juros_investimentos, juros_financiamentos, juros_cheque,
             rendimentos_aplicacoes, total_despesas, total_receitas, resultado_liquido
@@ -4797,9 +5697,73 @@ class MotorCalculo:
             juros_cheque[mes - 1] = pf.cheque_especial.calcular_juros_mes(mes)
         
         # 4. Rendimentos de Aplicações
-        evolucao_aplicacoes = pf.aplicacoes.calcular_evolucao_anual()
-        for mes_data in evolucao_aplicacoes:
-            rendimentos_aplicacoes[mes_data["mes"] - 1] = mes_data["rendimento"]
+        # Se o FC já foi calculado, usa os valores dele (mais precisos)
+        # Caso contrário, calcula de forma simplificada
+        if hasattr(self, 'fluxo_caixa') and self.fluxo_caixa and "(+) Rendimentos Aplicações" in self.fluxo_caixa:
+            rendimentos_aplicacoes = self.fluxo_caixa.get("(+) Rendimentos Aplicações", [0.0] * 12).copy()
+        else:
+            # Cálculo simplificado: rendimentos baseados no saldo com aportes estimados do excesso de caixa
+            # Essa lógica espelha o que o FC faz, mas sem precisar do FC completo
+            taxa_mensal = pf.aplicacoes.taxa_mensal
+            saldo_aplicacoes = pf.aplicacoes.saldo_inicial
+            saldo_minimo = self.premissas_fc.saldo_minimo
+            caixa_inicial = self.premissas_fc.caixa_inicial
+            
+            # Calcula recebimentos e pagamentos para estimar o fluxo
+            try:
+                recebimentos = self.calcular_recebimentos_totais()
+                total_recebimentos = recebimentos.get("Total Recebimentos", [0.0] * 12)
+            except:
+                total_recebimentos = [0.0] * 12
+            
+            try:
+                # Estima saídas totais (sem dividendos para evitar recursão)
+                saidas_estimadas = [0.0] * 12
+                folha = self.calcular_pagamentos_folha_fc()
+                impostos = self.calcular_pagamentos_impostos_fc()
+                despesas = self.calcular_pagamentos_despesas_fc()
+                financeiros = self.calcular_pagamentos_financeiros_fc()
+                
+                for m in range(12):
+                    for valores in folha.values():
+                        saidas_estimadas[m] += valores[m]
+                    for valores in impostos.values():
+                        saidas_estimadas[m] += valores[m]
+                    for valores in despesas.values():
+                        saidas_estimadas[m] += valores[m]
+                    for valores in financeiros.values():
+                        saidas_estimadas[m] += valores[m]
+            except:
+                saidas_estimadas = [0.0] * 12
+            
+            saldo_caixa = caixa_inicial
+            
+            for mes in range(12):
+                # Rendimento do mês sobre saldo de aplicações do início do mês
+                rendimentos_aplicacoes[mes] = saldo_aplicacoes * taxa_mensal
+                
+                # Estima variação do caixa
+                variacao = total_recebimentos[mes] - saidas_estimadas[mes] + rendimentos_aplicacoes[mes]
+                saldo_projetado = saldo_caixa + variacao
+                
+                # Se saldo_minimo > 0, simula aportes/resgates
+                if saldo_minimo > 0:
+                    excesso = saldo_projetado - saldo_minimo
+                    if excesso > 0:
+                        # Aporte do excesso em aplicações
+                        saldo_aplicacoes += excesso
+                        saldo_caixa = saldo_minimo
+                    elif excesso < 0 and saldo_aplicacoes > 0:
+                        # Resgate de aplicações
+                        resgate = min(abs(excesso), saldo_aplicacoes)
+                        saldo_aplicacoes -= resgate
+                        saldo_caixa = saldo_projetado + resgate
+                    else:
+                        saldo_caixa = saldo_projetado
+                else:
+                    saldo_caixa = saldo_projetado
+                    # Sem política de saldo mínimo, rendimento é só sobre saldo inicial
+                    saldo_aplicacoes = saldo_aplicacoes * (1 + taxa_mensal)
         
         # Totais
         total_despesas = [
@@ -5737,13 +6701,28 @@ class MotorCalculo:
     # ============================================
     
     def aplicar_cenario(self, nome_cenario: str):
-        """Aplica um cenário - guarda o nome para usar nos ajustes"""
-        cenarios_validos = ["Conservador", "Pessimista", "Otimista"]
-        if nome_cenario in cenarios_validos:
-            self.cenario = Cenario(nome=nome_cenario)
+        """Aplica um cenário - usa os fatores pré-definidos da classe Cenario"""
+        cenarios_map = {
+            "Pessimista": Cenario.pessimista,
+            "Conservador": Cenario.base,  # Conservador usa base (sem alteração)
+            "Otimista": Cenario.otimista,
+            "Base": Cenario.base
+        }
+        
+        if nome_cenario in cenarios_map:
+            self.cenario = cenarios_map[nome_cenario]()
         else:
-            # Fallback para cenário Conservador (base)
-            self.cenario = Cenario(nome="Conservador")
+            # Fallback para cenário Base
+            self.cenario = Cenario.base()
+        
+        # CRÍTICO: Limpar caches de cálculo para forçar recálculo com novo fator
+        # Sem isso, DRE/FC usam valores do cenário anterior!
+        self.despesas = {}
+        self.dre = {}
+        self.receita_bruta = {}
+        self.deducoes = {}
+        self.custos = {}
+        self.fluxo_caixa = {}  # CRÍTICO: Sem isso get_resumo_fluxo_caixa retorna valores antigos!
     
     def restaurar_ajustes_padrao(self):
         """Restaura ajustes padrão dos cenários"""
