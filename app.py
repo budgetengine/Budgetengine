@@ -12414,6 +12414,7 @@ def pagina_fc_simulado():
 
 def pagina_premissas():
     """Página de Premissas - Simulador"""
+    import pandas as pd  # Import local para evitar UnboundLocalError em Python 3.13
     render_header()
     
     # DEBUG v1.99.11: Log no INÍCIO da página
@@ -14707,7 +14708,6 @@ def pagina_premissas():
             # DETALHAMENTO PRÓ-LABORE
             st.markdown("##### Projeção Pró-Labore Sócios")
 
-            import pandas as pd  # Import local para evitar UnboundLocalError
             dados_prolabore = []
             for mes_idx, folha in enumerate(projecao):
                 prolabore_info = folha.get("prolabore") if isinstance(folha, dict) else None
