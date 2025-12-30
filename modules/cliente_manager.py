@@ -22,7 +22,7 @@ except ImportError:
     SUPABASE_DISPONIVEL = False
 
 def _conectar_supabase():
-    """Conecta ao Supabase se disponível"""
+    """Conecta ao Supabase se disponível - CRIA NOVA CONEXÃO A CADA CHAMADA"""
     if not SUPABASE_DISPONIVEL:
         print("[SUPABASE] Biblioteca não disponível")
         return None
@@ -30,11 +30,15 @@ def _conectar_supabase():
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         client = create_client(url, key)
-        print(f"[SUPABASE] ✅ Conectado com sucesso!")
+        print(f"[SUPABASE] ✅ Conectado!")
         return client
     except Exception as e:
         print(f"[SUPABASE] ❌ Erro ao conectar: {e}")
         return None
+
+def _obter_supabase():
+    """Obtém conexão Supabase - SEMPRE CRIA NOVA para evitar timeout"""
+    return _conectar_supabase()
 
 # Adiciona diretório pai ao path para imports do motor_calculo
 _parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -328,23 +332,26 @@ class ClienteManager:
     
     def carregar_filial(self, cliente_id: str, filial_id: str) -> Optional[Dict]:
         """Carrega dados de uma filial (Supabase primeiro, depois JSON local)"""
-        
+
         # ============================================
         # TENTA CARREGAR DO SUPABASE PRIMEIRO
         # ============================================
-        if self.supabase:
+        # SEMPRE cria nova conexão para evitar timeout
+        supabase = _obter_supabase()
+
+        if supabase:
             try:
                 # Busca company_id pelo nome do cliente
                 print(f"[LOAD] Buscando company: {cliente_id}")
-                resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
-                
+                resp_company = supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
+
                 if resp_company.data:
                     company_id = resp_company.data[0]["id"]
                     print(f"[LOAD] Company encontrada: {company_id}")
-                    
+
                     # Busca filial
-                    resp_branch = self.supabase.table("branches").select("data").eq("company_id", company_id).eq("slug", filial_id).execute()
-                    
+                    resp_branch = supabase.table("branches").select("data").eq("company_id", company_id).eq("slug", filial_id).execute()
+
                     if resp_branch.data and resp_branch.data[0].get("data"):
                         print(f"[LOAD] ✅ Dados carregados do Supabase para {filial_id}")
                         return resp_branch.data[0]["data"]
@@ -397,32 +404,35 @@ class ClienteManager:
         # ============================================
         # SALVA NO SUPABASE
         # ============================================
-        if self.supabase:
+        # SEMPRE cria nova conexão para evitar timeout
+        supabase = _obter_supabase()
+
+        if supabase:
             try:
                 # Busca company_id pelo nome do cliente
                 print(f"[SAVE] Buscando company: {cliente_id}")
-                resp_company = self.supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
-                
+                resp_company = supabase.table("companies").select("id").ilike("name", f"%{cliente_id.replace('_', ' ')}%").execute()
+
                 if resp_company.data:
                     company_id = resp_company.data[0]["id"]
                     print(f"[SAVE] Company encontrada: {company_id}")
-                    
+
                     # Verifica se filial já existe
-                    resp_branch = self.supabase.table("branches").select("id").eq("company_id", company_id).eq("slug", filial_id).execute()
-                    
+                    resp_branch = supabase.table("branches").select("id").eq("company_id", company_id).eq("slug", filial_id).execute()
+
                     if resp_branch.data:
                         # UPDATE
                         print(f"[SAVE] Atualizando branch: {resp_branch.data[0]['id']}")
-                        self.supabase.table("branches").update({
+                        supabase.table("branches").update({
                             "data": dados,
                             "updated_at": datetime.now().isoformat()
                         }).eq("id", resp_branch.data[0]["id"]).execute()
                         sucesso_supabase = True
-                        print(f"[SAVE] Branch atualizada com sucesso!")
+                        print(f"[SAVE] ✅ Branch atualizada!")
                     else:
                         # INSERT
                         print(f"[SAVE] Inserindo nova branch: {filial_id}")
-                        self.supabase.table("branches").insert({
+                        supabase.table("branches").insert({
                             "company_id": company_id,
                             "name": filial_id.replace("_", " ").title(),
                             "slug": filial_id,
@@ -430,7 +440,7 @@ class ClienteManager:
                             "data": dados
                         }).execute()
                         sucesso_supabase = True
-                        print(f"[SAVE] Branch inserida com sucesso!")
+                        print(f"[SAVE] ✅ Branch inserida!")
                 else:
                     print(f"[SAVE] ⚠️ Cliente '{cliente_id}' NÃO encontrado no Supabase!")
             except Exception as e:
