@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+.Python
+*.so
+
+# Logs
+data/logs/
+*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Backups
+*- old.py
+*- old.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Temp files
+*.tmp
+*.temp

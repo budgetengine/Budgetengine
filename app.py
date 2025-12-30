@@ -2272,8 +2272,7 @@ if 'motor' not in st.session_state:
         
         # Carrega modelo de eficiência salvo
         st.session_state.modelo_eficiencia = resultado.get("modelo_eficiencia", "profissional")
-        # CRÍTICO: Sincroniza a key do selectbox para evitar dessincronização
-        st.session_state['select_modelo_eficiencia'] = st.session_state.modelo_eficiencia
+        # v1.99.28: REMOVIDO - Streamlit não permite setar widget key diretamente
         
         # ===== SINCRONIZAÇÃO: Copia Conservador para cenários vazios =====
         motor_cons = st.session_state.motores_cenarios.get("Conservador")
@@ -3237,8 +3236,7 @@ def render_seletor_cliente_filial():
                         
                         # CRÍTICO: Restaura modelo de eficiência salvo da filial
                         st.session_state.modelo_eficiencia = resultado.get("modelo_eficiencia", "profissional")
-                        # CRÍTICO: Sincroniza a key do selectbox para evitar dessincronização
-                        st.session_state['select_modelo_eficiencia'] = st.session_state.modelo_eficiencia
+                        # v1.99.28: REMOVIDO - Streamlit não permite setar widget key diretamente
                         
                         # Se foi migrado, salva no novo formato
                         if resultado.get("_migrado", False):
@@ -4429,14 +4427,23 @@ def pagina_dashboard():
                 lucro_para_indicadores = ebitda_ano
             else:
                 # MODELO INFRAESTRUTURA: Lucro ABC / horas sala
-                tdabc_resumo = motor.get_resumo_tdabc()
-                lucro_para_indicadores = tdabc_resumo['lucro_total']
-                horas_trabalhadas = 0
-                for mes in range(12):
-                    tdabc_mes = motor.calcular_tdabc_mes(mes)
-                    for servico, rateio in tdabc_mes.rateios.items():
-                        horas_trabalhadas += rateio.horas_sala
-            
+                try:
+                    tdabc_resumo = motor.get_resumo_tdabc()
+                    lucro_para_indicadores = tdabc_resumo.get('lucro_total', 0) or ebitda_ano
+                    horas_trabalhadas = 0
+                    for mes in range(12):
+                        tdabc_mes = motor.calcular_tdabc_mes(mes)
+                        if tdabc_mes and hasattr(tdabc_mes, 'rateios'):
+                            for servico, rateio in tdabc_mes.rateios.items():
+                                horas_trabalhadas += rateio.horas_sala
+                    # Fallback se horas zeradas
+                    if horas_trabalhadas == 0:
+                        horas_trabalhadas = sum(ocupacao_anual.meses[m].demanda_profissional for m in range(12))
+                except Exception as e:
+                    log_info(f"[DASHBOARD] Fallback para EBITDA - erro TDABC: {e}")
+                    lucro_para_indicadores = ebitda_ano
+                    horas_trabalhadas = sum(ocupacao_anual.meses[m].demanda_profissional for m in range(12))
+
             lucro_por_hora = lucro_para_indicadores / horas_trabalhadas if horas_trabalhadas > 0 else 0
             receita_por_hora = receita_periodo / horas_trabalhadas if horas_trabalhadas > 0 else 0
             lucro_por_m2 = lucro_para_indicadores / total_m2 if total_m2 > 0 else 0
@@ -5009,47 +5016,106 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
     margem_cons = (lucro_cons / total_cons * 100) if total_cons > 0 else 0
     margem_otim = (lucro_otim / total_otim * 100) if total_otim > 0 else 0
     
+    # Buscar Resultado Líquido do DRE para cada cenário
+    try:
+        dre_pess = motor_pess.calcular_dre()
+        resultado_liq_pess = sum(dre_pess.get("Resultado Líquido", [0]*12))
+        log_info(f"[CENARIOS-DRE] Pessimista OK: {resultado_liq_pess:,.0f}")
+    except Exception as e:
+        log_info(f"[CENARIOS-DRE] Erro Pessimista: {e}")
+        resultado_liq_pess = lucro_pess
+
+    try:
+        dre_cons = motor_cons.calcular_dre()
+        resultado_liq_cons = sum(dre_cons.get("Resultado Líquido", [0]*12))
+        log_info(f"[CENARIOS-DRE] Conservador OK: {resultado_liq_cons:,.0f}")
+    except Exception as e:
+        log_info(f"[CENARIOS-DRE] Erro Conservador: {e}")
+        resultado_liq_cons = lucro_cons
+
+    try:
+        dre_otim = motor_otim.calcular_dre()
+        resultado_liq_otim = sum(dre_otim.get("Resultado Líquido", [0]*12))
+        log_info(f"[CENARIOS-DRE] Otimista OK: {resultado_liq_otim:,.0f}")
+    except Exception as e:
+        log_info(f"[CENARIOS-DRE] Erro Otimista: {e}")
+        resultado_liq_otim = lucro_otim
+
+    # Margem sobre resultado líquido
+    margem_liq_pess = (resultado_liq_pess / total_pess * 100) if total_pess > 0 else 0
+    margem_liq_cons = (resultado_liq_cons / total_cons * 100) if total_cons > 0 else 0
+    margem_liq_otim = (resultado_liq_otim / total_otim * 100) if total_otim > 0 else 0
+
     # Banner de referência
     if total_2025 > 0:
         st.caption(f"📅 Base 2025: **R$ {total_2025/1000:,.0f}k** | Crescimento calculado vs ano anterior")
-    
+
     col1, col2, col3 = st.columns(3)
-    
+
+    # Variação receita e resultado
+    delta_rec_pess = f"{cresc_pess_2025:+.1f}% vs 2025" if total_2025 > 0 else f"{var_pess:+.1f}% vs Base"
+    delta_rec_cons = f"{cresc_cons_2025:+.1f}% vs 2025" if total_2025 > 0 else "Base"
+    delta_rec_otim = f"{cresc_otim_2025:+.1f}% vs 2025" if total_2025 > 0 else f"{var_otim:+.1f}% vs Base"
+
     # PESSIMISTA
     with col1:
-        with st.container(border=True):
-            if cenario_aprovado == 'Pessimista':
-                st.success("✅ APROVADO")
-            st.subheader("📉 Pessimista")
-            st.caption("Cenário de Crise")
-            
-            delta_label = f"{cresc_pess_2025:+.1f}% vs 2025" if total_2025 > 0 else f"{var_pess:+.1f}% vs Base"
-            st.metric("Receita", f"R$ {total_pess/1000:,.0f}k", delta_label)
-            st.metric("Resultado", f"R$ {lucro_pess/1000:,.0f}k", f"Margem: {margem_pess:.1f}%")
-    
-    # CONSERVADOR
+        borda_aprov = "border:3px solid #28a745;" if cenario_aprovado == 'Pessimista' else ""
+        badge_aprov = '<div style="background:#28a745;color:white;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:bold;margin-bottom:10px;display:inline-block;">✅ APROVADO</div>' if cenario_aprovado == 'Pessimista' else ''
+        html_pess = f'<div style="background:linear-gradient(135deg,#c62828 0%,#b71c1c 100%);padding:20px;border-radius:15px;color:white;text-align:center;{borda_aprov}">'
+        html_pess += f'{badge_aprov}'
+        html_pess += '<div style="font-size:22px;font-weight:bold;margin-bottom:5px;">📉 Pessimista</div>'
+        html_pess += '<div style="font-size:12px;opacity:0.8;margin-bottom:15px;">Cenário de Crise</div>'
+        html_pess += '<div style="background:rgba(255,255,255,0.15);padding:12px;border-radius:10px;margin-bottom:10px;">'
+        html_pess += '<div style="font-size:11px;opacity:0.8;">Receita Bruta</div>'
+        html_pess += f'<div style="font-size:22px;font-weight:bold;">R$ {total_pess/1000:,.0f}k</div>'
+        html_pess += f'<div style="font-size:12px;opacity:0.9;">{delta_rec_pess}</div>'
+        html_pess += '</div>'
+        html_pess += '<div style="background:rgba(255,255,255,0.25);padding:12px;border-radius:10px;">'
+        html_pess += '<div style="font-size:11px;opacity:0.8;">Resultado Líquido</div>'
+        html_pess += f'<div style="font-size:22px;font-weight:bold;">R$ {resultado_liq_pess/1000:,.0f}k</div>'
+        html_pess += f'<div style="font-size:12px;opacity:0.9;">Margem: {margem_liq_pess:.1f}%</div>'
+        html_pess += '</div></div>'
+        st.markdown(html_pess, unsafe_allow_html=True)
+
+    # CONSERVADOR (Amarelo)
     with col2:
-        with st.container(border=True):
-            if cenario_aprovado == 'Conservador':
-                st.success("✅ APROVADO")
-            st.subheader("⚠️ Conservador")
-            st.caption("Base de Referência")
-            
-            delta_label = f"{cresc_cons_2025:+.1f}% vs 2025" if total_2025 > 0 else "Base"
-            st.metric("Receita", f"R$ {total_cons/1000:,.0f}k", delta_label)
-            st.metric("Resultado", f"R$ {lucro_cons/1000:,.0f}k", f"Margem: {margem_cons:.1f}%")
-    
+        borda_aprov = "border:3px solid #28a745;" if cenario_aprovado == 'Conservador' else ""
+        badge_aprov = '<div style="background:#28a745;color:white;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:bold;margin-bottom:10px;display:inline-block;">✅ APROVADO</div>' if cenario_aprovado == 'Conservador' else ''
+        html_cons = f'<div style="background:linear-gradient(135deg,#f39c12 0%,#e67e22 100%);padding:20px;border-radius:15px;color:#212529;text-align:center;{borda_aprov}">'
+        html_cons += f'{badge_aprov}'
+        html_cons += '<div style="font-size:22px;font-weight:bold;margin-bottom:5px;">⚖️ Conservador</div>'
+        html_cons += '<div style="font-size:12px;opacity:0.7;margin-bottom:15px;">Base de Referência</div>'
+        html_cons += '<div style="background:rgba(0,0,0,0.1);padding:12px;border-radius:10px;margin-bottom:10px;">'
+        html_cons += '<div style="font-size:11px;opacity:0.7;">Receita Bruta</div>'
+        html_cons += f'<div style="font-size:22px;font-weight:bold;">R$ {total_cons/1000:,.0f}k</div>'
+        html_cons += f'<div style="font-size:12px;opacity:0.8;">{delta_rec_cons}</div>'
+        html_cons += '</div>'
+        html_cons += '<div style="background:rgba(0,0,0,0.15);padding:12px;border-radius:10px;">'
+        html_cons += '<div style="font-size:11px;opacity:0.7;">Resultado Líquido</div>'
+        html_cons += f'<div style="font-size:22px;font-weight:bold;">R$ {resultado_liq_cons/1000:,.0f}k</div>'
+        html_cons += f'<div style="font-size:12px;opacity:0.8;">Margem: {margem_liq_cons:.1f}%</div>'
+        html_cons += '</div></div>'
+        st.markdown(html_cons, unsafe_allow_html=True)
+
     # OTIMISTA
     with col3:
-        with st.container(border=True):
-            if cenario_aprovado == 'Otimista':
-                st.success("✅ APROVADO")
-            st.subheader("🚀 Otimista")
-            st.caption("Cenário Favorável")
-            
-            delta_label = f"{cresc_otim_2025:+.1f}% vs 2025" if total_2025 > 0 else f"{var_otim:+.1f}% vs Base"
-            st.metric("Receita", f"R$ {total_otim/1000:,.0f}k", delta_label)
-            st.metric("Resultado", f"R$ {lucro_otim/1000:,.0f}k", f"Margem: {margem_otim:.1f}%")
+        borda_aprov = "border:3px solid #ffc107;" if cenario_aprovado == 'Otimista' else ""
+        badge_aprov = '<div style="background:#ffc107;color:#212529;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:bold;margin-bottom:10px;display:inline-block;">✅ APROVADO</div>' if cenario_aprovado == 'Otimista' else ''
+        html_otim = f'<div style="background:linear-gradient(135deg,#2e7d32 0%,#1b5e20 100%);padding:20px;border-radius:15px;color:white;text-align:center;{borda_aprov}">'
+        html_otim += f'{badge_aprov}'
+        html_otim += '<div style="font-size:22px;font-weight:bold;margin-bottom:5px;">🚀 Otimista</div>'
+        html_otim += '<div style="font-size:12px;opacity:0.8;margin-bottom:15px;">Cenário Favorável</div>'
+        html_otim += '<div style="background:rgba(255,255,255,0.15);padding:12px;border-radius:10px;margin-bottom:10px;">'
+        html_otim += '<div style="font-size:11px;opacity:0.8;">Receita Bruta</div>'
+        html_otim += f'<div style="font-size:22px;font-weight:bold;">R$ {total_otim/1000:,.0f}k</div>'
+        html_otim += f'<div style="font-size:12px;opacity:0.9;">{delta_rec_otim}</div>'
+        html_otim += '</div>'
+        html_otim += '<div style="background:rgba(255,255,255,0.25);padding:12px;border-radius:10px;">'
+        html_otim += '<div style="font-size:11px;opacity:0.8;">Resultado Líquido</div>'
+        html_otim += f'<div style="font-size:22px;font-weight:bold;">R$ {resultado_liq_otim/1000:,.0f}k</div>'
+        html_otim += f'<div style="font-size:12px;opacity:0.9;">Margem: {margem_liq_otim:.1f}%</div>'
+        html_otim += '</div></div>'
+        st.markdown(html_otim, unsafe_allow_html=True)
     
     st.write("")
     
@@ -5100,32 +5166,43 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
         # Tabela resumo
         st.markdown("### 📋 Resumo Comparativo")
         
-        import pandas as pd
-        df_resumo = pd.DataFrame({
-            "Métrica": ["Receita Anual", "Despesas Anuais", "Resultado", "Margem %", "Ticket Médio/Mês"],
-            "📉 Pessimista": [
-                f"R$ {total_pess:,.0f}",
-                f"R$ {total_desp_pess:,.0f}",
-                f"R$ {lucro_pess:,.0f}",
-                f"{(lucro_pess/total_pess*100) if total_pess > 0 else 0:.1f}%",
-                f"R$ {total_pess/12:,.0f}"
-            ],
-            "⚠️ Conservador": [
-                f"R$ {total_cons:,.0f}",
-                f"R$ {total_desp_cons:,.0f}",
-                f"R$ {lucro_cons:,.0f}",
-                f"{(lucro_cons/total_cons*100) if total_cons > 0 else 0:.1f}%",
-                f"R$ {total_cons/12:,.0f}"
-            ],
-            "🚀 Otimista": [
-                f"R$ {total_otim:,.0f}",
-                f"R$ {total_desp_otim:,.0f}",
-                f"R$ {lucro_otim:,.0f}",
-                f"{(lucro_otim/total_otim*100) if total_otim > 0 else 0:.1f}%",
-                f"R$ {total_otim/12:,.0f}"
-            ]
-        })
-        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+        # Tabela de Resumo HTML estilizada
+        margem_pess = (lucro_pess/total_pess*100) if total_pess > 0 else 0
+        margem_cons = (lucro_cons/total_cons*100) if total_cons > 0 else 0
+        margem_otim = (lucro_otim/total_otim*100) if total_otim > 0 else 0
+
+        dados_resumo = [
+            ("💵 Receita Anual", f"R$ {total_pess:,.2f}", f"R$ {total_cons:,.2f}", f"R$ {total_otim:,.2f}"),
+            ("📤 Despesas Anuais", f"R$ {total_desp_pess:,.2f}", f"R$ {total_desp_cons:,.2f}", f"R$ {total_desp_otim:,.2f}"),
+            ("📊 Resultado", f"R$ {lucro_pess:,.2f}", f"R$ {lucro_cons:,.2f}", f"R$ {lucro_otim:,.2f}"),
+            ("📈 Margem %", f"{margem_pess:.1f}%", f"{margem_cons:.1f}%", f"{margem_otim:.1f}%"),
+            ("🎫 Ticket Médio/Mês", f"R$ {total_pess/12:,.2f}", f"R$ {total_cons/12:,.2f}", f"R$ {total_otim/12:,.2f}"),
+        ]
+
+        html_resumo = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_resumo += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_resumo += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Métrica</th>'
+        html_resumo += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">📉 Pessimista</th>'
+        html_resumo += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">⚖️ Conservador</th>'
+        html_resumo += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">🚀 Otimista</th>'
+        html_resumo += '</tr></thead><tbody>'
+
+        for i, (metrica, val_pess, val_cons, val_otim) in enumerate(dados_resumo):
+            # Resultado tem cor especial (verde se positivo, vermelho se negativo)
+            if "Resultado" in metrica:
+                bg = "background-color:#e8f5e9;" if lucro_cons >= 0 else "background-color:#ffebee;"
+            else:
+                bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+
+            html_resumo += f'<tr style="{bg}">'
+            html_resumo += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{metrica}</td>'
+            html_resumo += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{val_pess}</td>'
+            html_resumo += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{val_cons}</td>'
+            html_resumo += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{val_otim}</td>'
+            html_resumo += '</tr>'
+
+        html_resumo += '</tbody></table>'
+        st.markdown(html_resumo, unsafe_allow_html=True)
     
     with tab2:
         # Gráfico de evolução mensal
@@ -5165,16 +5242,33 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
         
         # Tabela mês a mês
         with st.expander("📋 Ver tabela mês a mês"):
-            dados_mes = []
+            html_mes = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+            html_mes += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html_mes += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Mês</th>'
+            html_mes += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">📉 Pessimista</th>'
+            html_mes += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">⚖️ Conservador</th>'
+            html_mes += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">🚀 Otimista</th>'
+            html_mes += '</tr></thead><tbody>'
+
             for m in range(12):
-                dados_mes.append({
-                    "Mês": meses_nomes[m],
-                    "📉 Pessimista": f"R$ {receitas_pess[m]:,.0f}",
-                    "⚠️ Conservador": f"R$ {receitas_cons[m]:,.0f}",
-                    "🚀 Otimista": f"R$ {receitas_otim[m]:,.0f}"
-                })
-            df_mes = pd.DataFrame(dados_mes)
-            st.dataframe(df_mes, use_container_width=True, hide_index=True)
+                bg = "background-color:#f8fafc;" if m % 2 == 0 else "background-color:#ffffff;"
+                html_mes += f'<tr style="{bg}">'
+                html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">📅 {meses_nomes[m]}</td>'
+                html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">R$ {receitas_pess[m]:,.2f}</td>'
+                html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">R$ {receitas_cons[m]:,.2f}</td>'
+                html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">R$ {receitas_otim[m]:,.2f}</td>'
+                html_mes += '</tr>'
+
+            # Total
+            html_mes += f'<tr style="background:linear-gradient(135deg,#1a365d 0%,#2c5282 100%);color:white;font-weight:700;">'
+            html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;">TOTAL ANUAL</td>'
+            html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {sum(receitas_pess):,.2f}</td>'
+            html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {sum(receitas_cons):,.2f}</td>'
+            html_mes += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {sum(receitas_otim):,.2f}</td>'
+            html_mes += '</tr>'
+
+            html_mes += '</tbody></table>'
+            st.markdown(html_mes, unsafe_allow_html=True)
     
     with tab3:
         # Nova aba: Detalhes por cenário - mostra diferenças nas premissas
@@ -5183,31 +5277,33 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
         
         # Comparar premissas macro
         st.markdown("#### 📊 Premissas Macroeconômicas")
-        df_macro = pd.DataFrame({
-            "Premissa": ["IPCA", "IGP-M", "Dissídio", "Reaj. Tarifas", "Reaj. Contratos"],
-            "📉 Pessimista": [
-                f"{motor_pess.macro.ipca*100:.1f}%",
-                f"{motor_pess.macro.igpm*100:.1f}%",
-                f"{motor_pess.macro.dissidio*100:.1f}%",
-                f"{motor_pess.macro.reajuste_tarifas*100:.1f}%",
-                f"{motor_pess.macro.reajuste_contratos*100:.1f}%"
-            ],
-            "⚠️ Conservador": [
-                f"{motor_cons.macro.ipca*100:.1f}%",
-                f"{motor_cons.macro.igpm*100:.1f}%",
-                f"{motor_cons.macro.dissidio*100:.1f}%",
-                f"{motor_cons.macro.reajuste_tarifas*100:.1f}%",
-                f"{motor_cons.macro.reajuste_contratos*100:.1f}%"
-            ],
-            "🚀 Otimista": [
-                f"{motor_otim.macro.ipca*100:.1f}%",
-                f"{motor_otim.macro.igpm*100:.1f}%",
-                f"{motor_otim.macro.dissidio*100:.1f}%",
-                f"{motor_otim.macro.reajuste_tarifas*100:.1f}%",
-                f"{motor_otim.macro.reajuste_contratos*100:.1f}%"
-            ]
-        })
-        st.dataframe(df_macro, use_container_width=True, hide_index=True)
+
+        dados_macro = [
+            ("IPCA", f"{motor_pess.macro.ipca*100:.1f}%", f"{motor_cons.macro.ipca*100:.1f}%", f"{motor_otim.macro.ipca*100:.1f}%"),
+            ("IGP-M", f"{motor_pess.macro.igpm*100:.1f}%", f"{motor_cons.macro.igpm*100:.1f}%", f"{motor_otim.macro.igpm*100:.1f}%"),
+            ("Dissídio", f"{motor_pess.macro.dissidio*100:.1f}%", f"{motor_cons.macro.dissidio*100:.1f}%", f"{motor_otim.macro.dissidio*100:.1f}%"),
+            ("Reaj. Tarifas", f"{motor_pess.macro.reajuste_tarifas*100:.1f}%", f"{motor_cons.macro.reajuste_tarifas*100:.1f}%", f"{motor_otim.macro.reajuste_tarifas*100:.1f}%"),
+            ("Reaj. Contratos", f"{motor_pess.macro.reajuste_contratos*100:.1f}%", f"{motor_cons.macro.reajuste_contratos*100:.1f}%", f"{motor_otim.macro.reajuste_contratos*100:.1f}%"),
+        ]
+
+        html_macro = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_macro += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_macro += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Premissa</th>'
+        html_macro += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+        html_macro += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+        html_macro += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+        html_macro += '</tr></thead><tbody>'
+
+        for premissa, val_pess, val_cons, val_otim in dados_macro:
+            html_macro += f'<tr style="background-color:#f8fafc;">'
+            html_macro += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{premissa}</td>'
+            html_macro += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{val_pess}</td>'
+            html_macro += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{val_cons}</td>'
+            html_macro += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{val_otim}</td>'
+            html_macro += '</tr>'
+
+        html_macro += '</tbody></table>'
+        st.markdown(html_macro, unsafe_allow_html=True)
         
         # Comparar serviços (sessões) - calcula total de todas as fontes
         st.markdown("#### 🩺 Sessões por Serviço (Base Mensal)")
@@ -5235,17 +5331,40 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
             sessoes_pess = calcular_sessoes_servico(motor_pess, nome_srv)
             sessoes_cons = calcular_sessoes_servico(motor_cons, nome_srv)
             sessoes_otim = calcular_sessoes_servico(motor_otim, nome_srv)
-            
-            dados_servicos.append({
-                "Serviço": nome_srv,
-                "📉 Pessimista": f"{sessoes_pess:,.0f}",
-                "⚠️ Conservador": f"{sessoes_cons:,.0f}",
-                "🚀 Otimista": f"{sessoes_otim:,.0f}"
-            })
-        
+            dados_servicos.append((nome_srv, sessoes_pess, sessoes_cons, sessoes_otim))
+
         if dados_servicos:
-            df_servicos = pd.DataFrame(dados_servicos)
-            st.dataframe(df_servicos, use_container_width=True, hide_index=True)
+            # Calcular totais de SESSÕES (nomes diferentes para não sobrescrever receitas)
+            total_sess_pess = sum(d[1] for d in dados_servicos)
+            total_sess_cons = sum(d[2] for d in dados_servicos)
+            total_sess_otim = sum(d[3] for d in dados_servicos)
+
+            html_srv = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+            html_srv += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html_srv += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Serviço</th>'
+            html_srv += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+            html_srv += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+            html_srv += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+            html_srv += '</tr></thead><tbody>'
+
+            for nome_srv, s_pess, s_cons, s_otim in dados_servicos:
+                html_srv += f'<tr style="background-color:#f0fdf4;">'
+                html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">🩺 {nome_srv}</td>'
+                html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{s_pess:,.0f}</td>'
+                html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{s_cons:,.0f}</td>'
+                html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{s_otim:,.0f}</td>'
+                html_srv += '</tr>'
+
+            # Total
+            html_srv += f'<tr style="background:linear-gradient(135deg,#1a365d 0%,#2c5282 100%);color:white;font-weight:700;">'
+            html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;">TOTAL</td>'
+            html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">{total_sess_pess:,.0f}</td>'
+            html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">{total_sess_cons:,.0f}</td>'
+            html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">{total_sess_otim:,.0f}</td>'
+            html_srv += '</tr>'
+
+            html_srv += '</tbody></table>'
+            st.markdown(html_srv, unsafe_allow_html=True)
         
         # Comparar TODAS as despesas (FIXAS + VARIÁVEIS)
         st.markdown("#### 💰 Despesas e Custos - Comparativo por Cenário (Média Mensal)")
@@ -5276,9 +5395,9 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
                 dados_despesas.append({
                     "Tipo": "Fixa",
                     "Despesa": nome_desp,
-                    "📉 Pessimista": f"R$ {val_pess:,.0f}",
-                    "⚠️ Conservador": f"R$ {val_cons:,.0f}",
-                    "🚀 Otimista": f"R$ {val_otim:,.0f}"
+                    "📉 Pessimista": f"R$ {val_pess:,.2f}",
+                    "⚠️ Conservador": f"R$ {val_cons:,.2f}",
+                    "🚀 Otimista": f"R$ {val_otim:,.2f}"
                 })
         
         # Subtotal Despesas Fixas
@@ -5289,9 +5408,9 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
         dados_despesas.append({
             "Tipo": "",
             "Despesa": "**Subtotal Fixas**",
-            "📉 Pessimista": f"**R$ {total_fixa_pess:,.0f}**",
-            "⚠️ Conservador": f"**R$ {total_fixa_cons:,.0f}**",
-            "🚀 Otimista": f"**R$ {total_fixa_otim:,.0f}**"
+            "📉 Pessimista": f"**R$ {total_fixa_pess:,.2f}**",
+            "⚠️ Conservador": f"**R$ {total_fixa_cons:,.2f}**",
+            "🚀 Otimista": f"**R$ {total_fixa_otim:,.2f}**"
         })
         
         # ===== CUSTOS VARIÁVEIS =====
@@ -5313,9 +5432,9 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
                 dados_despesas.append({
                     "Tipo": "Variável",
                     "Despesa": nome_custo,
-                    "📉 Pessimista": f"R$ {val_pess:,.0f}",
-                    "⚠️ Conservador": f"R$ {val_cons:,.0f}",
-                    "🚀 Otimista": f"R$ {val_otim:,.0f}"
+                    "📉 Pessimista": f"R$ {val_pess:,.2f}",
+                    "⚠️ Conservador": f"R$ {val_cons:,.2f}",
+                    "🚀 Otimista": f"R$ {val_otim:,.2f}"
                 })
         
         # Subtotal Custos Variáveis
@@ -5327,27 +5446,72 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
             dados_despesas.append({
                 "Tipo": "",
                 "Despesa": "**Subtotal Variáveis**",
-                "📉 Pessimista": f"**R$ {total_var_pess:,.0f}**",
-                "⚠️ Conservador": f"**R$ {total_var_cons:,.0f}**",
-                "🚀 Otimista": f"**R$ {total_var_otim:,.0f}**"
+                "📉 Pessimista": f"**R$ {total_var_pess:,.2f}**",
+                "⚠️ Conservador": f"**R$ {total_var_cons:,.2f}**",
+                "🚀 Otimista": f"**R$ {total_var_otim:,.2f}**"
             })
-        
+
         # TOTAL GERAL
         total_geral_cons = total_fixa_cons + total_var_cons
         total_geral_pess = total_fixa_pess + total_var_pess
         total_geral_otim = total_fixa_otim + total_var_otim
-        
+
         dados_despesas.append({
             "Tipo": "",
             "Despesa": "**TOTAL GERAL**",
-            "📉 Pessimista": f"**R$ {total_geral_pess:,.0f}**",
-            "⚠️ Conservador": f"**R$ {total_geral_cons:,.0f}**",
-            "🚀 Otimista": f"**R$ {total_geral_otim:,.0f}**"
+            "📉 Pessimista": f"**R$ {total_geral_pess:,.2f}**",
+            "⚠️ Conservador": f"**R$ {total_geral_cons:,.2f}**",
+            "🚀 Otimista": f"**R$ {total_geral_otim:,.2f}**"
         })
         
         if dados_despesas:
-            df_despesas = pd.DataFrame(dados_despesas)
-            st.dataframe(df_despesas, use_container_width=True, hide_index=True)
+            # Tabela HTML com estilos inline (melhor compatibilidade com Streamlit)
+            html = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+            html += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html += '<th style="padding:12px 10px;text-align:left;width:80px;font-weight:600;">Tipo</th>'
+            html += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Despesa</th>'
+            html += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+            html += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+            html += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+            html += '</tr></thead><tbody>'
+
+            for item in dados_despesas:
+                tipo = item["Tipo"]
+                despesa = item["Despesa"].replace("**", "")
+                val_pess = item["📉 Pessimista"].replace("**", "")
+                val_cons = item["⚠️ Conservador"].replace("**", "")
+                val_otim = item["🚀 Otimista"].replace("**", "")
+
+                # Determina estilos da linha
+                if "TOTAL GERAL" in despesa:
+                    row_bg = "background:linear-gradient(135deg,#1a365d 0%,#2c5282 100%);color:white;font-weight:700;"
+                    cor_pess = cor_cons = cor_otim = "white"
+                elif "Subtotal" in despesa:
+                    row_bg = "background-color:#e3f2fd;font-weight:600;"
+                    cor_pess, cor_cons, cor_otim = "#c62828", "#1565c0", "#2e7d32"
+                elif tipo == "Fixa":
+                    row_bg = "background-color:#e8f5e9;"
+                    cor_pess, cor_cons, cor_otim = "#c62828", "#1565c0", "#2e7d32"
+                elif tipo == "Variável":
+                    row_bg = "background-color:#fff3e0;"
+                    cor_pess, cor_cons, cor_otim = "#c62828", "#1565c0", "#2e7d32"
+                else:
+                    row_bg = ""
+                    cor_pess, cor_cons, cor_otim = "#c62828", "#1565c0", "#2e7d32"
+
+                # Ícone do tipo
+                tipo_icon = "📌 " if tipo == "Fixa" else "📊 " if tipo == "Variável" else ""
+
+                html += f'<tr style="{row_bg}">'
+                html += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;">{tipo_icon}{tipo}</td>'
+                html += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;">{despesa}</td>'
+                html += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_pess};">{val_pess}</td>'
+                html += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_cons};">{val_cons}</td>'
+                html += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_otim};">{val_otim}</td>'
+                html += '</tr>'
+
+            html += '</tbody></table>'
+            st.markdown(html, unsafe_allow_html=True)
     
     with tab4:
         # Comparativo com ano anterior
@@ -5649,14 +5813,24 @@ def pagina_comparativo_cenarios():
                 custo_para_indicadores = custos_fixos
             else:
                 # MODELO INFRAESTRUTURA: Lucro ABC / horas sala
-                tdabc_resumo = motor.get_resumo_tdabc()
-                lucro_para_indicadores = tdabc_resumo['lucro_total']
-                custo_para_indicadores = tdabc_resumo['overhead_total']
-                horas_para_indicadores = 0
-                for mes in range(12):
-                    tdabc_mes = motor.calcular_tdabc_mes(mes)
-                    for servico, rateio in tdabc_mes.rateios.items():
-                        horas_para_indicadores += rateio.horas_sala
+                try:
+                    tdabc_resumo = motor.get_resumo_tdabc()
+                    lucro_para_indicadores = tdabc_resumo.get('lucro_total', 0) or ebitda
+                    custo_para_indicadores = tdabc_resumo.get('overhead_total', 0) or custos_fixos
+                    horas_para_indicadores = 0
+                    for mes in range(12):
+                        tdabc_mes = motor.calcular_tdabc_mes(mes)
+                        if tdabc_mes and hasattr(tdabc_mes, 'rateios'):
+                            for servico, rateio in tdabc_mes.rateios.items():
+                                horas_para_indicadores += rateio.horas_sala
+                    # Fallback se horas zeradas
+                    if horas_para_indicadores == 0:
+                        horas_para_indicadores = horas_trabalhadas
+                except Exception as e:
+                    log_info(f"[COMPARATIVO] Fallback para EBITDA - erro TDABC: {e}")
+                    lucro_para_indicadores = ebitda
+                    custo_para_indicadores = custos_fixos
+                    horas_para_indicadores = horas_trabalhadas
             # ==========================================
             
             # Por unidade
@@ -5808,18 +5982,175 @@ def pagina_comparativo_cenarios():
         
         st.markdown("---")
         
-        # Tabela Resumo
+        # Tabela Resumo - HTML estilizada
         st.markdown("#### 📋 Indicadores Principais")
-        import pandas as pd
-        
-        df_resumo = pd.DataFrame({
-            'Indicador': ['💰 Receita Bruta', '💵 Receita Líquida', '📊 EBITDA', '📈 Margem EBITDA', '🏥 Sessões', '💵 Lucro/Sessão'],
-            '📉 Pessimista': [f"R$ {m_pess['receita_bruta']:,.0f}", f"R$ {m_pess['receita_liquida']:,.0f}", f"R$ {m_pess['ebitda']:,.0f}", f"{m_pess['margem_ebitda']:.1f}%", f"{m_pess['sessoes']:,.0f}", f"R$ {m_pess['lucro_sessao']:.2f}"],
-            '⚖️ Conservador': [f"R$ {m_cons['receita_bruta']:,.0f}", f"R$ {m_cons['receita_liquida']:,.0f}", f"R$ {m_cons['ebitda']:,.0f}", f"{m_cons['margem_ebitda']:.1f}%", f"{m_cons['sessoes']:,.0f}", f"R$ {m_cons['lucro_sessao']:.2f}"],
-            '📈 Otimista': [f"R$ {m_otim['receita_bruta']:,.0f}", f"R$ {m_otim['receita_liquida']:,.0f}", f"R$ {m_otim['ebitda']:,.0f}", f"{m_otim['margem_ebitda']:.1f}%", f"{m_otim['sessoes']:,.0f}", f"R$ {m_otim['lucro_sessao']:.2f}"]
-        })
-        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
-    
+
+        indicadores_resumo = [
+            ("💰 Receita Bruta", f"R$ {m_pess['receita_bruta']:,.2f}", f"R$ {m_cons['receita_bruta']:,.2f}", f"R$ {m_otim['receita_bruta']:,.2f}"),
+            ("💵 Receita Líquida", f"R$ {m_pess['receita_liquida']:,.2f}", f"R$ {m_cons['receita_liquida']:,.2f}", f"R$ {m_otim['receita_liquida']:,.2f}"),
+            ("📊 EBITDA", f"R$ {m_pess['ebitda']:,.2f}", f"R$ {m_cons['ebitda']:,.2f}", f"R$ {m_otim['ebitda']:,.2f}"),
+            ("📈 Margem EBITDA", f"{m_pess['margem_ebitda']:.1f}%", f"{m_cons['margem_ebitda']:.1f}%", f"{m_otim['margem_ebitda']:.1f}%"),
+            ("🏥 Sessões", f"{m_pess['sessoes']:,.0f}", f"{m_cons['sessoes']:,.0f}", f"{m_otim['sessoes']:,.0f}"),
+            ("💵 Lucro/Sessão", f"R$ {m_pess['lucro_sessao']:.2f}", f"R$ {m_cons['lucro_sessao']:.2f}", f"R$ {m_otim['lucro_sessao']:.2f}"),
+        ]
+
+        html_ind = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_ind += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_ind += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Indicador</th>'
+        html_ind += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">📉 Pessimista</th>'
+        html_ind += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">⚖️ Conservador</th>'
+        html_ind += '<th style="padding:12px 10px;text-align:right;width:160px;font-weight:600;">🚀 Otimista</th>'
+        html_ind += '</tr></thead><tbody>'
+
+        for i, (ind, v_pess, v_cons, v_otim) in enumerate(indicadores_resumo):
+            bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+            html_ind += f'<tr style="{bg}">'
+            html_ind += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{ind}</td>'
+            html_ind += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{v_pess}</td>'
+            html_ind += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{v_cons}</td>'
+            html_ind += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{v_otim}</td>'
+            html_ind += '</tr>'
+
+        html_ind += '</tbody></table>'
+        st.markdown(html_ind, unsafe_allow_html=True)
+
+        st.markdown("---")
+
+        # ========================================================================
+        # RESULTADO LÍQUIDO MÊS A MÊS
+        # ========================================================================
+        st.markdown("#### 💵 Resultado Líquido - Evolução Mensal")
+        st.caption("Comparativo mês a mês dos três cenários")
+
+        with st.expander("📖 O que é Resultado Líquido?", expanded=False):
+            st.markdown("""
+            O **Resultado Líquido** é o que sobra no final das contas - é o lucro real do negócio após pagar TUDO.
+
+            **Analogia do Salário:** 💰
+            - **Receita Bruta** = Seu salário bruto no holerite
+            - **Deduções** = INSS, IRRF, vale transporte
+            - **Despesas** = Aluguel, alimentação, contas
+            - **Resultado Líquido** = O que sobra na conta no fim do mês
+
+            **Por que acompanhar mês a mês?** 📅
+            - Identificar meses críticos (férias, 13º, baixa temporada)
+            - Planejar reservas para meses ruins
+            - Ver o impacto da sazonalidade no lucro
+
+            **Cores na tabela:**
+            - 🔴 **Vermelho** = Pessimista (pior cenário)
+            - 🟡 **Amarelo** = Conservador (cenário base)
+            - 🟢 **Verde** = Otimista (melhor cenário)
+            """)
+
+        # Obter DRE de cada cenário
+        try:
+            dre_pess_comp = motor_pess.calcular_dre()
+            res_liq_pess_mensal = dre_pess_comp.get("Resultado Líquido", [0]*12)
+        except:
+            res_liq_pess_mensal = [0]*12
+
+        try:
+            dre_cons_comp = motor_cons.calcular_dre()
+            res_liq_cons_mensal = dre_cons_comp.get("Resultado Líquido", [0]*12)
+        except:
+            res_liq_cons_mensal = [0]*12
+
+        try:
+            dre_otim_comp = motor_otim.calcular_dre()
+            res_liq_otim_mensal = dre_otim_comp.get("Resultado Líquido", [0]*12)
+        except:
+            res_liq_otim_mensal = [0]*12
+
+        # Tabela HTML estilizada
+        html_res = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_res += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_res += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Mês</th>'
+        html_res += '<th style="padding:12px 10px;text-align:right;font-weight:600;">📉 Pessimista</th>'
+        html_res += '<th style="padding:12px 10px;text-align:right;font-weight:600;">⚖️ Conservador</th>'
+        html_res += '<th style="padding:12px 10px;text-align:right;font-weight:600;">🚀 Otimista</th>'
+        html_res += '<th style="padding:12px 10px;text-align:right;font-weight:600;">Gap (O-P)</th>'
+        html_res += '</tr></thead><tbody>'
+
+        total_pess_res = 0
+        total_cons_res = 0
+        total_otim_res = 0
+
+        for i, mes in enumerate(meses_nomes):
+            v_pess = res_liq_pess_mensal[i] if i < len(res_liq_pess_mensal) else 0
+            v_cons = res_liq_cons_mensal[i] if i < len(res_liq_cons_mensal) else 0
+            v_otim = res_liq_otim_mensal[i] if i < len(res_liq_otim_mensal) else 0
+            gap = v_otim - v_pess
+
+            total_pess_res += v_pess
+            total_cons_res += v_cons
+            total_otim_res += v_otim
+
+            bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+            html_res += f'<tr style="{bg}">'
+            html_res += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{mes}</td>'
+            html_res += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">R$ {v_pess:,.2f}</td>'
+            html_res += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#e67e22;">R$ {v_cons:,.2f}</td>'
+            html_res += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">R$ {v_otim:,.2f}</td>'
+            html_res += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#666;">R$ {gap:,.2f}</td>'
+            html_res += '</tr>'
+
+        # Linha de total
+        gap_total = total_otim_res - total_pess_res
+        html_res += '<tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;font-weight:bold;">'
+        html_res += '<td style="padding:12px 10px;">TOTAL ANUAL</td>'
+        html_res += f'<td style="padding:12px 10px;text-align:right;font-family:Consolas,monospace;">R$ {total_pess_res:,.2f}</td>'
+        html_res += f'<td style="padding:12px 10px;text-align:right;font-family:Consolas,monospace;">R$ {total_cons_res:,.2f}</td>'
+        html_res += f'<td style="padding:12px 10px;text-align:right;font-family:Consolas,monospace;">R$ {total_otim_res:,.2f}</td>'
+        html_res += f'<td style="padding:12px 10px;text-align:right;font-family:Consolas,monospace;">R$ {gap_total:,.2f}</td>'
+        html_res += '</tr></tbody></table>'
+
+        st.markdown(html_res, unsafe_allow_html=True)
+
+        # Gráfico de evolução
+        st.markdown("#### 📈 Evolução do Resultado Líquido")
+
+        import plotly.graph_objects as go
+        fig_res = go.Figure()
+        fig_res.add_trace(go.Scatter(
+            x=meses_nomes, y=res_liq_pess_mensal, name='📉 Pessimista',
+            line=dict(color='#c62828', width=3), mode='lines+markers',
+            hovertemplate='%{x}: R$ %{y:,.0f}<extra>Pessimista</extra>'
+        ))
+        fig_res.add_trace(go.Scatter(
+            x=meses_nomes, y=res_liq_cons_mensal, name='⚖️ Conservador',
+            line=dict(color='#f39c12', width=3), mode='lines+markers',
+            hovertemplate='%{x}: R$ %{y:,.0f}<extra>Conservador</extra>'
+        ))
+        fig_res.add_trace(go.Scatter(
+            x=meses_nomes, y=res_liq_otim_mensal, name='🚀 Otimista',
+            line=dict(color='#27ae60', width=3), mode='lines+markers',
+            hovertemplate='%{x}: R$ %{y:,.0f}<extra>Otimista</extra>'
+        ))
+
+        fig_res.update_layout(
+            height=400,
+            yaxis_title="Resultado Líquido (R$)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+            hovermode='x unified',
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        fig_res.update_xaxes(showgrid=True, gridwidth=1, gridcolor='#e0e0e0')
+        fig_res.update_yaxes(showgrid=True, gridwidth=1, gridcolor='#e0e0e0')
+
+        st.plotly_chart(fig_res, use_container_width=True)
+
+        # Insight automático
+        media_cons = total_cons_res / 12
+        meses_abaixo = [meses_nomes[i] for i, v in enumerate(res_liq_cons_mensal) if v < media_cons * 0.8]
+        meses_acima = [meses_nomes[i] for i, v in enumerate(res_liq_cons_mensal) if v > media_cons * 1.2]
+
+        if meses_abaixo:
+            st.warning(f"⚠️ **Atenção:** Os meses {', '.join(meses_abaixo)} têm resultado abaixo da média. Considere criar reservas para esses períodos.")
+        if meses_acima:
+            st.success(f"🌟 **Oportunidade:** Os meses {', '.join(meses_acima)} são os mais rentáveis. Aproveite para reinvestir ou guardar reservas.")
+
     # ========================================================================
     # TAB 2: RECEITAS DETALHADAS
     # ========================================================================
@@ -6088,24 +6419,50 @@ def pagina_comparativo_cenarios():
                     })
             
             if dados_tabela:
-                df_equipe = pd.DataFrame(dados_tabela)
-                st.dataframe(df_equipe, use_container_width=True, hide_index=True)
-                
-                # Totais
-                total_pess = sum(d["Remuneração"] for d in dados_pess)
-                total_cons = sum(d["Remuneração"] for d in dados_cons)
-                total_otim = sum(d["Remuneração"] for d in dados_otim)
+                # Tabela HTML estilizada
+                html_eq = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+                html_eq += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+                html_eq += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Fisioterapeuta</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:center;width:60px;font-weight:600;">Nível</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:right;width:130px;font-weight:600;">📉 Pessimista</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:right;width:130px;font-weight:600;">⚖️ Conservador</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:right;width:130px;font-weight:600;">🚀 Otimista</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:right;width:80px;font-weight:600;">Δ Pess.</th>'
+                html_eq += '<th style="padding:12px 10px;text-align:right;width:80px;font-weight:600;">Δ Otim.</th>'
+                html_eq += '</tr></thead><tbody>'
+
+                for i, d in enumerate(dados_tabela):
+                    bg = "background-color:#f0fdf4;" if "👑" in d["Fisioterapeuta"] else ("background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;")
+                    html_eq += f'<tr style="{bg}">'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{d["Fisioterapeuta"]}</td>'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center;">{d["Nível"]}</td>'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{d["📉 Pessimista"]}</td>'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{d["⚖️ Conservador"]}</td>'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{d["📈 Otimista"]}</td>'
+                    cor_dp = "#c62828" if "-" in d["Δ Pess."] else "#2e7d32"
+                    cor_do = "#2e7d32" if "+" in d["Δ Otim."] else "#c62828"
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_dp};">{d["Δ Pess."]}</td>'
+                    html_eq += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_do};">{d["Δ Otim."]}</td>'
+                    html_eq += '</tr>'
+
+                html_eq += '</tbody></table>'
+                st.markdown(html_eq, unsafe_allow_html=True)
+
+                # Totais (usar nomes diferentes para não conflitar)
+                total_rem_pess = sum(d["Remuneração"] for d in dados_pess)
+                total_rem_cons = sum(d["Remuneração"] for d in dados_cons)
+                total_rem_otim = sum(d["Remuneração"] for d in dados_otim)
                 
                 st.markdown("---")
                 col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("📉 Total Pessimista", f"R$ {total_pess:,.0f}", 
-                              f"{((total_pess/total_cons)-1)*100:+.1f}%" if total_cons > 0 else "")
+                    st.metric("📉 Total Pessimista", f"R$ {total_rem_pess:,.0f}",
+                              f"{((total_rem_pess/total_rem_cons)-1)*100:+.1f}%" if total_rem_cons > 0 else "")
                 with col2:
-                    st.metric("⚖️ Total Conservador", f"R$ {total_cons:,.0f}")
+                    st.metric("⚖️ Total Conservador", f"R$ {total_rem_cons:,.0f}")
                 with col3:
-                    st.metric("📈 Total Otimista", f"R$ {total_otim:,.0f}",
-                              f"{((total_otim/total_cons)-1)*100:+.1f}%" if total_cons > 0 else "")
+                    st.metric("📈 Total Otimista", f"R$ {total_rem_otim:,.0f}",
+                              f"{((total_rem_otim/total_rem_cons)-1)*100:+.1f}%" if total_rem_cons > 0 else "")
                 
                 # Gráfico de barras agrupadas
                 st.markdown("---")
@@ -6134,7 +6491,7 @@ def pagina_comparativo_cenarios():
                 st.plotly_chart(fig_equipe, use_container_width=True)
                 
                 # Insight
-                diff_rem = total_otim - total_pess
+                diff_rem = total_rem_otim - total_rem_pess
                 st.info(f"💡 **Insight:** A diferença de remuneração entre cenários é de **R$ {diff_rem:,.0f}/ano** para a equipe toda. Isso representa o impacto direto na motivação e retenção de talentos.")
     
     # ========================================================================
@@ -6234,11 +6591,39 @@ def pagina_comparativo_cenarios():
             
             # Ordena por faturamento conservador
             dados_tabela_srv.sort(key=lambda x: float(x["⚖️ Cons. (R$)"].replace("R$ ", "").replace(",", "")), reverse=True)
-            
+
             if dados_tabela_srv:
-                df_servicos = pd.DataFrame(dados_tabela_srv)
-                st.dataframe(df_servicos, use_container_width=True, hide_index=True)
-                
+                # Tabela HTML estilizada
+                html_srv = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+                html_srv += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+                html_srv += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Serviço</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:center;width:70px;font-weight:600;">Mix %</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:120px;font-weight:600;">📉 Pess.</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:120px;font-weight:600;">⚖️ Cons.</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:120px;font-weight:600;">🚀 Otim.</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:90px;font-weight:600;">Sessões</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:70px;font-weight:600;">Δ Pess.</th>'
+                html_srv += '<th style="padding:12px 10px;text-align:right;width:70px;font-weight:600;">Δ Otim.</th>'
+                html_srv += '</tr></thead><tbody>'
+
+                for i, d in enumerate(dados_tabela_srv):
+                    bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+                    html_srv += f'<tr style="{bg}">'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">🩺 {d["Serviço"]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center;">{d["Mix %"]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{d["📉 Pess. (R$)"]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{d["⚖️ Cons. (R$)"]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{d["📈 Otim. (R$)"]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">{d["Sessões Cons."]}</td>'
+                    cor_dp = "#c62828" if "-" in d["Δ Pess."] else "#2e7d32"
+                    cor_do = "#2e7d32" if "+" in d["Δ Otim."] else "#c62828"
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_dp};">{d["Δ Pess."]}</td>'
+                    html_srv += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_do};">{d["Δ Otim."]}</td>'
+                    html_srv += '</tr>'
+
+                html_srv += '</tbody></table>'
+                st.markdown(html_srv, unsafe_allow_html=True)
+
                 # Totais
                 total_fat_pess = sum(d["Faturamento"] for d in dados_srv_pess)
                 total_fat_cons = sum(d["Faturamento"] for d in dados_srv_cons)
@@ -6335,20 +6720,69 @@ def pagina_comparativo_cenarios():
                     
                     return df
                 
+                # Função para gerar HTML da tabela mensal
+                def gerar_html_tabela_mensal(motor, servicos, cor_header, cor_valores):
+                    dados = []
+                    for srv_nome in servicos:
+                        linha = {"Serviço": srv_nome, "valores": {}}
+                        total_srv = 0
+                        for mes in range(12):
+                            try:
+                                fat_mes = motor.calcular_receita_servico_mes(srv_nome, mes)
+                                linha["valores"][mes] = fat_mes
+                                total_srv += fat_mes
+                            except:
+                                linha["valores"][mes] = 0
+                        linha["Total"] = total_srv
+                        dados.append(linha)
+
+                    dados.sort(key=lambda x: x["Total"], reverse=True)
+
+                    # Calcular totais por mês
+                    totais_mes = {m: sum(d["valores"].get(m, 0) for d in dados) for m in range(12)}
+                    total_geral = sum(d["Total"] for d in dados)
+
+                    html = f'<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;">'
+                    html += f'<thead><tr style="background:linear-gradient(135deg,{cor_header} 0%,#2c5282 100%);color:white;">'
+                    html += '<th style="padding:10px 6px;text-align:left;font-weight:600;position:sticky;left:0;background:inherit;">Serviço</th>'
+                    for mes in meses_nomes:
+                        html += f'<th style="padding:10px 6px;text-align:right;font-weight:600;">{mes}</th>'
+                    html += '<th style="padding:10px 6px;text-align:right;font-weight:600;background:#1a365d;">Total</th>'
+                    html += '</tr></thead><tbody>'
+
+                    for i, d in enumerate(dados):
+                        bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+                        html += f'<tr style="{bg}">'
+                        html += f'<td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-weight:500;">{d["Serviço"]}</td>'
+                        for m in range(12):
+                            val = d["valores"].get(m, 0)
+                            html += f'<td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_valores};">R$ {val:,.0f}</td>'
+                        html += f'<td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;font-weight:600;color:{cor_valores};background-color:#f0f4f8;">R$ {d["Total"]:,.0f}</td>'
+                        html += '</tr>'
+
+                    # Linha de total
+                    html += '<tr style="background:linear-gradient(135deg,#1a365d 0%,#2c5282 100%);color:white;font-weight:600;">'
+                    html += '<td style="padding:10px 6px;">TOTAL</td>'
+                    for m in range(12):
+                        html += f'<td style="padding:10px 6px;text-align:right;font-family:Consolas,monospace;">R$ {totais_mes[m]:,.0f}</td>'
+                    html += f'<td style="padding:10px 6px;text-align:right;font-family:Consolas,monospace;background:#0d2137;">R$ {total_geral:,.0f}</td>'
+                    html += '</tr></tbody></table>'
+                    return html
+
                 # Tabs para os 3 cenários
                 tab_fat_pess, tab_fat_cons, tab_fat_otim = st.tabs(["📉 Pessimista", "⚖️ Conservador", "📈 Otimista"])
-                
+
                 with tab_fat_pess:
-                    df_pess = montar_tabela_mensal(motor_pess, servicos_unicos)
-                    st.dataframe(df_pess, use_container_width=True, hide_index=True)
-                
+                    html_pess = gerar_html_tabela_mensal(motor_pess, servicos_unicos, "#c62828", "#c62828")
+                    st.markdown(html_pess, unsafe_allow_html=True)
+
                 with tab_fat_cons:
-                    df_cons = montar_tabela_mensal(motor_cons, servicos_unicos)
-                    st.dataframe(df_cons, use_container_width=True, hide_index=True)
-                
+                    html_cons = gerar_html_tabela_mensal(motor_cons, servicos_unicos, "#1565c0", "#1565c0")
+                    st.markdown(html_cons, unsafe_allow_html=True)
+
                 with tab_fat_otim:
-                    df_otim = montar_tabela_mensal(motor_otim, servicos_unicos)
-                    st.dataframe(df_otim, use_container_width=True, hide_index=True)
+                    html_otim = gerar_html_tabela_mensal(motor_otim, servicos_unicos, "#2e7d32", "#2e7d32")
+                    st.markdown(html_otim, unsafe_allow_html=True)
                 
                 # Gráfico de evolução mensal (3 cenários)
                 st.markdown("#### 📈 Evolução Mensal do Faturamento Total")
@@ -6423,9 +6857,37 @@ def pagina_comparativo_cenarios():
                         })
                 
                 dados_volatilidade.sort(key=lambda x: x["Volatilidade"], reverse=True)
-                df_volatilidade = pd.DataFrame(dados_volatilidade)
-                df_volatilidade["Volatilidade"] = df_volatilidade["Volatilidade"].apply(lambda x: f"{x:.1f}%")
-                st.dataframe(df_volatilidade, use_container_width=True, hide_index=True)
+
+                # Tabela HTML estilizada
+                html_vol = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+                html_vol += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+                html_vol += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Serviço</th>'
+                html_vol += '<th style="padding:12px 10px;text-align:right;width:120px;font-weight:600;">Volatilidade</th>'
+                html_vol += '<th style="padding:12px 10px;text-align:center;width:200px;font-weight:600;">Range (Pess. ~ Otim.)</th>'
+                html_vol += '<th style="padding:12px 10px;text-align:center;width:100px;font-weight:600;">Risco</th>'
+                html_vol += '</tr></thead><tbody>'
+
+                for i, d in enumerate(dados_volatilidade):
+                    vol = d["Volatilidade"]
+                    if vol > 30:
+                        bg = "background-color:#ffebee;"
+                        cor_vol = "#c62828"
+                    elif vol > 15:
+                        bg = "background-color:#fff3e0;"
+                        cor_vol = "#ef6c00"
+                    else:
+                        bg = "background-color:#e8f5e9;"
+                        cor_vol = "#2e7d32"
+
+                    html_vol += f'<tr style="{bg}">'
+                    html_vol += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">🩺 {d["Serviço"]}</td>'
+                    html_vol += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{cor_vol};">{vol:.1f}%</td>'
+                    html_vol += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center;font-family:Consolas,monospace;">{d["Range"]}</td>'
+                    html_vol += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:center;">{d["Risco"]}</td>'
+                    html_vol += '</tr>'
+
+                html_vol += '</tbody></table>'
+                st.markdown(html_vol, unsafe_allow_html=True)
     
     # ========================================================================
     # TAB 5: OCUPAÇÃO (renumerado)
@@ -6672,13 +7134,26 @@ def pagina_comparativo_cenarios():
         hora_label = "Hora Trabalhada" if modelo_ef == 'profissional' else "Hora de Sala"
         st.markdown(f"#### ⏱️ Por {hora_label}")
         
-        df_hora = pd.DataFrame({
-            'Indicador': ['💵 Receita/Hora', '💰 Lucro/Hora', '💸 Custo Fixo/Hora'],
-            '📉 Pessimista': [f"R$ {m_pess['receita_hora']:.2f}", f"R$ {m_pess['lucro_hora']:.2f}", f"R$ {m_pess['custo_hora']:.2f}"],
-            '⚖️ Conservador': [f"R$ {m_cons['receita_hora']:.2f}", f"R$ {m_cons['lucro_hora']:.2f}", f"R$ {m_cons['custo_hora']:.2f}"],
-            '📈 Otimista': [f"R$ {m_otim['receita_hora']:.2f}", f"R$ {m_otim['lucro_hora']:.2f}", f"R$ {m_otim['custo_hora']:.2f}"]
-        })
-        st.dataframe(df_hora, use_container_width=True, hide_index=True)
+        dados_hora = [
+            ("💵 Receita/Hora", f"R$ {m_pess['receita_hora']:.2f}", f"R$ {m_cons['receita_hora']:.2f}", f"R$ {m_otim['receita_hora']:.2f}"),
+            ("💰 Lucro/Hora", f"R$ {m_pess['lucro_hora']:.2f}", f"R$ {m_cons['lucro_hora']:.2f}", f"R$ {m_otim['lucro_hora']:.2f}"),
+            ("💸 Custo Fixo/Hora", f"R$ {m_pess['custo_hora']:.2f}", f"R$ {m_cons['custo_hora']:.2f}", f"R$ {m_otim['custo_hora']:.2f}"),
+        ]
+        html_hora = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_hora += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_hora += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Indicador</th>'
+        html_hora += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+        html_hora += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+        html_hora += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+        html_hora += '</tr></thead><tbody>'
+        for i, (ind, v_p, v_c, v_o) in enumerate(dados_hora):
+            bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+            html_hora += f'<tr style="{bg}"><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{ind}</td>'
+            html_hora += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{v_p}</td>'
+            html_hora += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{v_c}</td>'
+            html_hora += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{v_o}</td></tr>'
+        html_hora += '</tbody></table>'
+        st.markdown(html_hora, unsafe_allow_html=True)
         
         horas_tipo = "trabalhadas" if modelo_ef == 'profissional' else "de sala"
         st.info(f"⏱️ Total de horas {horas_tipo} no ano (Conservador): **{m_cons['horas_trabalhadas']:,.0f}h**")
@@ -6689,13 +7164,26 @@ def pagina_comparativo_cenarios():
         st.markdown("#### 📐 Por Metro Quadrado")
         
         if m_cons['total_m2'] > 0:
-            df_m2 = pd.DataFrame({
-                'Indicador': ['💵 Receita/m²', '💰 Lucro/m²', '💸 Custo Fixo/m²'],
-                '📉 Pessimista': [f"R$ {m_pess['receita_m2']:,.0f}", f"R$ {m_pess['lucro_m2']:,.0f}", f"R$ {m_pess['custo_m2']:,.0f}"],
-                '⚖️ Conservador': [f"R$ {m_cons['receita_m2']:,.0f}", f"R$ {m_cons['lucro_m2']:,.0f}", f"R$ {m_cons['custo_m2']:,.0f}"],
-                '📈 Otimista': [f"R$ {m_otim['receita_m2']:,.0f}", f"R$ {m_otim['lucro_m2']:,.0f}", f"R$ {m_otim['custo_m2']:,.0f}"]
-            })
-            st.dataframe(df_m2, use_container_width=True, hide_index=True)
+            dados_m2 = [
+                ("💵 Receita/m²", f"R$ {m_pess['receita_m2']:,.2f}", f"R$ {m_cons['receita_m2']:,.2f}", f"R$ {m_otim['receita_m2']:,.2f}"),
+                ("💰 Lucro/m²", f"R$ {m_pess['lucro_m2']:,.2f}", f"R$ {m_cons['lucro_m2']:,.2f}", f"R$ {m_otim['lucro_m2']:,.2f}"),
+                ("💸 Custo Fixo/m²", f"R$ {m_pess['custo_m2']:,.2f}", f"R$ {m_cons['custo_m2']:,.2f}", f"R$ {m_otim['custo_m2']:,.2f}"),
+            ]
+            html_m2 = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+            html_m2 += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html_m2 += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Indicador</th>'
+            html_m2 += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+            html_m2 += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+            html_m2 += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+            html_m2 += '</tr></thead><tbody>'
+            for i, (ind, v_p, v_c, v_o) in enumerate(dados_m2):
+                bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+                html_m2 += f'<tr style="{bg}"><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{ind}</td>'
+                html_m2 += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{v_p}</td>'
+                html_m2 += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{v_c}</td>'
+                html_m2 += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{v_o}</td></tr>'
+            html_m2 += '</tbody></table>'
+            st.markdown(html_m2, unsafe_allow_html=True)
             st.info(f"📐 Área total da clínica: **{m_cons['total_m2']:.0f} m²**")
         else:
             st.warning("⚙️ Configure a área (m²) em **Premissas → Infraestrutura** para ver estes indicadores.")
@@ -6706,13 +7194,26 @@ def pagina_comparativo_cenarios():
         st.markdown("#### 🏥 Por Sala")
         
         if m_cons['num_salas'] > 0:
-            df_sala = pd.DataFrame({
-                'Indicador': ['💵 Receita/Sala', '💰 Lucro/Sala', '💸 Custo Fixo/Sala'],
-                '📉 Pessimista': [f"R$ {m_pess['receita_sala']:,.0f}", f"R$ {m_pess['lucro_sala']:,.0f}", f"R$ {m_pess['custo_sala']:,.0f}"],
-                '⚖️ Conservador': [f"R$ {m_cons['receita_sala']:,.0f}", f"R$ {m_cons['lucro_sala']:,.0f}", f"R$ {m_cons['custo_sala']:,.0f}"],
-                '📈 Otimista': [f"R$ {m_otim['receita_sala']:,.0f}", f"R$ {m_otim['lucro_sala']:,.0f}", f"R$ {m_otim['custo_sala']:,.0f}"]
-            })
-            st.dataframe(df_sala, use_container_width=True, hide_index=True)
+            dados_sala = [
+                ("💵 Receita/Sala", f"R$ {m_pess['receita_sala']:,.2f}", f"R$ {m_cons['receita_sala']:,.2f}", f"R$ {m_otim['receita_sala']:,.2f}"),
+                ("💰 Lucro/Sala", f"R$ {m_pess['lucro_sala']:,.2f}", f"R$ {m_cons['lucro_sala']:,.2f}", f"R$ {m_otim['lucro_sala']:,.2f}"),
+                ("💸 Custo Fixo/Sala", f"R$ {m_pess['custo_sala']:,.2f}", f"R$ {m_cons['custo_sala']:,.2f}", f"R$ {m_otim['custo_sala']:,.2f}"),
+            ]
+            html_sala = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+            html_sala += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html_sala += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Indicador</th>'
+            html_sala += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+            html_sala += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+            html_sala += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+            html_sala += '</tr></thead><tbody>'
+            for i, (ind, v_p, v_c, v_o) in enumerate(dados_sala):
+                bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+                html_sala += f'<tr style="{bg}"><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{ind}</td>'
+                html_sala += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{v_p}</td>'
+                html_sala += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{v_c}</td>'
+                html_sala += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{v_o}</td></tr>'
+            html_sala += '</tbody></table>'
+            st.markdown(html_sala, unsafe_allow_html=True)
             st.info(f"🏥 Total de salas: **{m_cons['num_salas']}**")
         else:
             st.warning("⚙️ Configure as salas em **Premissas → Infraestrutura** para ver estes indicadores.")
@@ -6722,13 +7223,26 @@ def pagina_comparativo_cenarios():
         # Por Sessão
         st.markdown("#### 🎯 Por Sessão/Atendimento")
         
-        df_sessao = pd.DataFrame({
-            'Indicador': ['💵 Receita/Sessão', '💰 Lucro/Sessão', '🏥 Total Sessões/Ano'],
-            '📉 Pessimista': [f"R$ {m_pess['receita_sessao']:.2f}", f"R$ {m_pess['lucro_sessao']:.2f}", f"{m_pess['sessoes']:,.0f}"],
-            '⚖️ Conservador': [f"R$ {m_cons['receita_sessao']:.2f}", f"R$ {m_cons['lucro_sessao']:.2f}", f"{m_cons['sessoes']:,.0f}"],
-            '📈 Otimista': [f"R$ {m_otim['receita_sessao']:.2f}", f"R$ {m_otim['lucro_sessao']:.2f}", f"{m_otim['sessoes']:,.0f}"]
-        })
-        st.dataframe(df_sessao, use_container_width=True, hide_index=True)
+        dados_sessao = [
+            ("💵 Receita/Sessão", f"R$ {m_pess['receita_sessao']:.2f}", f"R$ {m_cons['receita_sessao']:.2f}", f"R$ {m_otim['receita_sessao']:.2f}"),
+            ("💰 Lucro/Sessão", f"R$ {m_pess['lucro_sessao']:.2f}", f"R$ {m_cons['lucro_sessao']:.2f}", f"R$ {m_otim['lucro_sessao']:.2f}"),
+            ("🏥 Total Sessões/Ano", f"{m_pess['sessoes']:,.0f}", f"{m_cons['sessoes']:,.0f}", f"{m_otim['sessoes']:,.0f}"),
+        ]
+        html_sessao = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
+        html_sessao += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+        html_sessao += '<th style="padding:12px 10px;text-align:left;font-weight:600;">Indicador</th>'
+        html_sessao += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">📉 Pessimista</th>'
+        html_sessao += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">⚖️ Conservador</th>'
+        html_sessao += '<th style="padding:12px 10px;text-align:right;width:140px;font-weight:600;">🚀 Otimista</th>'
+        html_sessao += '</tr></thead><tbody>'
+        for i, (ind, v_p, v_c, v_o) in enumerate(dados_sessao):
+            bg = "background-color:#f8fafc;" if i % 2 == 0 else "background-color:#ffffff;"
+            html_sessao += f'<tr style="{bg}"><td style="padding:10px;border-bottom:1px solid #e2e8f0;font-weight:500;">{ind}</td>'
+            html_sessao += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">{v_p}</td>'
+            html_sessao += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1565c0;">{v_c}</td>'
+            html_sessao += f'<td style="padding:10px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">{v_o}</td></tr>'
+        html_sessao += '</tbody></table>'
+        st.markdown(html_sessao, unsafe_allow_html=True)
     
     # ========================================================================
     # TAB 8: GRÁFICOS
@@ -6812,9 +7326,17 @@ def pagina_comparativo_cenarios():
     with col1:
         import io
         buffer = io.BytesIO()
-        
+
+        # Criar DataFrame para exportação (não usa mais df_resumo que foi convertido para HTML)
+        df_resumo_export = pd.DataFrame({
+            'Indicador': ['Receita Bruta', 'Receita Líquida', 'EBITDA', 'Margem EBITDA', 'Sessões', 'Lucro/Sessão'],
+            'Pessimista': [m_pess['receita_bruta'], m_pess['receita_liquida'], m_pess['ebitda'], m_pess['margem_ebitda'], m_pess['sessoes'], m_pess['lucro_sessao']],
+            'Conservador': [m_cons['receita_bruta'], m_cons['receita_liquida'], m_cons['ebitda'], m_cons['margem_ebitda'], m_cons['sessoes'], m_cons['lucro_sessao']],
+            'Otimista': [m_otim['receita_bruta'], m_otim['receita_liquida'], m_otim['ebitda'], m_otim['margem_ebitda'], m_otim['sessoes'], m_otim['lucro_sessao']]
+        })
+
         with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_resumo.to_excel(writer, sheet_name='Resumo', index=False)
+            df_resumo_export.to_excel(writer, sheet_name='Resumo', index=False)
             
             df_rec = pd.DataFrame({
                 'Indicador': ['Receita Bruta', 'Deduções', 'Receita Líquida', 'Margem Bruta %'],
