@@ -14706,76 +14706,84 @@ def pagina_premissas():
             
             # DETALHAMENTO PRÓ-LABORE
             st.markdown("##### Projeção Pró-Labore Sócios")
-            
-            dados_pl = []
-            for mes_idx, folha in enumerate(projecao):
+
+            try:
+                dados_pl = []
+                for mes_idx, folha in enumerate(projecao):
+                    pl_data = folha.get("prolabore", {})
+                    dados_pl.append({
+                        "Mês": MESES_ABREV[mes_idx],
+                        "Bruto": pl_data.get("bruto", 0),
+                        "INSS": pl_data.get("inss", 0),
+                        "IRRF": pl_data.get("irrf", 0),
+                        "Líquido": pl_data.get("liquido", 0)
+                    })
+
+                # Total
+                total_pl = {
+                    "bruto": sum(f.get("prolabore", {}).get("bruto", 0) for f in projecao),
+                    "inss": sum(f.get("prolabore", {}).get("inss", 0) for f in projecao),
+                    "irrf": sum(f.get("prolabore", {}).get("irrf", 0) for f in projecao),
+                    "liquido": sum(f.get("prolabore", {}).get("liquido", 0) for f in projecao)
+                }
                 dados_pl.append({
-                    "Mês": MESES_ABREV[mes_idx],
-                    "Bruto": folha["prolabore"]["bruto"],
-                    "INSS": folha["prolabore"]["inss"],
-                    "IRRF": folha["prolabore"]["irrf"],
-                    "Líquido": folha["prolabore"]["liquido"]
+                    "Mês": "TOTAL",
+                    "Bruto": total_pl["bruto"],
+                    "INSS": total_pl["inss"],
+                    "IRRF": total_pl["irrf"],
+                    "Líquido": total_pl["liquido"]
                 })
-            
-            # Total
-            total_pl = {
-                "bruto": sum(f["prolabore"]["bruto"] for f in projecao),
-                "inss": sum(f["prolabore"]["inss"] for f in projecao),
-                "irrf": sum(f["prolabore"]["irrf"] for f in projecao),
-                "liquido": sum(f["prolabore"]["liquido"] for f in projecao)
-            }
-            dados_pl.append({
-                "Mês": "TOTAL",
-                "Bruto": total_pl["bruto"],
-                "INSS": total_pl["inss"],
-                "IRRF": total_pl["irrf"],
-                "Líquido": total_pl["liquido"]
-            })
-            
-            df_pl = pd.DataFrame(dados_pl)
-            for col in ["Bruto", "INSS", "IRRF", "Líquido"]:
-                df_pl[col] = df_pl[col].apply(lambda x: f"R$ {x:,.2f}")
-            
-            st.dataframe(df_pl, use_container_width=True, hide_index=True)
+
+                df_pl = pd.DataFrame(dados_pl)
+                for col in ["Bruto", "INSS", "IRRF", "Líquido"]:
+                    df_pl[col] = df_pl[col].apply(lambda x: f"R$ {x:,.2f}")
+
+                st.dataframe(df_pl, use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.info("Nenhum sócio com pró-labore cadastrado.")
             
             st.markdown("---")
             
             # DETALHAMENTO CLT
             st.markdown("##### Projeção Folha CLT")
-            
-            dados_clt = []
-            for mes_idx, folha in enumerate(projecao):
+
+            try:
+                dados_clt = []
+                for mes_idx, folha in enumerate(projecao):
+                    clt_data = folha.get("clt", {})
+                    dados_clt.append({
+                        "Mês": MESES_ABREV[mes_idx],
+                        "Salários": clt_data.get("salarios_brutos", 0),
+                        "INSS": clt_data.get("inss", 0),
+                        "IRRF": clt_data.get("irrf", 0),
+                        "FGTS": clt_data.get("fgts", 0),
+                        "Líquido": clt_data.get("liquido", 0)
+                    })
+
+                # Total
+                total_clt = {
+                    "sal": sum(f.get("clt", {}).get("salarios_brutos", 0) for f in projecao),
+                    "inss": sum(f.get("clt", {}).get("inss", 0) for f in projecao),
+                    "irrf": sum(f.get("clt", {}).get("irrf", 0) for f in projecao),
+                    "fgts": sum(f.get("clt", {}).get("fgts", 0) for f in projecao),
+                    "liq": sum(f.get("clt", {}).get("liquido", 0) for f in projecao)
+                }
                 dados_clt.append({
-                    "Mês": MESES_ABREV[mes_idx],
-                    "Salários": folha["clt"]["salarios_brutos"],
-                    "INSS": folha["clt"]["inss"],
-                    "IRRF": folha["clt"]["irrf"],
-                    "FGTS": folha["clt"]["fgts"],
-                    "Líquido": folha["clt"]["liquido"]
+                    "Mês": "TOTAL",
+                    "Salários": total_clt["sal"],
+                    "INSS": total_clt["inss"],
+                    "IRRF": total_clt["irrf"],
+                    "FGTS": total_clt["fgts"],
+                    "Líquido": total_clt["liq"]
                 })
-            
-            # Total
-            total_clt = {
-                "sal": sum(f["clt"]["salarios_brutos"] for f in projecao),
-                "inss": sum(f["clt"]["inss"] for f in projecao),
-                "irrf": sum(f["clt"]["irrf"] for f in projecao),
-                "fgts": sum(f["clt"]["fgts"] for f in projecao),
-                "liq": sum(f["clt"]["liquido"] for f in projecao)
-            }
-            dados_clt.append({
-                "Mês": "TOTAL",
-                "Salários": total_clt["sal"],
-                "INSS": total_clt["inss"],
-                "IRRF": total_clt["irrf"],
-                "FGTS": total_clt["fgts"],
-                "Líquido": total_clt["liq"]
-            })
-            
-            df_clt = pd.DataFrame(dados_clt)
-            for col in ["Salários", "INSS", "IRRF", "FGTS", "Líquido"]:
-                df_clt[col] = df_clt[col].apply(lambda x: f"R$ {x:,.2f}")
-            
-            st.dataframe(df_clt, use_container_width=True, hide_index=True)
+
+                df_clt = pd.DataFrame(dados_clt)
+                for col in ["Salários", "INSS", "IRRF", "FGTS", "Líquido"]:
+                    df_clt[col] = df_clt[col].apply(lambda x: f"R$ {x:,.2f}")
+
+                st.dataframe(df_clt, use_container_width=True, hide_index=True)
+            except Exception as e:
+                st.info("Nenhum funcionário CLT cadastrado.")
         
         # ===== CADASTROS =====
         with subtab_f3:
