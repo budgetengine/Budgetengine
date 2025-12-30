@@ -14707,6 +14707,7 @@ def pagina_premissas():
             # DETALHAMENTO PRÓ-LABORE
             st.markdown("##### Projeção Pró-Labore Sócios")
 
+            import pandas as pd  # Import local para evitar UnboundLocalError
             dados_prolabore = []
             for mes_idx, folha in enumerate(projecao):
                 prolabore_info = folha.get("prolabore") if isinstance(folha, dict) else None
