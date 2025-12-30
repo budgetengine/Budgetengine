@@ -24,12 +24,16 @@ except ImportError:
 def _conectar_supabase():
     """Conecta ao Supabase se disponível"""
     if not SUPABASE_DISPONIVEL:
+        print("[SUPABASE] Biblioteca não disponível")
         return None
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
-        return create_client(url, key)
-    except:
+        client = create_client(url, key)
+        print(f"[SUPABASE] ✅ Conectado com sucesso!")
+        return client
+    except Exception as e:
+        print(f"[SUPABASE] ❌ Erro ao conectar: {e}")
         return None
 
 # Adiciona diretório pai ao path para imports do motor_calculo

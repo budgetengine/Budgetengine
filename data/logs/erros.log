@@ -1,2 +1,0 @@
-[2025-12-24 17:21:47] BE-601: Erro ao exportar Excel | Local: pagina_dashboard/exportar_excel | Detalhe: division by zero
-[2025-12-24 18:08:27] BE-602: Formato de arquivo inválido | Local: pagina_dashboard/exportar_pdf | Detalhe: No module named 'reportlab'

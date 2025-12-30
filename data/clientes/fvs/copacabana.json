@@ -1,18 +1,19 @@
 {
   "_version": "2.0",
   "_format": "multi_cenario",
-  "cenario_ativo": "Conservador",
+  "cenario_ativo": "Otimista",
   "cenario_aprovado": null,
   "usar_cenarios": true,
+  "modelo_eficiencia": "infraestrutura",
   "cenarios": {
     "Conservador": {
       "servicos": {
         "Ginasio": {
           "nome": "Ginasio",
           "duracao_minutos": 50,
-          "valor_2026": 155.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "valor_2026": 150.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -20,9 +21,9 @@
         "Individual": {
           "nome": "Individual",
           "duracao_minutos": 50,
-          "valor_2026": 190.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "valor_2026": 185.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -31,8 +32,8 @@
           "nome": "Domiciliar ",
           "duracao_minutos": 50,
           "valor_2026": 270.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -41,8 +42,8 @@
           "nome": "Osteopatia ",
           "duracao_minutos": 50,
           "valor_2026": 330.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -51,8 +52,8 @@
           "nome": "Consultório ",
           "duracao_minutos": 50,
           "valor_2026": 230.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -61,8 +62,8 @@
           "nome": "Personalizado",
           "duracao_minutos": 50,
           "valor_2026": 205.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
           "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
@@ -76,30 +77,25 @@
           "tipo": "proprietario",
           "ativo": true,
           "sessoes_por_servico": {
-            "Osteopatia ": 23
+            "Osteopatia ": 18.0
           },
           "pct_crescimento_por_servico": {
-            "Osteopatia ": 0.11
+            "Osteopatia ": 0.0
           }
         }
       },
       "profissionais": {
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {}
-        },
         "Igor Melgaço da Silva": {
           "nome": "Igor Melgaço da Silva",
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 7
+            "Individual": 1.0,
+            "Domiciliar ": 5.0
           },
           "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.14
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
           }
         },
         "Pablo Henrick de Moura": {
@@ -107,12 +103,12 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 90
+            "Domiciliar ": 3.0,
+            "Personalizado": 93.2
           },
           "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.25,
-            "Personalizado": 0.1
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Yuri Peixoto Gabrielli": {
@@ -120,14 +116,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
+            "Ginasio": 287.7,
+            "Individual": 1.0,
+            "Domiciliar ": 8.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.1,
-            "Domiciliar ": 0.09,
-            "Consultório ": 0.5
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Isabelle Rodrigues de Lira": {
@@ -135,10 +135,14 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Personalizado": 65
+            "Ginasio": 1.0,
+            "Consultório ": 1.0,
+            "Personalizado": 66.2
           },
           "pct_crescimento_por_servico": {
-            "Personalizado": 0.05
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Patricya Hellen Pisani Rial": {
@@ -146,16 +150,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 15,
-            "Individual": 70,
-            "Domiciliar ": 3,
-            "Personalizado": 3
+            "Ginasio": 9.0,
+            "Individual": 72.2,
+            "Domiciliar ": 1.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.44,
-            "Individual": 0.06,
-            "Domiciliar ": 0.33,
-            "Personalizado": 0.33
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Felipe Barros Penchel Tresse": {
@@ -163,14 +169,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 80,
-            "Domiciliar ": 2
+            "Ginasio": 5.0,
+            "Individual": 88.2,
+            "Domiciliar ": 3.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.5,
-            "Individual": 0.1,
-            "Domiciliar ": 0.5
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Cláudia Alves de Souto Ventura": {
@@ -178,12 +188,16 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Consultório ": 80,
-            "Personalizado": 4
+            "Ginasio": 5.0,
+            "Domiciliar ": 1.0,
+            "Consultório ": 85.2,
+            "Personalizado": 1.0
           },
           "pct_crescimento_por_servico": {
-            "Consultório ": 0.1,
-            "Personalizado": 0.25
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Juliana Cristina de Faria e França": {
@@ -191,12 +205,16 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 170,
-            "Consultório ": 14
+            "Ginasio": 192.5,
+            "Individual": 1.0,
+            "Consultório ": 12.0,
+            "Personalizado": 1.0
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.1,
-            "Consultório ": 0.2
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         }
       },
@@ -204,30 +222,30 @@
         "Cursos": {
           "nome": "Cursos",
           "categoria": "Ocupação",
-          "valor_mensal": 2.08,
-          "tipo_reajuste": "ipca",
+          "valor_mensal": 1638.64,
+          "tipo_reajuste": "igpm",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64
           ],
           "ativa": true,
           "tipo_despesa": "fixa",
           "base_variavel": "receita",
-          "pct_receita": 0.0,
+          "pct_receita": 0.0174,
           "valor_por_sessao": 0.0
         },
         "Aluguel": {
@@ -284,19 +302,19 @@
           ],
           "ativa": true,
           "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.0708,
-          "valor_por_sessao": 0.0
+          "base_variavel": "sessao",
+          "pct_receita": 0.09,
+          "valor_por_sessao": 6.08
         },
         "Energia": {
           "nome": "Energia",
           "categoria": "Ocupação",
           "valor_mensal": 1577.45,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "tarifas",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             1577.45,
             1577.45,
@@ -321,7 +339,7 @@
           "nome": "Limpeza",
           "categoria": "Ocupação",
           "valor_mensal": 767.13,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "dissidio",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -350,7 +368,7 @@
           "nome": "Seguros",
           "categoria": "Ocupação",
           "valor_mensal": 60.15,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "igpm",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -379,7 +397,7 @@
           "nome": "Sistema",
           "categoria": "Ocupação",
           "valor_mensal": 595.76,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -429,19 +447,19 @@
           ],
           "ativa": true,
           "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.028300000000000002,
-          "valor_por_sessao": 0.0
+          "base_variavel": "sessao",
+          "pct_receita": 0.04,
+          "valor_por_sessao": 2.43
         },
         "Manutenção": {
           "nome": "Manutenção",
           "categoria": "Ocupação",
           "valor_mensal": 474.89,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             474.89,
             474.89,
@@ -466,7 +484,7 @@
           "nome": "Contabilidade",
           "categoria": "Ocupação",
           "valor_mensal": 1518.0,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -495,7 +513,7 @@
           "nome": "TV/Telefone/Internet",
           "categoria": "Ocupação",
           "valor_mensal": 360.2,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "tarifas",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -524,11 +542,11 @@
           "nome": "Serviços de Terceiros",
           "categoria": "Ocupação",
           "valor_mensal": 588.54,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "dissidio",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             588.54,
             588.54,
@@ -553,18 +571,18 @@
       "custo_pessoal_mensal": 0.0,
       "mes_dissidio": 5,
       "sazonalidade": [
-        1.0,
-        0.85,
-        1.0,
-        0.8,
-        1.0,
-        1.0,
-        1.25,
-        1.25,
-        1.0,
-        1.0,
+        1.02,
+        0.79,
+        0.86,
+        0.99,
+        0.9,
+        1.21,
         1.15,
-        0.85
+        1.16,
+        0.97,
+        1.14,
+        1.1,
+        0.71
       ],
       "operacional": {
         "num_fisioterapeutas": 10,
@@ -689,7 +707,7 @@
         "ipca": 0.04,
         "igpm": 0.035,
         "dissidio": 0.05,
-        "reajuste_tarifas": 0.1,
+        "reajuste_tarifas": 0.08,
         "reajuste_contratos": 0.05,
         "taxa_cartao_credito": 0.0354,
         "taxa_cartao_debito": 0.021099999999999997,
@@ -707,1283 +725,7 @@
         "deducao_dependente_ir": 189.59,
         "aliquota_fgts": 0.08,
         "desconto_vt_pct": 0.06,
-        "dias_uteis_mes": 22,
-        "mes_dissidio": 5,
-        "pct_dissidio": 0.06
-      },
-      "funcionarios_clt": {
-        "Rafa": {
-          "nome": "Rafa",
-          "cargo": "",
-          "salario_base": 1200.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "João": {
-          "nome": "João",
-          "cargo": "Estagiario ",
-          "salario_base": 500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Rubia": {
-          "nome": "Rubia",
-          "cargo": "",
-          "salario_base": 500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Karine": {
-          "nome": "Karine",
-          "cargo": "",
-          "salario_base": 1800.0,
-          "tipo_vinculo": "clt",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Lucia ": {
-          "nome": "Lucia ",
-          "cargo": "",
-          "salario_base": 1030.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Mylena": {
-          "nome": "Mylena",
-          "cargo": "Estagiario ",
-          "salario_base": 500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Sirley": {
-          "nome": "Sirley",
-          "cargo": "",
-          "salario_base": 1800.0,
-          "tipo_vinculo": "clt",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Alexia ": {
-          "nome": "Alexia ",
-          "cargo": "",
-          "salario_base": 3500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Fabiana": {
-          "nome": "Fabiana",
-          "cargo": "",
-          "salario_base": 1500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Flavio ": {
-          "nome": "Flavio ",
-          "cargo": "",
-          "salario_base": 1000.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Mariana": {
-          "nome": "Mariana",
-          "cargo": "Estagiario ",
-          "salario_base": 500.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        },
-        "Guilherme": {
-          "nome": "Guilherme",
-          "cargo": "Estagiario ",
-          "salario_base": 400.0,
-          "tipo_vinculo": "informal",
-          "dependentes_ir": 0,
-          "vt_dia": 0.0,
-          "vr_dia": 0.0,
-          "plano_saude": 0.0,
-          "plano_odonto": 0.0,
-          "mes_admissao": 1,
-          "mes_aumento": 13,
-          "pct_reajuste": 0.0,
-          "ativo": true
-        }
-      },
-      "socios_prolabore": {
-        "Felipe Vidal ": {
-          "nome": "Felipe Vidal ",
-          "prolabore": 1631.0,
-          "dependentes_ir": 0,
-          "mes_reajuste": 5,
-          "pct_aumento": 0.0,
-          "ativo": true
-        }
-      },
-      "fisioterapeutas": {
-        "Felipe Vidal ": {
-          "nome": "Felipe Vidal ",
-          "cargo": "Proprietário",
-          "nivel": 0,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Osteopatia ": 23
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 3.0,
-            "terca": 3.0,
-            "quarta": 3.0,
-            "quinta": 3.0,
-            "sabado": 0.0,
-            "segunda": 3.0
-          }
-        },
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "cargo": "Fisioterapeuta",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Igor Melgaço da Silva": {
-          "nome": "Igor Melgaço da Silva",
-          "cargo": "Fisioterapeuta",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Domiciliar ": 7
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Pablo Henrick de Moura": {
-          "nome": "Pablo Henrick de Moura",
-          "cargo": "Fisioterapeuta",
-          "nivel": 3,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 90
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Yuri Peixoto Gabrielli": {
-          "nome": "Yuri Peixoto Gabrielli",
-          "cargo": "Fisioterapeuta",
-          "nivel": 3,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Isabelle Rodrigues de Lira": {
-          "nome": "Isabelle Rodrigues de Lira",
-          "cargo": "Fisioterapeuta",
-          "nivel": 3,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Personalizado": 65
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Patricya Hellen Pisani Rial": {
-          "nome": "Patricya Hellen Pisani Rial",
-          "cargo": "Fisioterapeuta",
-          "nivel": 3,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 15,
-            "Individual": 70,
-            "Domiciliar ": 3,
-            "Personalizado": 3
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Felipe Barros Penchel Tresse": {
-          "nome": "Felipe Barros Penchel Tresse",
-          "cargo": "Fisioterapeuta",
-          "nivel": 3,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 80,
-            "Domiciliar ": 2
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
-        "Cláudia Alves de Souto Ventura": {
-          "nome": "Cláudia Alves de Souto Ventura",
-          "cargo": "Gerente",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Consultório ": 80,
-            "Personalizado": 4
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 8.0,
-            "terca": 8.0,
-            "quarta": 8.0,
-            "quinta": 8.0,
-            "sabado": 0.0,
-            "segunda": 8.0
-          }
-        },
-        "Juliana Cristina de Faria e França": {
-          "nome": "Juliana Cristina de Faria e França",
-          "cargo": "Fisioterapeuta",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 170,
-            "Consultório ": 14
-          },
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        }
-      },
-      "premissas_fisio": {
-        "niveis_remuneracao": {
-          "1": 0.25,
-          "2": 0.25,
-          "3": 0.25,
-          "4": 0.25,
-          "1": 0.25,
-          "2": 0.25,
-          "3": 0.25,
-          "4": 0.25
-        },
-        "pct_producao_propria": 0.6,
-        "pct_faturamento_total": 0.2,
-        "pct_base_remuneracao_prop": 0.75,
-        "pct_gerencia_equipe": 0.01,
-        "pct_base_remuneracao_ger": 0.75
-      },
-      "premissas_simples": {
-        "faturamento_pf_anual": 0.0,
-        "aliquota_inss_pf": 0.11,
-        "teto_inss_pf": 908.86,
-        "limite_fator_r": 0.28
-      },
-      "premissas_dividendos": {
-        "distribuir": true,
-        "pct_reserva_legal": 0.05,
-        "pct_reserva_investimento": 0.2,
-        "frequencia": "Trimestral",
-        "pct_distribuir": 0.3,
-        "mostrar_no_dre": true
-      },
-      "premissas_fc": {
-        "caixa_inicial": 0.0,
-        "cp_impostos": 0,
-        "cp_folha_colaboradores": 0.0,
-        "cp_folha_fisioterapeutas": 0,
-        "cp_retirada_proprietarios": 0.0,
-        "cp_encargos_clt": 0.0,
-        "cp_fornecedores": 0,
-        "usar_cp_folha_auto": true,
-        "receita_out_ano_anterior": 0.0,
-        "receita_nov_ano_anterior": 0.0,
-        "receita_dez_ano_anterior": 0.0,
-        "usar_receita_auto": true,
-        "recebimento_avista_no_mes": true,
-        "saldo_minimo": 5000.0,
-        "pct_cartao_1x": 0.3333,
-        "pct_cartao_2x": 0.3333,
-        "pct_cartao_3x": 0.3334,
-        "pct_cartao_4x": 0.0,
-        "pct_cartao_5x": 0.0,
-        "pct_cartao_6x": 0.0
-      },
-      "aplicacoes": {
-        "saldo_inicial": 0.0,
-        "taxa_selic_anual": 0.1225,
-        "pct_cdi": 1.0
-      },
-      "investimentos": [
-        {
-          "descricao": "",
-          "categoria": "Equipamentos",
-          "valor_total": 0.0,
-          "mes_aquisicao": 6,
-          "entrada": 0.0,
-          "taxa_mensal": 0.03,
-          "parcelas": 24,
-          "beneficio_mensal": 0.0,
-          "ativo": true
-        },
-        {
-          "descricao": "Novo Investimento",
-          "categoria": "Equipamentos",
-          "valor_total": 0.0,
-          "mes_aquisicao": 1,
-          "entrada": 0.0,
-          "taxa_mensal": 0.03,
-          "parcelas": 24,
-          "beneficio_mensal": 0.0,
-          "ativo": true
-        },
-        {
-          "descricao": "Novo Investimento",
-          "categoria": "Equipamentos",
-          "valor_total": 0.0,
-          "mes_aquisicao": 1,
-          "entrada": 0.0,
-          "taxa_mensal": 0.03,
-          "parcelas": 24,
-          "beneficio_mensal": 0.0,
-          "ativo": true
-        }
-      ],
-      "financiamentos": [
-        {
-          "descricao": "",
-          "saldo_devedor": 0.0,
-          "taxa_mensal": 0.02,
-          "parcelas_total": 60,
-          "parcelas_pagas": 0,
-          "mes_inicio_2026": 3,
-          "valor_parcela": 0.0,
-          "ativo": true
-        },
-        {
-          "descricao": "Novo Financiamento",
-          "saldo_devedor": 0.0,
-          "taxa_mensal": 0.02,
-          "parcelas_total": 60,
-          "parcelas_pagas": 0,
-          "mes_inicio_2026": 1,
-          "valor_parcela": 0.0,
-          "ativo": true
-        }
-      ],
-      "usar_cenarios": true,
-      "cenario_oficial": "Conservador",
-      "ajustes_cenarios": {
-        "Otimista": {
-          "sessoes": {},
-          "valores": {},
-          "despesas": {},
-          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
-        },
-        "Pessimista": {
-          "sessoes": {},
-          "valores": {},
-          "despesas": {},
-          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
-        }
-      },
-      "usar_comparativo_anterior": true,
-      "faturamento_anterior": [
-        157790.0,
-        122490.0,
-        133700.0,
-        153280.0,
-        139700.0,
-        188650.0,
-        179260.0,
-        180430.0,
-        149950.0,
-        177130.0,
-        171000.0,
-        110000.0
-      ],
-      "ano_anterior": 2025
-    },
-    "Pessimista": {
-      "servicos": {
-        "Ginasio": {
-          "nome": "Ginasio",
-          "duracao_minutos": 50,
-          "valor_2026": 143.64,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        },
-        "Individual": {
-          "nome": "Individual",
-          "duracao_minutos": 50,
-          "valor_2026": 182.09,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        },
-        "Domiciliar ": {
-          "nome": "Domiciliar ",
-          "duracao_minutos": 50,
-          "valor_2026": 262.82,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        },
-        "Osteopatia ": {
-          "nome": "Osteopatia ",
-          "duracao_minutos": 50,
-          "valor_2026": 322.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        },
-        "Consultório ": {
-          "nome": "Consultório ",
-          "duracao_minutos": 50,
-          "valor_2026": 223.27,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        },
-        "Personalizado": {
-          "nome": "Personalizado",
-          "duracao_minutos": 50,
-          "valor_2026": 199.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
-          "pct_crescimento": 0.0,
-          "usa_sala": true
-        }
-      },
-      "valores_proprietario": {},
-      "valores_profissional": {},
-      "proprietarios": {
-        "Felipe Vidal ": {
-          "nome": "Felipe Vidal ",
-          "tipo": "proprietario",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Osteopatia ": 19
-          },
-          "pct_crescimento_por_servico": {
-            "Osteopatia ": 0.11
-          }
-        }
-      },
-      "profissionais": {
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {}
-        },
-        "Igor Melgaço da Silva": {
-          "nome": "Igor Melgaço da Silva",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Domiciliar ": 7
-          },
-          "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.14
-          }
-        },
-        "Pablo Henrick de Moura": {
-          "nome": "Pablo Henrick de Moura",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 82
-          },
-          "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.25,
-            "Personalizado": 0.05
-          }
-        },
-        "Yuri Peixoto Gabrielli": {
-          "nome": "Yuri Peixoto Gabrielli",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
-          },
-          "pct_crescimento_por_servico": {
-            "Ginasio": 0.05,
-            "Domiciliar ": 0.09,
-            "Consultório ": 0.5
-          }
-        },
-        "Isabelle Rodrigues de Lira": {
-          "nome": "Isabelle Rodrigues de Lira",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Personalizado": 58
-          },
-          "pct_crescimento_por_servico": {
-            "Personalizado": 0.05
-          }
-        },
-        "Patricya Hellen Pisani Rial": {
-          "nome": "Patricya Hellen Pisani Rial",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 9,
-            "Individual": 66,
-            "Domiciliar ": 3,
-            "Personalizado": 3
-          },
-          "pct_crescimento_por_servico": {
-            "Ginasio": 0.44,
-            "Individual": 0.06,
-            "Domiciliar ": 0.33,
-            "Personalizado": 0.33
-          }
-        },
-        "Felipe Barros Penchel Tresse": {
-          "nome": "Felipe Barros Penchel Tresse",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 77,
-            "Domiciliar ": 2
-          },
-          "pct_crescimento_por_servico": {
-            "Ginasio": 0.5,
-            "Individual": 0.05,
-            "Domiciliar ": 0.5
-          }
-        },
-        "Cláudia Alves de Souto Ventura": {
-          "nome": "Cláudia Alves de Souto Ventura",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Consultório ": 75,
-            "Personalizado": 4
-          },
-          "pct_crescimento_por_servico": {
-            "Consultório ": 0.07,
-            "Personalizado": 0.25
-          }
-        },
-        "Juliana Cristina de Faria e França": {
-          "nome": "Juliana Cristina de Faria e França",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {
-            "Ginasio": 165,
-            "Consultório ": 14
-          },
-          "pct_crescimento_por_servico": {
-            "Ginasio": 0.06,
-            "Consultório ": 0.14
-          }
-        }
-      },
-      "despesas": {
-        "Cursos": {
-          "nome": "Cursos",
-          "categoria": "Ocupação",
-          "valor_mensal": 2.08,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Aluguel": {
-          "nome": "Aluguel",
-          "categoria": "Ocupação",
-          "valor_mensal": 8408.55,
-          "tipo_reajuste": "igpm",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "sessao",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 12.17
-        },
-        "Compras": {
-          "nome": "Compras",
-          "categoria": "Ocupação",
-          "valor_mensal": 0.0,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "ativa": true,
-          "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.0708,
-          "valor_por_sessao": 0.0
-        },
-        "Energia": {
-          "nome": "Energia",
-          "categoria": "Ocupação",
-          "valor_mensal": 1577.45,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45,
-            1577.45
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Limpeza": {
-          "nome": "Limpeza",
-          "categoria": "Ocupação",
-          "valor_mensal": 767.13,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13,
-            767.13
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Seguros": {
-          "nome": "Seguros",
-          "categoria": "Ocupação",
-          "valor_mensal": 60.15,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15,
-            60.15
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Sistema": {
-          "nome": "Sistema",
-          "categoria": "Ocupação",
-          "valor_mensal": 595.76,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76,
-            595.76
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Marketing": {
-          "nome": "Marketing",
-          "categoria": "Ocupação",
-          "valor_mensal": 0.0,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "ativa": true,
-          "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.028300000000000002,
-          "valor_por_sessao": 0.0
-        },
-        "Manutenção": {
-          "nome": "Manutenção",
-          "categoria": "Ocupação",
-          "valor_mensal": 474.89,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89,
-            474.89
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Contabilidade": {
-          "nome": "Contabilidade",
-          "categoria": "Ocupação",
-          "valor_mensal": 1518.0,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0,
-            1518.0
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "TV/Telefone/Internet": {
-          "nome": "TV/Telefone/Internet",
-          "categoria": "Ocupação",
-          "valor_mensal": 360.2,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2,
-            360.2
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        },
-        "Serviços de Terceiros": {
-          "nome": "Serviços de Terceiros",
-          "categoria": "Ocupação",
-          "valor_mensal": 588.54,
-          "tipo_reajuste": "ipca",
-          "mes_reajuste": 1,
-          "pct_adicional": 0.0,
-          "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
-          "valores_2025": [
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54,
-            588.54
-          ],
-          "ativa": true,
-          "tipo_despesa": "fixa",
-          "base_variavel": "receita",
-          "pct_receita": 0.0,
-          "valor_por_sessao": 0.0
-        }
-      },
-      "custo_pessoal_mensal": 0.0,
-      "mes_dissidio": 5,
-      "sazonalidade": [
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0,
-        1.0
-      ],
-      "operacional": {
-        "num_fisioterapeutas": 10,
-        "num_salas": 3,
-        "horas_atendimento_dia": 12,
         "dias_uteis_mes": 20,
-        "modelo_tributario": "PJ - Simples Nacional",
-        "modo_calculo_sessoes": "servico"
-      },
-      "cadastro_salas": {
-        "horas_funcionamento_dia": 12,
-        "dias_uteis_mes": 20,
-        "salas": [
-          {
-            "numero": 1,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": true
-          },
-          {
-            "numero": 2,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": true
-          },
-          {
-            "numero": 3,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": true
-          },
-          {
-            "numero": 4,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 5,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 6,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 7,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 8,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 9,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 10,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 11,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 12,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 13,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 14,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          },
-          {
-            "numero": 15,
-            "metros_quadrados": 0.0,
-            "tipo": "Individual",
-            "servicos_atendidos": [],
-            "ativa": false
-          }
-        ]
-      },
-      "macro": {
-        "ipca": 0.01,
-        "igpm": 0.035,
-        "dissidio": 0.05,
-        "reajuste_tarifas": 0.1,
-        "reajuste_contratos": 0.08,
-        "taxa_cartao_credito": 0.0354,
-        "taxa_cartao_debito": 0.021099999999999997,
-        "taxa_antecipacao": 0.05
-      },
-      "pagamento": {
-        "dinheiro_pix": 0.3,
-        "cartao_credito": 0.5,
-        "cartao_debito": 0.2,
-        "outros": 0.0,
-        "pct_antecipacao": 0.0
-      },
-      "premissas_folha": {
-        "regime_tributario": "PJ - Simples Nacional",
-        "deducao_dependente_ir": 189.59,
-        "aliquota_fgts": 0.08,
-        "desconto_vt_pct": 0.06,
-        "dias_uteis_mes": 22,
         "mes_dissidio": 5,
         "pct_dissidio": 0.05
       },
@@ -2187,9 +929,11 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Osteopatia ": 19
+            "Osteopatia ": 18.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Osteopatia ": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2202,26 +946,6 @@
             "segunda": 3.0
           }
         },
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "cargo": "Fisioterapeuta",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
         "Igor Melgaço da Silva": {
           "nome": "Igor Melgaço da Silva",
           "cargo": "Fisioterapeuta",
@@ -2229,9 +953,13 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 7
+            "Individual": 1.0,
+            "Domiciliar ": 5.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2251,10 +979,13 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 82
+            "Domiciliar ": 3.0,
+            "Personalizado": 93.2
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2274,11 +1005,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
+            "Ginasio": 287.7,
+            "Individual": 1.0,
+            "Domiciliar ": 8.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2298,9 +1037,15 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Personalizado": 58
+            "Ginasio": 1.0,
+            "Consultório ": 1.0,
+            "Personalizado": 66.2
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2320,12 +1065,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 9,
-            "Individual": 66,
-            "Domiciliar ": 3,
-            "Personalizado": 3
+            "Ginasio": 9.0,
+            "Individual": 72.2,
+            "Domiciliar ": 1.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2345,11 +1097,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 77,
-            "Domiciliar ": 2
+            "Ginasio": 5.0,
+            "Individual": 88.2,
+            "Domiciliar ": 3.0,
+            "Consultório ": 1.0,
+            "Personalizado": 1.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2369,10 +1129,17 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Consultório ": 75,
-            "Personalizado": 4
+            "Ginasio": 5.0,
+            "Domiciliar ": 1.0,
+            "Consultório ": 85.2,
+            "Personalizado": 1.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2392,10 +1159,17 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 165,
-            "Consultório ": 14
+            "Ginasio": 192.5,
+            "Individual": 1.0,
+            "Consultório ": 12.0,
+            "Personalizado": 1.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -2411,10 +1185,6 @@
       },
       "premissas_fisio": {
         "niveis_remuneracao": {
-          "1": 0.25,
-          "2": 0.25,
-          "3": 0.25,
-          "4": 0.25,
           "1": 0.25,
           "2": 0.25,
           "3": 0.25,
@@ -2435,13 +1205,13 @@
       "premissas_dividendos": {
         "distribuir": true,
         "pct_reserva_legal": 0.05,
-        "pct_reserva_investimento": 0.2,
+        "pct_reserva_investimento": 0.16,
         "frequencia": "Trimestral",
-        "pct_distribuir": 0.3,
+        "pct_distribuir": 0.5,
         "mostrar_no_dre": true
       },
       "premissas_fc": {
-        "caixa_inicial": 0.0,
+        "caixa_inicial": 5000.0,
         "cp_impostos": 0,
         "cp_folha_colaboradores": 0.0,
         "cp_folha_fisioterapeutas": 0,
@@ -2453,7 +1223,7 @@
         "receita_nov_ano_anterior": 0.0,
         "receita_dez_ano_anterior": 0.0,
         "usar_receita_auto": true,
-        "recebimento_avista_no_mes": true,
+        "recebimento_avista_no_mes": false,
         "saldo_minimo": 5000.0,
         "pct_cartao_1x": 0.3333,
         "pct_cartao_2x": 0.3333,
@@ -2477,7 +1247,7 @@
           "taxa_mensal": 0.03,
           "parcelas": 24,
           "beneficio_mensal": 0.0,
-          "ativo": true
+          "ativo": false
         },
         {
           "descricao": "Novo Investimento",
@@ -2488,7 +1258,7 @@
           "taxa_mensal": 0.03,
           "parcelas": 24,
           "beneficio_mensal": 0.0,
-          "ativo": true
+          "ativo": false
         },
         {
           "descricao": "Novo Investimento",
@@ -2499,7 +1269,7 @@
           "taxa_mensal": 0.03,
           "parcelas": 24,
           "beneficio_mensal": 0.0,
-          "ativo": true
+          "ativo": false
         }
       ],
       "financiamentos": [
@@ -2511,7 +1281,7 @@
           "parcelas_pagas": 0,
           "mes_inicio_2026": 3,
           "valor_parcela": 0.0,
-          "ativo": true
+          "ativo": false
         },
         {
           "descricao": "Novo Financiamento",
@@ -2521,7 +1291,7 @@
           "parcelas_pagas": 0,
           "mes_inicio_2026": 1,
           "valor_parcela": 0.0,
-          "ativo": true
+          "ativo": false
         }
       ],
       "usar_cenarios": true,
@@ -2557,65 +1327,65 @@
       ],
       "ano_anterior": 2025
     },
-    "Otimista": {
+    "Pessimista": {
       "servicos": {
         "Ginasio": {
           "nome": "Ginasio",
           "duracao_minutos": 50,
-          "valor_2026": 143.64,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 150.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         },
         "Individual": {
           "nome": "Individual",
           "duracao_minutos": 50,
-          "valor_2026": 182.09,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 185.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         },
         "Domiciliar ": {
           "nome": "Domiciliar ",
           "duracao_minutos": 50,
-          "valor_2026": 262.82,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 270.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         },
         "Osteopatia ": {
           "nome": "Osteopatia ",
           "duracao_minutos": 50,
-          "valor_2026": 322.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 330.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         },
         "Consultório ": {
           "nome": "Consultório ",
           "duracao_minutos": 50,
-          "valor_2026": 223.27,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 230.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         },
         "Personalizado": {
           "nome": "Personalizado",
           "duracao_minutos": 50,
-          "valor_2026": 199.0,
-          "sessoes_mes_base": 0,
-          "pct_reajuste": 0.05,
-          "mes_reajuste": 3,
+          "valor_2026": 205.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
           "pct_crescimento": 0.0,
           "usa_sala": true
         }
@@ -2628,30 +1398,25 @@
           "tipo": "proprietario",
           "ativo": true,
           "sessoes_por_servico": {
-            "Osteopatia ": 19
+            "Osteopatia ": 18.1
           },
           "pct_crescimento_por_servico": {
-            "Osteopatia ": 0.11
+            "Osteopatia ": 0.0
           }
         }
       },
       "profissionais": {
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "tipo": "profissional",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {}
-        },
         "Igor Melgaço da Silva": {
           "nome": "Igor Melgaço da Silva",
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 7
+            "Individual": 0.9,
+            "Domiciliar ": 2.0
           },
           "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.14
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
           }
         },
         "Pablo Henrick de Moura": {
@@ -2659,12 +1424,12 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 82
+            "Domiciliar ": 0.9,
+            "Personalizado": 92.3
           },
           "pct_crescimento_por_servico": {
-            "Domiciliar ": 0.25,
-            "Personalizado": 0.05
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Yuri Peixoto Gabrielli": {
@@ -2672,14 +1437,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
+            "Ginasio": 287.9,
+            "Individual": 0.9,
+            "Domiciliar ": 5.0,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.05,
-            "Domiciliar ": 0.09,
-            "Consultório ": 0.5
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Isabelle Rodrigues de Lira": {
@@ -2687,10 +1456,14 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Personalizado": 58
+            "Ginasio": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 64.2
           },
           "pct_crescimento_por_servico": {
-            "Personalizado": 0.05
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Patricya Hellen Pisani Rial": {
@@ -2698,16 +1471,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 9,
-            "Individual": 66,
-            "Domiciliar ": 3,
-            "Personalizado": 3
+            "Ginasio": 8.0,
+            "Individual": 71.2,
+            "Domiciliar ": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.44,
-            "Individual": 0.06,
-            "Domiciliar ": 0.33,
-            "Personalizado": 0.33
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Felipe Barros Penchel Tresse": {
@@ -2715,14 +1490,18 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 77,
-            "Domiciliar ": 2
+            "Ginasio": 2.0,
+            "Individual": 86.3,
+            "Domiciliar ": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.5,
-            "Individual": 0.05,
-            "Domiciliar ": 0.5
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Cláudia Alves de Souto Ventura": {
@@ -2730,12 +1509,16 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Consultório ": 75,
-            "Personalizado": 4
+            "Ginasio": 2.0,
+            "Domiciliar ": 0.9,
+            "Consultório ": 82.3,
+            "Personalizado": 0.9
           },
           "pct_crescimento_por_servico": {
-            "Consultório ": 0.07,
-            "Personalizado": 0.25
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         },
         "Juliana Cristina de Faria e França": {
@@ -2743,12 +1526,16 @@
           "tipo": "profissional",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 165,
-            "Consultório ": 14
+            "Ginasio": 193.6,
+            "Individual": 0.9,
+            "Consultório ": 10.0,
+            "Personalizado": 0.9
           },
           "pct_crescimento_por_servico": {
-            "Ginasio": 0.06,
-            "Consultório ": 0.14
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
           }
         }
       },
@@ -2756,30 +1543,30 @@
         "Cursos": {
           "nome": "Cursos",
           "categoria": "Ocupação",
-          "valor_mensal": 2.08,
-          "tipo_reajuste": "ipca",
+          "valor_mensal": 1638.64,
+          "tipo_reajuste": "igpm",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08,
-            2.08
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64
           ],
           "ativa": true,
           "tipo_despesa": "fixa",
           "base_variavel": "receita",
-          "pct_receita": 0.0,
+          "pct_receita": 0.0174,
           "valor_por_sessao": 0.0
         },
         "Aluguel": {
@@ -2836,19 +1623,19 @@
           ],
           "ativa": true,
           "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.0708,
-          "valor_por_sessao": 0.0
+          "base_variavel": "sessao",
+          "pct_receita": 0.09,
+          "valor_por_sessao": 6.27
         },
         "Energia": {
           "nome": "Energia",
           "categoria": "Ocupação",
           "valor_mensal": 1577.45,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "tarifas",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             1577.45,
             1577.45,
@@ -2873,7 +1660,7 @@
           "nome": "Limpeza",
           "categoria": "Ocupação",
           "valor_mensal": 767.13,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "dissidio",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -2902,7 +1689,7 @@
           "nome": "Seguros",
           "categoria": "Ocupação",
           "valor_mensal": 60.15,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "igpm",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -2931,7 +1718,7 @@
           "nome": "Sistema",
           "categoria": "Ocupação",
           "valor_mensal": 595.76,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -2981,19 +1768,19 @@
           ],
           "ativa": true,
           "tipo_despesa": "variavel",
-          "base_variavel": "receita",
-          "pct_receita": 0.028300000000000002,
-          "valor_por_sessao": 0.0
+          "base_variavel": "sessao",
+          "pct_receita": 0.04,
+          "valor_por_sessao": 1.79
         },
         "Manutenção": {
           "nome": "Manutenção",
           "categoria": "Ocupação",
           "valor_mensal": 474.89,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             474.89,
             474.89,
@@ -3018,7 +1805,7 @@
           "nome": "Contabilidade",
           "categoria": "Ocupação",
           "valor_mensal": 1518.0,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "contratos",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -3047,7 +1834,7 @@
           "nome": "TV/Telefone/Internet",
           "categoria": "Ocupação",
           "valor_mensal": 360.2,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "tarifas",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
@@ -3076,11 +1863,11 @@
           "nome": "Serviços de Terceiros",
           "categoria": "Ocupação",
           "valor_mensal": 588.54,
-          "tipo_reajuste": "ipca",
+          "tipo_reajuste": "dissidio",
           "mes_reajuste": 1,
           "pct_adicional": 0.0,
           "aplicar_reajuste": true,
-          "tipo_sazonalidade": "uniforme",
+          "tipo_sazonalidade": "sazonal",
           "valores_2025": [
             588.54,
             588.54,
@@ -3105,29 +1892,29 @@
       "custo_pessoal_mensal": 0.0,
       "mes_dissidio": 5,
       "sazonalidade": [
-        1.0,
-        0.85,
-        1.0,
-        0.8,
-        1.0,
-        1.0,
-        1.25,
-        1.25,
-        1.0,
-        1.0,
+        1.02,
+        0.79,
+        0.86,
+        0.99,
+        0.9,
+        1.21,
         1.15,
-        0.85
+        1.16,
+        0.97,
+        1.14,
+        1.1,
+        0.71
       ],
       "operacional": {
-        "num_fisioterapeutas": 11,
-        "num_salas": 10,
-        "horas_atendimento_dia": 10,
+        "num_fisioterapeutas": 10,
+        "num_salas": 3,
+        "horas_atendimento_dia": 12,
         "dias_uteis_mes": 20,
         "modelo_tributario": "PJ - Simples Nacional",
         "modo_calculo_sessoes": "profissional"
       },
       "cadastro_salas": {
-        "horas_funcionamento_dia": 10,
+        "horas_funcionamento_dia": 12,
         "dias_uteis_mes": 20,
         "salas": [
           {
@@ -3156,49 +1943,49 @@
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 5,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 6,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 7,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 8,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 9,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 10,
             "metros_quadrados": 0.0,
             "tipo": "Individual",
             "servicos_atendidos": [],
-            "ativa": true
+            "ativa": false
           },
           {
             "numero": 11,
@@ -3238,11 +2025,11 @@
         ]
       },
       "macro": {
-        "ipca": 0.01,
-        "igpm": 0.035,
-        "dissidio": 0.05,
-        "reajuste_tarifas": 0.1,
-        "reajuste_contratos": 0.08,
+        "ipca": 0.06,
+        "igpm": 0.05,
+        "dissidio": 0.1,
+        "reajuste_tarifas": 0.135,
+        "reajuste_contratos": 0.12,
         "taxa_cartao_credito": 0.0354,
         "taxa_cartao_debito": 0.021099999999999997,
         "taxa_antecipacao": 0.05
@@ -3259,9 +2046,9 @@
         "deducao_dependente_ir": 189.59,
         "aliquota_fgts": 0.08,
         "desconto_vt_pct": 0.06,
-        "dias_uteis_mes": 22,
+        "dias_uteis_mes": 20,
         "mes_dissidio": 5,
-        "pct_dissidio": 0.06
+        "pct_dissidio": 0.1
       },
       "funcionarios_clt": {
         "Rafa": {
@@ -3463,9 +2250,11 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Osteopatia ": 19
+            "Osteopatia ": 18.1
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Osteopatia ": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3478,26 +2267,6 @@
             "segunda": 3.0
           }
         },
-        "Elane Lopes Rodrigues": {
-          "nome": "Elane Lopes Rodrigues",
-          "cargo": "Fisioterapeuta",
-          "nivel": 2,
-          "filial": "Copacabana",
-          "ativo": true,
-          "sessoes_por_servico": {},
-          "pct_crescimento_por_servico": {},
-          "tipo_remuneracao": "percentual",
-          "valores_fixos_por_servico": {},
-          "pct_customizado": 0.0,
-          "escala_semanal": {
-            "sexta": 0.0,
-            "terca": 0.0,
-            "quarta": 0.0,
-            "quinta": 0.0,
-            "sabado": 0.0,
-            "segunda": 0.0
-          }
-        },
         "Igor Melgaço da Silva": {
           "nome": "Igor Melgaço da Silva",
           "cargo": "Fisioterapeuta",
@@ -3505,9 +2274,13 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 7
+            "Individual": 0.9,
+            "Domiciliar ": 2.0
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3527,10 +2300,13 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Domiciliar ": 4,
-            "Personalizado": 82
+            "Domiciliar ": 0.9,
+            "Personalizado": 92.3
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3550,11 +2326,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 225,
-            "Domiciliar ": 11,
-            "Consultório ": 2
+            "Ginasio": 287.9,
+            "Individual": 0.9,
+            "Domiciliar ": 5.0,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3574,9 +2358,15 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Personalizado": 58
+            "Ginasio": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 64.2
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3596,12 +2386,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 9,
-            "Individual": 66,
-            "Domiciliar ": 3,
-            "Personalizado": 3
+            "Ginasio": 8.0,
+            "Individual": 71.2,
+            "Domiciliar ": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3621,11 +2418,19 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 3,
-            "Individual": 77,
-            "Domiciliar ": 2
+            "Ginasio": 2.0,
+            "Individual": 86.3,
+            "Domiciliar ": 0.9,
+            "Consultório ": 0.9,
+            "Personalizado": 0.9
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3645,10 +2450,17 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Consultório ": 75,
-            "Personalizado": 4
+            "Ginasio": 2.0,
+            "Domiciliar ": 0.9,
+            "Consultório ": 82.3,
+            "Personalizado": 0.9
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3668,10 +2480,17 @@
           "filial": "Copacabana",
           "ativo": true,
           "sessoes_por_servico": {
-            "Ginasio": 165,
-            "Consultório ": 14
+            "Ginasio": 193.6,
+            "Individual": 0.9,
+            "Consultório ": 10.0,
+            "Personalizado": 0.9
           },
-          "pct_crescimento_por_servico": {},
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
           "tipo_remuneracao": "percentual",
           "valores_fixos_por_servico": {},
           "pct_customizado": 0.0,
@@ -3713,7 +2532,1328 @@
         "mostrar_no_dre": true
       },
       "premissas_fc": {
-        "caixa_inicial": 0.0,
+        "caixa_inicial": 5000.0,
+        "cp_impostos": 0,
+        "cp_folha_colaboradores": 0.0,
+        "cp_folha_fisioterapeutas": 0,
+        "cp_retirada_proprietarios": 0.0,
+        "cp_encargos_clt": 0.0,
+        "cp_fornecedores": 0,
+        "usar_cp_folha_auto": true,
+        "receita_out_ano_anterior": 0.0,
+        "receita_nov_ano_anterior": 0.0,
+        "receita_dez_ano_anterior": 0.0,
+        "usar_receita_auto": true,
+        "recebimento_avista_no_mes": false,
+        "saldo_minimo": 5000.0,
+        "pct_cartao_1x": 0.1,
+        "pct_cartao_2x": 0.1,
+        "pct_cartao_3x": 0.1,
+        "pct_cartao_4x": 0.1,
+        "pct_cartao_5x": 0.1,
+        "pct_cartao_6x": 0.1
+      },
+      "aplicacoes": {
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225,
+        "pct_cdi": 1.0
+      },
+      "investimentos": [
+        {
+          "descricao": "",
+          "categoria": "Equipamentos",
+          "valor_total": 0.0,
+          "mes_aquisicao": 6,
+          "entrada": 0.0,
+          "taxa_mensal": 0.03,
+          "parcelas": 24,
+          "beneficio_mensal": 0.0,
+          "ativo": true
+        },
+        {
+          "descricao": "Novo Investimento",
+          "categoria": "Equipamentos",
+          "valor_total": 0.0,
+          "mes_aquisicao": 1,
+          "entrada": 0.0,
+          "taxa_mensal": 0.03,
+          "parcelas": 24,
+          "beneficio_mensal": 0.0,
+          "ativo": true
+        },
+        {
+          "descricao": "Novo Investimento",
+          "categoria": "Equipamentos",
+          "valor_total": 0.0,
+          "mes_aquisicao": 1,
+          "entrada": 0.0,
+          "taxa_mensal": 0.03,
+          "parcelas": 24,
+          "beneficio_mensal": 0.0,
+          "ativo": true
+        }
+      ],
+      "financiamentos": [
+        {
+          "descricao": "",
+          "saldo_devedor": 0.0,
+          "taxa_mensal": 0.02,
+          "parcelas_total": 60,
+          "parcelas_pagas": 0,
+          "mes_inicio_2026": 3,
+          "valor_parcela": 0.0,
+          "ativo": true
+        },
+        {
+          "descricao": "Novo Financiamento",
+          "saldo_devedor": 0.0,
+          "taxa_mensal": 0.02,
+          "parcelas_total": 60,
+          "parcelas_pagas": 0,
+          "mes_inicio_2026": 1,
+          "valor_parcela": 0.0,
+          "ativo": true
+        }
+      ],
+      "usar_cenarios": true,
+      "cenario_oficial": "Conservador",
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Ajustes limpos após simulação de metas"
+        }
+      },
+      "usar_comparativo_anterior": true,
+      "faturamento_anterior": [
+        157790.0,
+        122490.0,
+        133700.0,
+        153280.0,
+        139700.0,
+        188650.0,
+        179260.0,
+        180430.0,
+        149950.0,
+        177130.0,
+        171000.0,
+        110000.0
+      ],
+      "ano_anterior": 2025
+    },
+    "Otimista": {
+      "servicos": {
+        "Ginasio": {
+          "nome": "Ginasio",
+          "duracao_minutos": 50,
+          "valor_2026": 150.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        },
+        "Individual": {
+          "nome": "Individual",
+          "duracao_minutos": 50,
+          "valor_2026": 185.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        },
+        "Domiciliar ": {
+          "nome": "Domiciliar ",
+          "duracao_minutos": 50,
+          "valor_2026": 270.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        },
+        "Osteopatia ": {
+          "nome": "Osteopatia ",
+          "duracao_minutos": 50,
+          "valor_2026": 330.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        },
+        "Consultório ": {
+          "nome": "Consultório ",
+          "duracao_minutos": 50,
+          "valor_2026": 230.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        },
+        "Personalizado": {
+          "nome": "Personalizado",
+          "duracao_minutos": 50,
+          "valor_2026": 205.0,
+          "sessoes_mes_base": 0.0,
+          "pct_reajuste": 0.0,
+          "mes_reajuste": 12,
+          "pct_crescimento": 0.0,
+          "usa_sala": true
+        }
+      },
+      "valores_proprietario": {},
+      "valores_profissional": {},
+      "proprietarios": {
+        "Felipe Vidal ": {
+          "nome": "Felipe Vidal ",
+          "tipo": "proprietario",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Osteopatia ": 20
+          },
+          "pct_crescimento_por_servico": {
+            "Osteopatia ": 0.0
+          }
+        }
+      },
+      "profissionais": {
+        "Igor Melgaço da Silva": {
+          "nome": "Igor Melgaço da Silva",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Individual": 1,
+            "Domiciliar ": 3
+          },
+          "pct_crescimento_por_servico": {
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
+          }
+        },
+        "Pablo Henrick de Moura": {
+          "nome": "Pablo Henrick de Moura",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Personalizado": 103
+          },
+          "pct_crescimento_por_servico": {
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Yuri Peixoto Gabrielli": {
+          "nome": "Yuri Peixoto Gabrielli",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 317,
+            "Individual": 1,
+            "Domiciliar ": 6,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Isabelle Rodrigues de Lira": {
+          "nome": "Isabelle Rodrigues de Lira",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 1,
+            "Consultório ": 1,
+            "Personalizado": 71
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Patricya Hellen Pisani Rial": {
+          "nome": "Patricya Hellen Pisani Rial",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 9,
+            "Individual": 78,
+            "Domiciliar ": 1,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Felipe Barros Penchel Tresse": {
+          "nome": "Felipe Barros Penchel Tresse",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 3,
+            "Individual": 96,
+            "Domiciliar ": 1,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Cláudia Alves de Souto Ventura": {
+          "nome": "Cláudia Alves de Souto Ventura",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 3,
+            "Domiciliar ": 1,
+            "Consultório ": 92,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        },
+        "Juliana Cristina de Faria e França": {
+          "nome": "Juliana Cristina de Faria e França",
+          "tipo": "profissional",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 212,
+            "Individual": 1,
+            "Consultório ": 11,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          }
+        }
+      },
+      "despesas": {
+        "Cursos": {
+          "nome": "Cursos",
+          "categoria": "Ocupação",
+          "valor_mensal": 1638.64,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64,
+            1638.64
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Aluguel": {
+          "nome": "Aluguel",
+          "categoria": "Ocupação",
+          "valor_mensal": 8408.55,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "sessao",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 12.17
+        },
+        "Compras": {
+          "nome": "Compras",
+          "categoria": "Ocupação",
+          "valor_mensal": 0.0,
+          "tipo_reajuste": "ipca",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "variavel",
+          "base_variavel": "sessao",
+          "pct_receita": 0.0708,
+          "valor_por_sessao": 5.64
+        },
+        "Energia": {
+          "nome": "Energia",
+          "categoria": "Ocupação",
+          "valor_mensal": 1577.45,
+          "tipo_reajuste": "tarifas",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45,
+            1577.45
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Limpeza": {
+          "nome": "Limpeza",
+          "categoria": "Ocupação",
+          "valor_mensal": 767.13,
+          "tipo_reajuste": "dissidio",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13,
+            767.13
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Seguros": {
+          "nome": "Seguros",
+          "categoria": "Ocupação",
+          "valor_mensal": 60.15,
+          "tipo_reajuste": "igpm",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15,
+            60.15
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Sistema": {
+          "nome": "Sistema",
+          "categoria": "Ocupação",
+          "valor_mensal": 595.76,
+          "tipo_reajuste": "contratos",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76,
+            595.76
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Marketing": {
+          "nome": "Marketing",
+          "categoria": "Ocupação",
+          "valor_mensal": 0.0,
+          "tipo_reajuste": "ipca",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "variavel",
+          "base_variavel": "sessao",
+          "pct_receita": 0.028300000000000002,
+          "valor_por_sessao": 2.25
+        },
+        "Manutenção": {
+          "nome": "Manutenção",
+          "categoria": "Ocupação",
+          "valor_mensal": 474.89,
+          "tipo_reajuste": "contratos",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89,
+            474.89
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Contabilidade": {
+          "nome": "Contabilidade",
+          "categoria": "Ocupação",
+          "valor_mensal": 1518.0,
+          "tipo_reajuste": "contratos",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0,
+            1518.0
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "TV/Telefone/Internet": {
+          "nome": "TV/Telefone/Internet",
+          "categoria": "Ocupação",
+          "valor_mensal": 360.2,
+          "tipo_reajuste": "tarifas",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "uniforme",
+          "valores_2025": [
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2,
+            360.2
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        },
+        "Serviços de Terceiros": {
+          "nome": "Serviços de Terceiros",
+          "categoria": "Ocupação",
+          "valor_mensal": 588.54,
+          "tipo_reajuste": "dissidio",
+          "mes_reajuste": 1,
+          "pct_adicional": 0.0,
+          "aplicar_reajuste": true,
+          "tipo_sazonalidade": "sazonal",
+          "valores_2025": [
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54,
+            588.54
+          ],
+          "ativa": true,
+          "tipo_despesa": "fixa",
+          "base_variavel": "receita",
+          "pct_receita": 0.0,
+          "valor_por_sessao": 0.0
+        }
+      },
+      "custo_pessoal_mensal": 0.0,
+      "mes_dissidio": 5,
+      "sazonalidade": [
+        1.02,
+        0.79,
+        0.86,
+        0.99,
+        0.9,
+        1.21,
+        1.15,
+        1.16,
+        0.97,
+        1.14,
+        1.1,
+        0.71
+      ],
+      "operacional": {
+        "num_fisioterapeutas": 10,
+        "num_salas": 3,
+        "horas_atendimento_dia": 12,
+        "dias_uteis_mes": 20,
+        "modelo_tributario": "PJ - Simples Nacional",
+        "modo_calculo_sessoes": "profissional"
+      },
+      "cadastro_salas": {
+        "horas_funcionamento_dia": 12,
+        "dias_uteis_mes": 20,
+        "salas": [
+          {
+            "numero": 1,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 2,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 3,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": true
+          },
+          {
+            "numero": 4,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          },
+          {
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "tipo": "Individual",
+            "servicos_atendidos": [],
+            "ativa": false
+          }
+        ]
+      },
+      "macro": {
+        "ipca": 0.03,
+        "igpm": 0.01,
+        "dissidio": 0.04,
+        "reajuste_tarifas": 0.07,
+        "reajuste_contratos": 0.04,
+        "taxa_cartao_credito": 0.0354,
+        "taxa_cartao_debito": 0.021099999999999997,
+        "taxa_antecipacao": 0.05
+      },
+      "pagamento": {
+        "dinheiro_pix": 0.3,
+        "cartao_credito": 0.5,
+        "cartao_debito": 0.2,
+        "outros": 0.0,
+        "pct_antecipacao": 0.0
+      },
+      "premissas_folha": {
+        "regime_tributario": "PJ - Simples Nacional",
+        "deducao_dependente_ir": 189.59,
+        "aliquota_fgts": 0.08,
+        "desconto_vt_pct": 0.06,
+        "dias_uteis_mes": 20,
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.04
+      },
+      "funcionarios_clt": {
+        "Rafa": {
+          "nome": "Rafa",
+          "cargo": "",
+          "salario_base": 1200.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "João": {
+          "nome": "João",
+          "cargo": "Estagiario ",
+          "salario_base": 500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Rubia": {
+          "nome": "Rubia",
+          "cargo": "",
+          "salario_base": 500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Karine": {
+          "nome": "Karine",
+          "cargo": "",
+          "salario_base": 1800.0,
+          "tipo_vinculo": "clt",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Lucia ": {
+          "nome": "Lucia ",
+          "cargo": "",
+          "salario_base": 1030.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Mylena": {
+          "nome": "Mylena",
+          "cargo": "Estagiario ",
+          "salario_base": 500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Sirley": {
+          "nome": "Sirley",
+          "cargo": "",
+          "salario_base": 1800.0,
+          "tipo_vinculo": "clt",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Alexia ": {
+          "nome": "Alexia ",
+          "cargo": "",
+          "salario_base": 3500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Fabiana": {
+          "nome": "Fabiana",
+          "cargo": "",
+          "salario_base": 1500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Flavio ": {
+          "nome": "Flavio ",
+          "cargo": "",
+          "salario_base": 1000.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Mariana": {
+          "nome": "Mariana",
+          "cargo": "Estagiario ",
+          "salario_base": 500.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        },
+        "Guilherme": {
+          "nome": "Guilherme",
+          "cargo": "Estagiario ",
+          "salario_base": 400.0,
+          "tipo_vinculo": "informal",
+          "dependentes_ir": 0,
+          "vt_dia": 0.0,
+          "vr_dia": 0.0,
+          "plano_saude": 0.0,
+          "plano_odonto": 0.0,
+          "mes_admissao": 1,
+          "mes_aumento": 13,
+          "pct_reajuste": 0.0,
+          "ativo": true
+        }
+      },
+      "socios_prolabore": {
+        "Felipe Vidal ": {
+          "nome": "Felipe Vidal ",
+          "prolabore": 1631.0,
+          "dependentes_ir": 0,
+          "mes_reajuste": 5,
+          "pct_aumento": 0.0,
+          "ativo": true
+        }
+      },
+      "fisioterapeutas": {
+        "Felipe Vidal ": {
+          "nome": "Felipe Vidal ",
+          "cargo": "Proprietário",
+          "nivel": 0,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Osteopatia ": 20
+          },
+          "pct_crescimento_por_servico": {
+            "Osteopatia ": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 3.0,
+            "terca": 3.0,
+            "quarta": 3.0,
+            "quinta": 3.0,
+            "sabado": 0.0,
+            "segunda": 3.0
+          }
+        },
+        "Igor Melgaço da Silva": {
+          "nome": "Igor Melgaço da Silva",
+          "cargo": "Fisioterapeuta",
+          "nivel": 2,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Individual": 1,
+            "Domiciliar ": 3
+          },
+          "pct_crescimento_por_servico": {
+            "Individual": 0.0,
+            "Domiciliar ": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Pablo Henrick de Moura": {
+          "nome": "Pablo Henrick de Moura",
+          "cargo": "Fisioterapeuta",
+          "nivel": 3,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Domiciliar ": 1,
+            "Personalizado": 103
+          },
+          "pct_crescimento_por_servico": {
+            "Domiciliar ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Yuri Peixoto Gabrielli": {
+          "nome": "Yuri Peixoto Gabrielli",
+          "cargo": "Fisioterapeuta",
+          "nivel": 3,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 317,
+            "Individual": 1,
+            "Domiciliar ": 6,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Isabelle Rodrigues de Lira": {
+          "nome": "Isabelle Rodrigues de Lira",
+          "cargo": "Fisioterapeuta",
+          "nivel": 3,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 1,
+            "Consultório ": 1,
+            "Personalizado": 71
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Patricya Hellen Pisani Rial": {
+          "nome": "Patricya Hellen Pisani Rial",
+          "cargo": "Fisioterapeuta",
+          "nivel": 3,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 9,
+            "Individual": 78,
+            "Domiciliar ": 1,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Felipe Barros Penchel Tresse": {
+          "nome": "Felipe Barros Penchel Tresse",
+          "cargo": "Fisioterapeuta",
+          "nivel": 3,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 3,
+            "Individual": 96,
+            "Domiciliar ": 1,
+            "Consultório ": 1,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        },
+        "Cláudia Alves de Souto Ventura": {
+          "nome": "Cláudia Alves de Souto Ventura",
+          "cargo": "Gerente",
+          "nivel": 2,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 3,
+            "Domiciliar ": 1,
+            "Consultório ": 92,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Domiciliar ": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 8.0,
+            "terca": 8.0,
+            "quarta": 8.0,
+            "quinta": 8.0,
+            "sabado": 0.0,
+            "segunda": 8.0
+          }
+        },
+        "Juliana Cristina de Faria e França": {
+          "nome": "Juliana Cristina de Faria e França",
+          "cargo": "Fisioterapeuta",
+          "nivel": 2,
+          "filial": "Copacabana",
+          "ativo": true,
+          "sessoes_por_servico": {
+            "Ginasio": 212,
+            "Individual": 1,
+            "Consultório ": 11,
+            "Personalizado": 1
+          },
+          "pct_crescimento_por_servico": {
+            "Ginasio": 0.0,
+            "Individual": 0.0,
+            "Consultório ": 0.0,
+            "Personalizado": 0.0
+          },
+          "tipo_remuneracao": "percentual",
+          "valores_fixos_por_servico": {},
+          "pct_customizado": 0.0,
+          "escala_semanal": {
+            "sexta": 0.0,
+            "terca": 0.0,
+            "quarta": 0.0,
+            "quinta": 0.0,
+            "sabado": 0.0,
+            "segunda": 0.0
+          }
+        }
+      },
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.25,
+          "2": 0.25,
+          "3": 0.25,
+          "4": 0.25
+        },
+        "pct_producao_propria": 0.6,
+        "pct_faturamento_total": 0.2,
+        "pct_base_remuneracao_prop": 0.75,
+        "pct_gerencia_equipe": 0.01,
+        "pct_base_remuneracao_ger": 0.75
+      },
+      "premissas_simples": {
+        "faturamento_pf_anual": 0.0,
+        "aliquota_inss_pf": 0.11,
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28
+      },
+      "premissas_dividendos": {
+        "distribuir": true,
+        "pct_reserva_legal": 0.045,
+        "pct_reserva_investimento": 0.24,
+        "frequencia": "Trimestral",
+        "pct_distribuir": 0.3,
+        "mostrar_no_dre": true
+      },
+      "premissas_fc": {
+        "caixa_inicial": 5000.0,
         "cp_impostos": 0,
         "cp_folha_colaboradores": 0.0,
         "cp_folha_fisioterapeutas": 0,
@@ -3803,7 +3943,7 @@
           "sessoes": {},
           "valores": {},
           "despesas": {},
-          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+          "descricao": "Ajustes limpos após simulação de metas"
         },
         "Pessimista": {
           "sessoes": {},
