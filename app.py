@@ -2967,16 +2967,6 @@ with st.sidebar:
 
     st.divider()
 
-    # ----- SEÇÃO: LANÇAMENTOS -----
-    st.caption("✏️ LANÇAMENTOS")
-    menu_radio([
-        "✅ Lançar Realizado",
-        "📊 Orçado x Realizado",
-        "📋 DRE Comparativo",
-    ], "menu_lancamentos")
-
-    st.divider()
-
     # ----- SEÇÃO: SISTEMA -----
     st.caption("⚙️ SISTEMA")
     menu_radio([
@@ -2986,9 +2976,18 @@ with st.sidebar:
         "📄 FC (Excel)",
     ], "menu_sistema")
 
-    # ----- SEÇÃO: ADMIN -----
+    # ----- SEÇÃO: ADMIN E LANÇAMENTOS (só para admins) -----
     user_logado = get_current_user() if AUTH_ENABLED else None
     is_admin_user = user_logado and user_logado.get("role") == "admin" if user_logado else True
+
+    if is_admin_user:
+        st.divider()
+        st.caption("🚧 LANÇAMENTOS (Em Construção)")
+        menu_radio([
+            "✅ Lançar Realizado",
+            "📊 Orçado x Realizado",
+            "📋 DRE Comparativo",
+        ], "menu_lancamentos")
 
     if is_admin_user:
         st.divider()
