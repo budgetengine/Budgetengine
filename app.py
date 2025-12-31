@@ -9657,15 +9657,258 @@ def pagina_ponto_equilibrio():
                     """)
 
 
+def _pagina_custeio_abc_consolidado():
+    """Mostra Custeio ABC consolidado de todas as filiais - v1.99.80"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+    import plotly.graph_objects as go
+    import plotly.express as px
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"📊 **Visão Consolidada** - Custeio ABC de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "receita_total": 0,
+        "lucro_total": 0,
+        "overhead_total": 0,
+        "soma_margem": 0
+    }
+
+    # Ranking consolidado de serviços
+    servicos_consolidados = {}
+
+    # Para gráfico de lucro por filial
+    lucro_por_filial = []
+    filiais_count = 0
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula TDABC da filial
+                tdabc_resumo = motor.get_resumo_tdabc()
+                ranking = tdabc_resumo['ranking']
+
+                receita = sum(r['receita'] for r in ranking) if ranking else 0
+                lucro = tdabc_resumo['lucro_total']
+                overhead = tdabc_resumo['overhead_total']
+                margem = (lucro / receita * 100) if receita > 0 else 0
+
+                # Acumula totais
+                totais["receita_total"] += receita
+                totais["lucro_total"] += lucro
+                totais["overhead_total"] += overhead
+                totais["soma_margem"] += margem
+
+                # Melhor e pior serviço da filial
+                if ranking:
+                    melhor = max(ranking, key=lambda x: x['margem_abc'])
+                    pior = min(ranking, key=lambda x: x['margem_abc'])
+                    melhor_srv = f"{melhor['servico']} ({melhor['margem_abc']:.1f}%)"
+                    pior_srv = f"{pior['servico']} ({pior['margem_abc']:.1f}%)"
+
+                    # Consolidar ranking de serviços
+                    for srv in ranking:
+                        nome_srv = srv['servico']
+                        if nome_srv not in servicos_consolidados:
+                            servicos_consolidados[nome_srv] = {
+                                "receita": 0,
+                                "lucro": 0,
+                                "count": 0
+                            }
+                        servicos_consolidados[nome_srv]["receita"] += srv['receita']
+                        servicos_consolidados[nome_srv]["lucro"] += srv['lucro_abc']
+                        servicos_consolidados[nome_srv]["count"] += 1
+                else:
+                    melhor_srv = "-"
+                    pior_srv = "-"
+
+                # Lucro por filial para gráfico
+                lucro_por_filial.append({
+                    "Filial": filial_nome,
+                    "Lucro": lucro,
+                    "Receita": receita
+                })
+
+                filiais_count += 1
+
+                # Status por cor
+                if margem >= 20:
+                    cor = "🟢"
+                elif margem >= 10:
+                    cor = "🟡"
+                else:
+                    cor = "🔴"
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita": f"R$ {receita:,.0f}",
+                    "Overhead": f"R$ {overhead:,.0f}",
+                    "Lucro ABC": f"R$ {lucro:,.0f}",
+                    "Margem": f"{cor} {margem:.1f}%",
+                    "Melhor Serviço": melhor_srv,
+                    "Pior Serviço": pior_srv
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita": "R$ 0",
+                    "Overhead": "R$ 0",
+                    "Lucro ABC": "R$ 0",
+                    "Margem": "0%",
+                    "Melhor Serviço": "-",
+                    "Pior Serviço": "-"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Receita": "Erro",
+                "Overhead": "-",
+                "Lucro ABC": "-",
+                "Margem": "-",
+                "Melhor Serviço": "-",
+                "Pior Serviço": "-"
+            })
+
+    # Calcula médias
+    if filiais_count > 0:
+        media_margem = totais["soma_margem"] / filiais_count
+    else:
+        media_margem = 0
+
+    margem_total = (totais["lucro_total"] / totais["receita_total"] * 100) if totais["receita_total"] > 0 else 0
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Totais Consolidados")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("💵 Receita Total Anual", f"R$ {totais['receita_total']:,.0f}")
+
+    with col2:
+        st.metric("🏢 Overhead Total", f"R$ {totais['overhead_total']:,.0f}")
+
+    with col3:
+        st.metric("💰 Lucro ABC Total", f"R$ {totais['lucro_total']:,.0f}")
+
+    with col4:
+        cor = "🟢" if margem_total >= 20 else ("🟡" if margem_total >= 10 else "🔴")
+        st.metric("📈 Margem Consolidada", f"{cor} {margem_total:.1f}%")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ===== GRÁFICOS =====
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📊 Lucro por Filial")
+        if lucro_por_filial:
+            df_lucro = pd.DataFrame(lucro_por_filial)
+            fig = px.bar(
+                df_lucro,
+                x="Filial",
+                y="Lucro",
+                color="Lucro",
+                color_continuous_scale=["#e74c3c", "#f39c12", "#27ae60"],
+                text_auto=True
+            )
+            fig.update_layout(height=350, showlegend=False)
+            fig.update_traces(texttemplate='R$ %{y:,.0f}', textposition='outside')
+            st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        st.subheader("🏆 Ranking de Serviços (Consolidado)")
+        if servicos_consolidados:
+            # Calcular margem consolidada por serviço
+            ranking_final = []
+            for srv, dados in servicos_consolidados.items():
+                margem_srv = (dados["lucro"] / dados["receita"] * 100) if dados["receita"] > 0 else 0
+                ranking_final.append({
+                    "Serviço": srv,
+                    "Receita": dados["receita"],
+                    "Lucro": dados["lucro"],
+                    "Margem": margem_srv
+                })
+
+            # Ordenar por margem
+            ranking_final.sort(key=lambda x: x["Margem"], reverse=True)
+
+            # Gráfico de barras horizontais
+            df_rank = pd.DataFrame(ranking_final[:10])  # Top 10
+            fig = go.Figure()
+
+            colors = ['#27ae60' if m >= 20 else '#f39c12' if m >= 10 else '#e74c3c' for m in df_rank["Margem"]]
+
+            fig.add_trace(go.Bar(
+                y=df_rank["Serviço"],
+                x=df_rank["Margem"],
+                orientation='h',
+                marker_color=colors,
+                text=[f"{m:.1f}%" for m in df_rank["Margem"]],
+                textposition='outside'
+            ))
+
+            fig.update_layout(
+                height=350,
+                xaxis_title="Margem ABC (%)",
+                yaxis=dict(autorange="reversed")
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ===== RESUMO =====
+    st.divider()
+
+    if margem_total >= 20:
+        st.success(f"✅ **Rentabilidade saudável** - Margem consolidada de {margem_total:.1f}%. Lucro anual de R$ {totais['lucro_total']:,.0f}")
+    elif margem_total >= 10:
+        st.warning(f"🟡 **Atenção** - Margem de {margem_total:.1f}%. Analisar serviços com baixa rentabilidade.")
+    else:
+        st.error(f"🔴 **Situação crítica** - Margem de apenas {margem_total:.1f}%. Revisar estrutura de custos.")
+
+
 def pagina_custeio_abc():
     """Página de Custeio ABC (Activity-Based Costing) - TDABC"""
     render_header()
-    
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_custeio_abc_consolidado()
+        return
+
     # CORREÇÃO v1.99.2: Garante que motor é independente antes de modificar
     garantir_motor_independente()
-    
+
     st.markdown('<div class="section-header"><h3>🎯 Custeio ABC - Activity-Based Costing</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
     
     # IMPORTANTE: Sincronizar cadastro_salas com premissas operacionais ANTES de qualquer cálculo
