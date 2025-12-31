@@ -4355,17 +4355,24 @@ def pagina_dashboard():
         st.caption("Quanto sobra por atendimento")
     
     st.markdown("---")
-    
+
     # ========================================================================
     # NÍVEL 4: DETALHES EM TABS
     # ========================================================================
+    # No modo consolidado, não temos dados mensais detalhados - mostra mensagem
+    if is_consolidado:
+        st.markdown("## 📋 Visão Consolidada")
+        st.info("📊 **Modo Consolidado** - Os valores acima representam a soma de todas as filiais.")
+        st.caption("Para análise detalhada por mês, selecione uma filial específica.")
+        return
+
     st.markdown("## 📋 Análise Detalhada")
     st.caption("📖 Clique nas abas para explorar cada área. Todas as tabelas e gráficos têm explicações!")
-    
+
     tab_evolucao, tab_servicos, tab_profissionais, tab_ocupacao, tab_custos, tab_alertas = st.tabs([
         "📈 Evolução", "🏆 Serviços", "👥 Profissionais", "📊 Ocupação", "💸 Custos", "🚨 Alertas"
     ])
-    
+
     # -------------------- TAB EVOLUÇÃO --------------------
     with tab_evolucao:
         st.markdown("### 📈 Evolução Mensal")
