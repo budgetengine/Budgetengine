@@ -2911,43 +2911,13 @@ with st.sidebar:
     motor = st.session_state.get('motor')
     usar_cenarios = getattr(motor, 'usar_cenarios', True) if motor else True
     
-    # ========== MENU ORGANIZADO POR SEÇÕES ==========
+    # ========== MENU SIMPLES ==========
+    opcoes_menu = []
 
-    # Inicializa página selecionada
-    if 'pagina_selecionada' not in st.session_state:
-        st.session_state.pagina_selecionada = "🏠 Dashboard"
-
-    pagina = st.session_state.pagina_selecionada
-
-    # Função para criar radio e atualizar seleção
-    def menu_radio(opcoes, key):
-        # Verifica se alguma opção deste grupo está selecionada
-        idx = None
-        for i, op in enumerate(opcoes):
-            if op == st.session_state.pagina_selecionada:
-                idx = i
-                break
-
-        sel = st.radio(
-            "nav", opcoes,
-            index=idx if idx is not None else None,
-            key=key,
-            label_visibility="collapsed"
-        )
-        if sel and sel != st.session_state.pagina_selecionada:
-            st.session_state.pagina_selecionada = sel
-            st.rerun()
-        return sel
-
-    # ----- SEÇÃO: CENÁRIOS -----
     if usar_cenarios:
-        st.caption("📊 CENÁRIOS")
-        menu_radio(["🎯 Cenários", "📊 Comparativo Cenários"], "menu_cenarios")
-        st.divider()
+        opcoes_menu.extend(["🎯 Cenários", "📊 Comparativo Cenários"])
 
-    # ----- SEÇÃO: ANÁLISES -----
-    st.caption("📈 ANÁLISES")
-    menu_radio([
+    opcoes_menu.extend([
         "🏠 Dashboard",
         "🤖 Consultor IA",
         "⚙️ Premissas",
@@ -2963,43 +2933,22 @@ with st.sidebar:
         "📊 Taxa Ocupação",
         "⚖️ Ponto Equilíbrio",
         "🎯 Custeio ABC",
-    ], "menu_analises")
-
-    st.divider()
-
-    # ----- SEÇÃO: SISTEMA -----
-    st.caption("⚙️ SISTEMA")
-    menu_radio([
+        "✅ Lançar Realizado",
+        "📊 Orçado x Realizado",
+        "📋 DRE Comparativo",
         "👥 Clientes",
         "📥 Importar Dados",
         "📄 DRE (Excel)",
         "📄 FC (Excel)",
-    ], "menu_sistema")
+        "🔧 Admin",
+        "🛠️ Diagnóstico Dev",
+    ])
 
-    # ----- SEÇÃO: ADMIN E LANÇAMENTOS -----
-    user_logado = get_current_user() if AUTH_ENABLED else None
-    # TEMPORÁRIO: Libera acesso para qualquer usuário logado (ou se auth desabilitado)
-    is_admin_user = True if not AUTH_ENABLED else (user_logado is not None)
-
-    if is_admin_user:
-        st.divider()
-        st.caption("🚧 LANÇAMENTOS (Em Construção)")
-        menu_radio([
-            "✅ Lançar Realizado",
-            "📊 Orçado x Realizado",
-            "📋 DRE Comparativo",
-        ], "menu_lancamentos")
-
-    if is_admin_user:
-        st.divider()
-        st.caption("🔧 ADMIN")
-        menu_radio([
-            "🔧 Admin",
-            "🛠️ Diagnóstico Dev"
-        ], "menu_admin")
-
-    # Pega página atual
-    pagina = st.session_state.pagina_selecionada
+    pagina = st.radio(
+        "Navegação",
+        opcoes_menu,
+        label_visibility="collapsed"
+    )
     
     # AUTO-SAVE: Salva automaticamente ao mudar de página
     if st.session_state.pagina_anterior and st.session_state.pagina_anterior != pagina:
