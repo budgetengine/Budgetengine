@@ -8425,12 +8425,229 @@ def pagina_taxa_ocupacao():
                 st.metric("Status Simulado", status_sim)
 
 
+def _pagina_ponto_equilibrio_consolidado():
+    """Mostra Ponto de Equilíbrio consolidado de todas as filiais - v1.99.79"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+    import plotly.graph_objects as go
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"📊 **Visão Consolidada** - Ponto de Equilíbrio de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "receita_total": 0,
+        "ebitda_total": 0,
+        "pe_contabil_total": 0,
+        "margem_seguranca_total": 0,
+        "custo_ociosidade_total": 0,
+        "custos_fixos_total": 0,
+        "soma_margem_pct": 0,
+        "soma_gao": 0
+    }
+
+    # Para gráfico mensal
+    pe_mensal = [0.0] * 12
+    receita_mensal = [0.0] * 12
+    filiais_count = 0
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula PE da filial
+                pe_resumo = motor.get_resumo_pe()
+
+                receita = pe_resumo['receita_total']
+                ebitda = pe_resumo['ebitda_total']
+                pe_contabil = pe_resumo['pe_contabil_total']
+                pe_medio = pe_resumo['pe_contabil_medio']
+                margem_pct = pe_resumo['margem_seguranca_media_pct'] * 100
+                gao = pe_resumo['gao_medio']
+                custo_ocio = pe_resumo['custo_ociosidade_total']
+                status = pe_resumo['status_predominante']
+
+                # Acumula totais
+                totais["receita_total"] += receita
+                totais["ebitda_total"] += ebitda
+                totais["pe_contabil_total"] += pe_contabil
+                totais["custo_ociosidade_total"] += custo_ocio
+                totais["custos_fixos_total"] += pe_resumo['custos_fixos_total']
+                totais["soma_margem_pct"] += margem_pct
+                totais["soma_gao"] += gao
+
+                # Acumula mensais para gráfico
+                for m, mes_data in enumerate(pe_resumo['meses']):
+                    pe_mensal[m] += mes_data['pe_contabil']
+                    receita_mensal[m] += mes_data['receita_liquida']
+
+                filiais_count += 1
+
+                # Status por cor
+                if margem_pct >= 20:
+                    cor = "🟢"
+                elif margem_pct >= 10:
+                    cor = "🟡"
+                else:
+                    cor = "🔴"
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita Anual": f"R$ {receita:,.0f}",
+                    "PE Médio/Mês": f"R$ {pe_medio:,.0f}",
+                    "Margem Seg.": f"{cor} {margem_pct:.1f}%",
+                    "EBITDA": f"R$ {ebitda:,.0f}",
+                    "GAO": f"{gao:.2f}x",
+                    "Status": status
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita Anual": "R$ 0",
+                    "PE Médio/Mês": "R$ 0",
+                    "Margem Seg.": "0%",
+                    "EBITDA": "R$ 0",
+                    "GAO": "-",
+                    "Status": "-"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Receita Anual": "Erro",
+                "PE Médio/Mês": "-",
+                "Margem Seg.": "-",
+                "EBITDA": "-",
+                "GAO": "-",
+                "Status": "-"
+            })
+
+    # Calcula médias
+    if filiais_count > 0:
+        media_margem_pct = totais["soma_margem_pct"] / filiais_count
+        media_gao = totais["soma_gao"] / filiais_count
+        pe_medio_consolidado = totais["pe_contabil_total"] / 12
+    else:
+        media_margem_pct = 0
+        media_gao = 0
+        pe_medio_consolidado = 0
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Totais Consolidados")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("💰 Receita Total Anual", f"R$ {totais['receita_total']:,.0f}")
+
+    with col2:
+        st.metric("⚖️ PE Médio Mensal", f"R$ {pe_medio_consolidado:,.0f}")
+
+    with col3:
+        cor = "🟢" if media_margem_pct >= 20 else ("🟡" if media_margem_pct >= 10 else "🔴")
+        st.metric("🛡️ Margem Segurança Média", f"{cor} {media_margem_pct:.1f}%")
+
+    with col4:
+        st.metric("📈 EBITDA Total", f"R$ {totais['ebitda_total']:,.0f}")
+
+    # Segunda linha de cards
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("📊 GAO Médio", f"{media_gao:.2f}x")
+
+    with col2:
+        st.metric("💸 Custo Ociosidade", f"R$ {totais['custo_ociosidade_total']:,.0f}")
+
+    with col3:
+        st.metric("🏢 Custos Fixos Totais", f"R$ {totais['custos_fixos_total']:,.0f}")
+
+    with col4:
+        st.metric("🏥 Filiais Analisadas", f"{filiais_count}")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ===== GRÁFICO EVOLUÇÃO MENSAL =====
+    st.subheader("📈 Evolução Mensal Consolidada")
+
+    MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=MESES,
+        y=receita_mensal,
+        name="Receita",
+        marker_color="#3498db"
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=MESES,
+        y=pe_mensal,
+        name="Ponto de Equilíbrio",
+        line=dict(color="#e74c3c", width=3),
+        mode="lines+markers"
+    ))
+
+    fig.update_layout(
+        xaxis_title="Mês",
+        yaxis_title="Valor (R$)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=400,
+        barmode='group'
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ===== RESUMO =====
+    st.divider()
+
+    folga_mensal = (totais['receita_total'] / 12) - pe_medio_consolidado
+    if media_margem_pct >= 20:
+        st.success(f"✅ **Situação saudável** - Margem de segurança média de {media_margem_pct:.1f}%. Folga mensal de R$ {folga_mensal:,.0f}")
+    elif media_margem_pct >= 10:
+        st.warning(f"🟡 **Atenção** - Margem de segurança de {media_margem_pct:.1f}%. Folga mensal de R$ {folga_mensal:,.0f}")
+    else:
+        st.error(f"🔴 **Situação crítica** - Margem de segurança de apenas {media_margem_pct:.1f}%")
+
+
 def pagina_ponto_equilibrio():
     """Página de análise de Ponto de Equilíbrio + Custo de Ociosidade"""
     render_header()
-    
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_ponto_equilibrio_consolidado()
+        return
+
     st.markdown('<div class="section-header"><h3>⚖️ Ponto de Equilíbrio</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
     
     # Calcular análise completa
