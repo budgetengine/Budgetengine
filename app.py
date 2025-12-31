@@ -2917,7 +2917,7 @@ with st.sidebar:
     motor = st.session_state.get('motor')
     usar_cenarios = getattr(motor, 'usar_cenarios', True) if motor else True
     
-    # ========== MENU SIMPLES ==========
+    # ========== MENU SIMPLES v1.99.90 ==========
     opcoes_menu = []
 
     if usar_cenarios:
@@ -2939,23 +2939,41 @@ with st.sidebar:
         "📊 Taxa Ocupação",
         "⚖️ Ponto Equilíbrio",
         "🎯 Custeio ABC",
-        "─────────────",
+    ])
+
+    # Separador visual 1
+    st.markdown("<hr style='margin:5px 0; border:none; border-top:1px solid #ddd;'>", unsafe_allow_html=True)
+
+    opcoes_lancamentos = [
         "✅ Lançar Realizado",
         "📊 Orçado x Realizado",
         "📋 DRE Comparativo",
-        "─────────────",
+    ]
+
+    # Separador visual 2
+    st.markdown("<hr style='margin:5px 0; border:none; border-top:1px solid #ddd;'>", unsafe_allow_html=True)
+
+    opcoes_sistema = [
         "👥 Clientes",
         "📥 Importar Dados",
         "📄 DRE (Excel)",
         "📄 FC (Excel)",
-        "─────────────",
+    ]
+
+    # Separador visual 3
+    st.markdown("<hr style='margin:5px 0; border:none; border-top:1px solid #ddd;'>", unsafe_allow_html=True)
+
+    opcoes_admin = [
         "🔧 Admin",
         "🛠️ Diagnóstico Dev",
-    ])
+    ]
+
+    # Junta todas as opções para o radio (sem separadores)
+    todas_opcoes = opcoes_menu + opcoes_lancamentos + opcoes_sistema + opcoes_admin
 
     pagina = st.radio(
         "Navegação",
-        opcoes_menu,
+        todas_opcoes,
         label_visibility="collapsed"
     )
     
@@ -3812,10 +3830,64 @@ def calcular_indicadores_eficiencia(motor, modelo: str = None) -> dict:
 # PÁGINAS
 # ============================================
 
+def _calcular_consolidado_somando_filiais(manager, cliente_id: str, cenario: str, meses_range: list) -> dict:
+    """Calcula valores consolidados somando cada filial individualmente.
+
+    Abordagem simples: carrega cada filial, calcula os valores, soma tudo.
+    """
+    from modules.cliente_manager import carregar_motores_cenarios
+
+    totais = {
+        "receita_bruta": 0,
+        "receita_liquida": 0,
+        "ebitda": 0,
+        "custos_fixos": 0,
+        "custos_variaveis": 0,
+        "sessoes": 0,
+        "pe_contabil": 0,
+        "taxa_prof": 0,
+        "taxa_sala": 0,
+        "filiais_count": 0
+    }
+
+    filiais = manager.listar_filiais(cliente_id)
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motor = resultado.get("motores", {}).get(cenario)
+
+            if motor:
+                pe_anual = motor.calcular_pe_anual()
+                dre = motor.calcular_dre()
+                ocupacao = motor.calcular_ocupacao_anual()
+
+                totais["receita_bruta"] += sum(dre.get("Receita Bruta Total", [0]*12)[m] for m in meses_range)
+                totais["receita_liquida"] += sum(pe_anual.meses[m].receita_liquida for m in meses_range)
+                totais["ebitda"] += sum(pe_anual.meses[m].ebitda for m in meses_range)
+                totais["custos_fixos"] += sum(pe_anual.meses[m].custos_fixos for m in meses_range)
+                totais["custos_variaveis"] += sum(pe_anual.meses[m].custos_variaveis for m in meses_range)
+                totais["sessoes"] += sum(pe_anual.meses[m].total_sessoes for m in meses_range)
+                totais["pe_contabil"] += sum(pe_anual.meses[m].pe_contabil for m in meses_range)
+                totais["taxa_prof"] += ocupacao.media_taxa_profissional
+                totais["taxa_sala"] += ocupacao.media_taxa_sala
+                totais["filiais_count"] += 1
+        except Exception as e:
+            log_info(f"[CONSOLIDADO] Erro ao processar {filial_id}: {e}")
+
+    # Média das taxas
+    if totais["filiais_count"] > 0:
+        totais["taxa_prof"] /= totais["filiais_count"]
+        totais["taxa_sala"] /= totais["filiais_count"]
+
+    return totais
+
+
 def pagina_dashboard():
     """Página principal - Dashboard Completo de Gestão à Vista (v2.0 - Reestruturado)"""
     render_header()
-    
+
     # Para visualização no Dashboard, usa o cenário ativo
     cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
     cenario_edicao = st.session_state.get('cenario_edicao', 'Conservador')
@@ -3973,45 +4045,70 @@ def pagina_dashboard():
                         st.error(f"Erro ao gerar PDF: {str(e)[:100]}")
     
     st.markdown("---")
-    
+
     # ========================================================================
     # CALCULAR DADOS DO PERÍODO
     # ========================================================================
-    pe_anual = motor.calcular_pe_anual()
-    ocupacao_anual = motor.calcular_ocupacao_anual()
-    tdabc_anual = motor.calcular_tdabc_anual()
-    
     num_meses = len(meses_range) if meses_range else 1
-    
-    receita_periodo = sum(pe_anual.meses[m].receita_liquida for m in meses_range)
-    ebitda_periodo = sum(pe_anual.meses[m].ebitda for m in meses_range)
-    cf_periodo = sum(pe_anual.meses[m].custos_fixos for m in meses_range)
-    cv_periodo = sum(pe_anual.meses[m].custos_variaveis for m in meses_range)
-    sessoes_periodo = sum(pe_anual.meses[m].total_sessoes for m in meses_range)
-    pe_periodo = sum(pe_anual.meses[m].pe_contabil for m in meses_range)
-    
-    # Receita Bruta (antes das deduções)
-    dre = motor.calcular_dre()
-    receita_bruta_periodo = sum(dre.get("Receita Bruta Total", [0]*12)[m] for m in meses_range)
+    is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+    if is_consolidado:
+        # MODO CONSOLIDADO: Soma valores de cada filial individualmente
+        manager = st.session_state.cliente_manager
+        cliente_id = st.session_state.cliente_id
+        totais = _calcular_consolidado_somando_filiais(manager, cliente_id, cenario_ativo, meses_range)
+
+        receita_bruta_periodo = totais["receita_bruta"]
+        receita_periodo = totais["receita_liquida"]
+        ebitda_periodo = totais["ebitda"]
+        cf_periodo = totais["custos_fixos"]
+        cv_periodo = totais["custos_variaveis"]
+        sessoes_periodo = totais["sessoes"]
+        pe_periodo = totais["pe_contabil"]
+        taxa_prof_media = totais["taxa_prof"]
+        taxa_sala_media = totais["taxa_sala"]
+
+        # Variáveis que o Dashboard usa mas não fazem sentido no consolidado
+        pe_anual = None
+        ocupacao_anual = None
+        tdabc_anual = None
+        dre = None
+    else:
+        # MODO FILIAL: Calcula normalmente
+        pe_anual = motor.calcular_pe_anual()
+        ocupacao_anual = motor.calcular_ocupacao_anual()
+        tdabc_anual = motor.calcular_tdabc_anual()
+
+        receita_periodo = sum(pe_anual.meses[m].receita_liquida for m in meses_range)
+        ebitda_periodo = sum(pe_anual.meses[m].ebitda for m in meses_range)
+        cf_periodo = sum(pe_anual.meses[m].custos_fixos for m in meses_range)
+        cv_periodo = sum(pe_anual.meses[m].custos_variaveis for m in meses_range)
+        sessoes_periodo = sum(pe_anual.meses[m].total_sessoes for m in meses_range)
+        pe_periodo = sum(pe_anual.meses[m].pe_contabil for m in meses_range)
+
+        dre = motor.calcular_dre()
+        receita_bruta_periodo = sum(dre.get("Receita Bruta Total", [0]*12)[m] for m in meses_range)
+
+        taxa_prof_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_profissional for m in meses_range) / num_meses
+        taxa_sala_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_sala for m in meses_range) / num_meses
     
     margem_ebitda_periodo = ebitda_periodo / receita_periodo if receita_periodo > 0 else 0
     margem_seg_periodo = (receita_periodo - pe_periodo) / receita_periodo if receita_periodo > 0 else 0
-    
+
     # Lucro/Sessão - usa modelo de eficiência selecionado
     modelo_ef_dash = st.session_state.get('modelo_eficiencia', 'profissional')
-    if modelo_ef_dash == 'profissional':
+    if modelo_ef_dash == 'profissional' or is_consolidado:
+        # Modo consolidado ou profissional: usa EBITDA/sessões
         lucro_sessao = ebitda_periodo / sessoes_periodo if sessoes_periodo > 0 else 0
     else:
-        # Modelo infraestrutura: usa Lucro ABC
+        # Modelo infraestrutura: usa Lucro ABC (só para filial individual)
         lucro_abc_periodo = sum(
-            sum(getattr(tdabc_anual.meses[m].rateios.get(s, type('', (), {'lucro_abc': 0})()), 'lucro_abc', 0) 
-                for s in motor.servicos.keys()) 
+            sum(getattr(tdabc_anual.meses[m].rateios.get(s, type('', (), {'lucro_abc': 0})()), 'lucro_abc', 0)
+                for s in motor.servicos.keys())
             for m in meses_range
         )
         lucro_sessao = lucro_abc_periodo / sessoes_periodo if sessoes_periodo > 0 else 0
-    
-    taxa_prof_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_profissional for m in meses_range) / num_meses
-    taxa_sala_media = sum(ocupacao_anual.meses[m].taxa_ocupacao_sala for m in meses_range) / num_meses
+
     gargalo = "Sala" if taxa_sala_media > taxa_prof_media else "Profissional"
     
     # ========================================================================
@@ -4801,32 +4898,32 @@ def _pagina_cenarios_consolidado():
     """Mostra comparativo de cenários para visão Consolidada (todas as filiais)"""
     from modules.cliente_manager import carregar_motores_cenarios
     import pandas as pd
-    
+
     manager = st.session_state.cliente_manager
     cliente_id = st.session_state.cliente_id
-    
+
     # Busca todas as filiais do cliente
     filiais = manager.listar_filiais(cliente_id)
-    
+
     if not filiais:
         st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
         return
-    
+
     st.info("📊 **Visão Consolidada** - Soma de todas as filiais por cenário")
-    
+
     # Carrega dados de cada filial
     dados_filiais = []
     totais = {"Pessimista": 0, "Conservador": 0, "Otimista": 0, "Aprovado": 0}
-    
+
     for filial in filiais:
         filial_id = filial["id"]
         filial_nome = filial["nome"]
-        
+
         try:
             resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
             motores = resultado.get("motores", {})
             cenario_aprovado = resultado.get("cenario_aprovado", None)
-            
+
             # Calcula receita de cada cenário
             receitas = {}
             for cenario_nome, motor in motores.items():
@@ -4837,11 +4934,11 @@ def _pagina_cenarios_consolidado():
                     )
                     receitas[cenario_nome] = receita
                     totais[cenario_nome] += receita
-            
+
             # Soma o cenário aprovado
             if cenario_aprovado and cenario_aprovado in receitas:
                 totais["Aprovado"] += receitas[cenario_aprovado]
-            
+
             dados_filiais.append({
                 "Filial": filial_nome,
                 "📉 Pessimista": f"R$ {receitas.get('Pessimista', 0)/1000:,.0f}k",
