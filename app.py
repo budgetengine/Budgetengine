@@ -16160,15 +16160,176 @@ def pagina_premissas():
                              f"{((receita_otim/receita_conserv)-1)*100:+.1f}%" if receita_conserv > 0 else "")
 
 
+def _pagina_dre_consolidado():
+    """Mostra DRE consolidado de todas as filiais - v1.99.76"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"📊 **Visão Consolidada** - DRE de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "receita_bruta": 0,
+        "deducoes": 0,
+        "receita_liquida": 0,
+        "custos_variaveis": 0,
+        "margem_contribuicao": 0,
+        "custos_fixos": 0,
+        "ebitda": 0,
+        "resultado_liquido": 0
+    }
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula DRE da filial
+                dre = motor.calcular_dre()
+
+                receita_bruta = sum(dre.get("Receita Bruta Total", [0]*12))
+                deducoes = abs(sum(dre.get("Total Deduções", [0]*12)))
+                receita_liquida = sum(dre.get("Receita Líquida", [0]*12))
+                custos_var = abs(sum(dre.get("Total Custos Variáveis", [0]*12)))
+                margem_contrib = sum(dre.get("Margem de Contribuição", [0]*12))
+                custos_fix = abs(sum(dre.get("Total Custos Fixos", [0]*12)))
+                ebitda = sum(dre.get("EBITDA", [0]*12))
+                resultado_liq = sum(dre.get("Resultado Líquido", [0]*12))
+
+                # Acumula totais
+                totais["receita_bruta"] += receita_bruta
+                totais["deducoes"] += deducoes
+                totais["receita_liquida"] += receita_liquida
+                totais["custos_variaveis"] += custos_var
+                totais["margem_contribuicao"] += margem_contrib
+                totais["custos_fixos"] += custos_fix
+                totais["ebitda"] += ebitda
+                totais["resultado_liquido"] += resultado_liq
+
+                # Margens
+                margem_ebitda = (ebitda / receita_bruta * 100) if receita_bruta > 0 else 0
+                margem_liq = (resultado_liq / receita_bruta * 100) if receita_bruta > 0 else 0
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita Bruta": f"R$ {receita_bruta:,.0f}",
+                    "Receita Líquida": f"R$ {receita_liquida:,.0f}",
+                    "EBITDA": f"R$ {ebitda:,.0f}",
+                    "Mg EBITDA": f"{margem_ebitda:.1f}%",
+                    "Resultado": f"R$ {resultado_liq:,.0f}",
+                    "Mg Líquida": f"{margem_liq:.1f}%"
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Receita Bruta": "R$ 0",
+                    "Receita Líquida": "R$ 0",
+                    "EBITDA": "R$ 0",
+                    "Mg EBITDA": "0%",
+                    "Resultado": "R$ 0",
+                    "Mg Líquida": "0%"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Receita Bruta": f"Erro",
+                "Receita Líquida": "-",
+                "EBITDA": "-",
+                "Mg EBITDA": "-",
+                "Resultado": "-",
+                "Mg Líquida": "-"
+            })
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Totais Consolidados")
+
+    # Linha 1: Receitas
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("📈 Receita Bruta", f"R$ {totais['receita_bruta']/1000:,.0f}k")
+
+    with col2:
+        st.metric("📉 Deduções", f"R$ {totais['deducoes']/1000:,.0f}k")
+
+    with col3:
+        st.metric("💰 Receita Líquida", f"R$ {totais['receita_liquida']/1000:,.0f}k")
+
+    with col4:
+        margem_contrib_pct = (totais['margem_contribuicao'] / totais['receita_bruta'] * 100) if totais['receita_bruta'] > 0 else 0
+        st.metric("📊 Margem Contribuição", f"R$ {totais['margem_contribuicao']/1000:,.0f}k", f"{margem_contrib_pct:.1f}%")
+
+    # Linha 2: Resultados
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("🏢 Custos Fixos", f"R$ {totais['custos_fixos']/1000:,.0f}k")
+
+    with col2:
+        margem_ebitda_total = (totais['ebitda'] / totais['receita_bruta'] * 100) if totais['receita_bruta'] > 0 else 0
+        st.metric("📊 EBITDA", f"R$ {totais['ebitda']/1000:,.0f}k", f"{margem_ebitda_total:.1f}%")
+
+    with col3:
+        margem_liq_total = (totais['resultado_liquido'] / totais['receita_bruta'] * 100) if totais['receita_bruta'] > 0 else 0
+        color = "normal" if totais['resultado_liquido'] >= 0 else "inverse"
+        st.metric("✅ Resultado Líquido", f"R$ {totais['resultado_liquido']/1000:,.0f}k", f"{margem_liq_total:.1f}%", delta_color=color)
+
+    with col4:
+        # Lucro por filial médio
+        lucro_medio = totais['resultado_liquido'] / len(filiais) if filiais else 0
+        st.metric("📍 Média por Filial", f"R$ {lucro_medio/1000:,.0f}k")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # ===== RESUMO =====
+    st.divider()
+
+    if totais['resultado_liquido'] >= 0:
+        st.success(f"✅ **RESULTADO CONSOLIDADO: R$ {totais['resultado_liquido']:,.0f}** (Margem: {margem_liq_total:.1f}%)")
+    else:
+        st.error(f"❌ **RESULTADO CONSOLIDADO: R$ {totais['resultado_liquido']:,.0f}** (Margem: {margem_liq_total:.1f}%)")
+
+
 def pagina_simulador_dre():
     """Página de DRE Simulado - Formato Profissional"""
     render_header()
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_dre_consolidado()
+        return
+
     # Badge no header
-    
+
     st.markdown('<div class="section-header"><h3>📊 DRE - Demonstração do Resultado do Exercício</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
-    
+
     # IMPORTANTE: Calcula FC primeiro para ter os rendimentos de aplicações corretos
     # Isso é necessário porque o DRE usa calcular_resultado_financeiro() que lê self.fluxo_caixa
     motor.calcular_fluxo_caixa()
