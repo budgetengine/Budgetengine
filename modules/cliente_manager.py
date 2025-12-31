@@ -21,23 +21,33 @@ try:
 except ImportError:
     SUPABASE_DISPONIVEL = False
 
+# v1.99.74: Singleton para evitar "Too many open files"
+_supabase_client = None
+
 def _conectar_supabase():
-    """Conecta ao Supabase se disponível - CRIA NOVA CONEXÃO A CADA CHAMADA"""
+    """Conecta ao Supabase se disponível - USA SINGLETON para evitar vazamento"""
+    global _supabase_client
+
     if not SUPABASE_DISPONIVEL:
         print("[SUPABASE] Biblioteca não disponível")
         return None
+
+    # Reutiliza conexão existente
+    if _supabase_client is not None:
+        return _supabase_client
+
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
-        client = create_client(url, key)
-        print(f"[SUPABASE] ✅ Conectado!")
-        return client
+        _supabase_client = create_client(url, key)
+        print(f"[SUPABASE] ✅ Conectado (singleton)!")
+        return _supabase_client
     except Exception as e:
         print(f"[SUPABASE] ❌ Erro ao conectar: {e}")
         return None
 
 def _obter_supabase():
-    """Obtém conexão Supabase - SEMPRE CRIA NOVA para evitar timeout"""
+    """Obtém conexão Supabase - REUTILIZA singleton"""
     return _conectar_supabase()
 
 
