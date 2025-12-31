@@ -7590,13 +7590,204 @@ def pagina_comparativo_cenarios():
 
 
 
+def _pagina_taxa_ocupacao_consolidado():
+    """Mostra Taxa de Ocupação consolidada de todas as filiais - v1.99.78"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+    import plotly.graph_objects as go
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"📊 **Visão Consolidada** - Taxa de Ocupação de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "total_sessoes": 0,
+        "soma_taxa_prof": 0,
+        "soma_taxa_sala": 0,
+        "gargalos": {"Profissional": 0, "Sala": 0}
+    }
+
+    # Arrays mensais para gráfico
+    taxa_prof_mensal = [0.0] * 12
+    taxa_sala_mensal = [0.0] * 12
+    filiais_count = 0
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula ocupação da filial
+                ocupacao = motor.calcular_ocupacao_anual()
+
+                taxa_prof = ocupacao.media_taxa_profissional * 100
+                taxa_sala = ocupacao.media_taxa_sala * 100
+                gargalo = ocupacao.gargalo_predominante
+                total_sessoes = ocupacao.total_sessoes_ano
+
+                # Acumula totais
+                totais["total_sessoes"] += total_sessoes
+                totais["soma_taxa_prof"] += taxa_prof
+                totais["soma_taxa_sala"] += taxa_sala
+                totais["gargalos"][gargalo] = totais["gargalos"].get(gargalo, 0) + 1
+
+                # Acumula mensais para média
+                for m, mes_data in enumerate(ocupacao.meses):
+                    taxa_prof_mensal[m] += mes_data.taxa_ocupacao_profissional * 100
+                    taxa_sala_mensal[m] += mes_data.taxa_ocupacao_sala * 100
+
+                filiais_count += 1
+
+                # Status por cor
+                cor_prof = "🟢" if taxa_prof < 70 else ("🟡" if taxa_prof < 90 else "🔴")
+                cor_sala = "🟢" if taxa_sala < 70 else ("🟡" if taxa_sala < 90 else "🔴")
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Taxa Prof.": f"{cor_prof} {taxa_prof:.1f}%",
+                    "Taxa Sala": f"{cor_sala} {taxa_sala:.1f}%",
+                    "Gargalo": f"{'🏥' if gargalo == 'Sala' else '👥'} {gargalo}",
+                    "Sessões/Ano": f"{total_sessoes:,.0f}"
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Taxa Prof.": "0%",
+                    "Taxa Sala": "0%",
+                    "Gargalo": "-",
+                    "Sessões/Ano": "0"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Taxa Prof.": "Erro",
+                "Taxa Sala": "-",
+                "Gargalo": "-",
+                "Sessões/Ano": "-"
+            })
+
+    # Calcula médias
+    if filiais_count > 0:
+        media_taxa_prof = totais["soma_taxa_prof"] / filiais_count
+        media_taxa_sala = totais["soma_taxa_sala"] / filiais_count
+        for m in range(12):
+            taxa_prof_mensal[m] /= filiais_count
+            taxa_sala_mensal[m] /= filiais_count
+    else:
+        media_taxa_prof = 0
+        media_taxa_sala = 0
+
+    # Gargalo predominante geral
+    gargalo_geral = max(totais["gargalos"], key=totais["gargalos"].get) if totais["gargalos"] else "Indefinido"
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Médias Consolidadas")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        cor = "🟢" if media_taxa_prof < 70 else ("🟡" if media_taxa_prof < 90 else "🔴")
+        st.metric("👥 Taxa Profissional", f"{cor} {media_taxa_prof:.1f}%")
+
+    with col2:
+        cor = "🟢" if media_taxa_sala < 70 else ("🟡" if media_taxa_sala < 90 else "🔴")
+        st.metric("🏥 Taxa Sala", f"{cor} {media_taxa_sala:.1f}%")
+
+    with col3:
+        emoji = "🏥" if gargalo_geral == "Sala" else "👥"
+        st.metric("⚠️ Gargalo Predominante", f"{emoji} {gargalo_geral}")
+
+    with col4:
+        st.metric("📊 Total Sessões/Ano", f"{totais['total_sessoes']:,.0f}")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ===== GRÁFICO EVOLUÇÃO MENSAL =====
+    st.subheader("📈 Evolução Mensal (Média das Filiais)")
+
+    MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(
+        x=MESES,
+        y=taxa_prof_mensal,
+        name="Profissional",
+        line=dict(color="#3498db", width=3),
+        mode="lines+markers"
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=MESES,
+        y=taxa_sala_mensal,
+        name="Sala",
+        line=dict(color="#e74c3c", width=3),
+        mode="lines+markers"
+    ))
+
+    # Linhas de referência
+    fig.add_hline(y=70, line_dash="dash", line_color="orange", annotation_text="Atenção (70%)")
+    fig.add_hline(y=90, line_dash="dash", line_color="red", annotation_text="Crítico (90%)")
+
+    fig.update_layout(
+        xaxis_title="Mês",
+        yaxis_title="Taxa de Ocupação (%)",
+        yaxis=dict(range=[0, 110]),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        height=400
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ===== RESUMO =====
+    st.divider()
+
+    if media_taxa_prof < 70 and media_taxa_sala < 70:
+        st.success(f"✅ **Ocupação saudável** - Há folga operacional nas filiais")
+    elif media_taxa_prof > 90 or media_taxa_sala > 90:
+        st.error(f"🔴 **Ocupação crítica** - Gargalo predominante: {gargalo_geral}")
+    else:
+        st.warning(f"🟡 **Atenção** - Ocupação moderada, gargalo predominante: {gargalo_geral}")
+
+
 def pagina_taxa_ocupacao():
     """Página de análise de taxa de ocupação - modelo de gargalo"""
     render_header()
-    
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_taxa_ocupacao_consolidado()
+        return
+
     # CORREÇÃO v1.99.0: Garante que motor é independente antes de modificar
     garantir_motor_independente()
-    
+
     st.markdown('<div class="section-header"><h3>📊 Taxa de Ocupação</h3></div>', unsafe_allow_html=True)
     st.caption("Análise de gargalo: Profissional vs Sala")
     
