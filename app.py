@@ -9722,8 +9722,9 @@ def _pagina_custeio_abc_consolidado():
                 if ranking:
                     melhor = max(ranking, key=lambda x: x['margem_abc'])
                     pior = min(ranking, key=lambda x: x['margem_abc'])
-                    melhor_srv = f"{melhor['servico']} ({melhor['margem_abc']:.1f}%)"
-                    pior_srv = f"{pior['servico']} ({pior['margem_abc']:.1f}%)"
+                    # margem_abc está em decimal, multiplicar por 100 para %
+                    melhor_srv = f"{melhor['servico']} ({melhor['margem_abc']*100:.1f}%)"
+                    pior_srv = f"{pior['servico']} ({pior['margem_abc']*100:.1f}%)"
 
                     # Consolidar ranking de serviços
                     for srv in ranking:
