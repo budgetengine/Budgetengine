@@ -2935,11 +2935,9 @@ with st.sidebar:
         "📊 Taxa Ocupação",
         "⚖️ Ponto Equilíbrio",
         "🎯 Custeio ABC",
-        "───────────────",  # Separador visual
         "✅ Lançar Realizado",
         "📊 Orçado x Realizado",
         "📋 DRE Comparativo",
-        "───────────────",  # Separador visual
         "👥 Clientes", 
         "📥 Importar Dados", 
         "📄 DRE (Excel)", 
@@ -2952,7 +2950,6 @@ with st.sidebar:
     
     if is_admin_user:
         opcoes_menu.extend([
-            "───────────────",  # Separador visual
             "🔧 Admin",
             "🛠️ Diagnóstico Dev"
         ])
