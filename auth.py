@@ -10,18 +10,28 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 
 # ============================================
-# CONFIGURAÇÃO DO SUPABASE
+# CONFIGURAÇÃO DO SUPABASE - SINGLETON v1.99.85
 # ============================================
+
+_supabase_client = None
 
 def get_supabase_client() -> Client:
     """
     Retorna cliente Supabase configurado.
     Credenciais devem estar em .streamlit/secrets.toml
+    USA SINGLETON para evitar "Too many open files"
     """
+    global _supabase_client
+
+    # Reutiliza conexão existente
+    if _supabase_client is not None:
+        return _supabase_client
+
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
-        return create_client(url, key)
+        _supabase_client = create_client(url, key)
+        return _supabase_client
     except Exception as e:
         st.error(f"Erro ao conectar com Supabase: {e}")
         st.info("Configure as credenciais em .streamlit/secrets.toml")
