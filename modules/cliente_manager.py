@@ -40,6 +40,100 @@ def _obter_supabase():
     """Obtém conexão Supabase - SEMPRE CRIA NOVA para evitar timeout"""
     return _conectar_supabase()
 
+
+def sincronizar_do_supabase(data_dir: str = "data/clientes") -> Dict:
+    """
+    SINCRONIZAÇÃO COMPLETA: Baixa todos os dados do Supabase para o local.
+    Atualiza config.json e arquivos de filiais.
+
+    Returns:
+        Dict com estatísticas: {"clientes": n, "filiais": n, "erros": []}
+    """
+    stats = {"clientes": 0, "filiais": 0, "erros": [], "atualizados": []}
+
+    supabase = _obter_supabase()
+    if not supabase:
+        stats["erros"].append("Supabase não disponível")
+        return stats
+
+    try:
+        # Busca todas as companies
+        resp_companies = supabase.table("companies").select("*").execute()
+
+        for company in resp_companies.data:
+            company_id = company["id"]
+            company_name = company["name"].strip()
+
+            # Gera slug do cliente
+            import re
+            cliente_id = company_name.lower()
+            cliente_id = re.sub(r'[áàãâä]', 'a', cliente_id)
+            cliente_id = re.sub(r'[éèêë]', 'e', cliente_id)
+            cliente_id = re.sub(r'[íìîï]', 'i', cliente_id)
+            cliente_id = re.sub(r'[óòõôö]', 'o', cliente_id)
+            cliente_id = re.sub(r'[úùûü]', 'u', cliente_id)
+            cliente_id = re.sub(r'[ç]', 'c', cliente_id)
+            cliente_id = re.sub(r'[^a-z0-9]', '_', cliente_id)
+            cliente_id = re.sub(r'_+', '_', cliente_id).strip('_')
+
+            # Cria diretório do cliente
+            cliente_path = os.path.join(data_dir, cliente_id)
+            os.makedirs(cliente_path, exist_ok=True)
+
+            # Busca filiais desta company
+            resp_branches = supabase.table("branches").select("*").eq("company_id", company_id).execute()
+
+            filiais_ids = []
+            for branch in resp_branches.data:
+                filial_id = branch["slug"]
+                filiais_ids.append(filial_id)
+
+                # Salva dados da filial localmente
+                if branch.get("data"):
+                    filial_path = os.path.join(cliente_path, f"{filial_id}.json")
+                    with open(filial_path, 'w', encoding='utf-8') as f:
+                        json.dump(branch["data"], f, ensure_ascii=False, indent=2)
+                    stats["filiais"] += 1
+                    stats["atualizados"].append(f"{cliente_id}/{filial_id}")
+                    print(f"[SYNC] ✅ {cliente_id}/{filial_id} atualizado")
+
+            # Atualiza config.json do cliente
+            config_path = os.path.join(cliente_path, "config.json")
+            config = {
+                "id": cliente_id,
+                "nome": company_name,
+                "cnpj": company.get("cnpj", ""),
+                "contato": "",
+                "email": "",
+                "telefone": "",
+                "filiais": filiais_ids,
+                "premissas_macro": {
+                    "ipca": 0.045,
+                    "igpm": 0.05,
+                    "dissidio": 0.06,
+                    "reajuste_tarifas": 0.08,
+                    "reajuste_contratos": 0.05,
+                    "taxa_credito": 0.0354,
+                    "taxa_debito": 0.0211,
+                    "taxa_antecipacao": 0.05
+                },
+                "data_criacao": company.get("created_at", datetime.now().isoformat()),
+                "data_atualizacao": datetime.now().isoformat()
+            }
+
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+
+            stats["clientes"] += 1
+            print(f"[SYNC] ✅ Cliente {cliente_id} com {len(filiais_ids)} filiais")
+
+    except Exception as e:
+        stats["erros"].append(str(e))
+        print(f"[SYNC] ❌ Erro: {e}")
+
+    return stats
+
+
 # Adiciona diretório pai ao path para imports do motor_calculo
 _parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _parent_dir not in sys.path:
@@ -1383,16 +1477,25 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
     
     if not dados_brutos:
         # Filial não existe, cria estrutura padrão
-        motor_padrao = criar_motor_padrao()
+        # v1.99.49: CORREÇÃO CRÍTICA - Definir cenario_origem para evitar bloqueio
+        motor_cons = criar_motor_padrao()
+        motor_cons.cenario_origem = "Conservador"
+
+        motor_pess = criar_motor_padrao()
+        motor_pess.cenario_origem = "Pessimista"
+
+        motor_otim = criar_motor_padrao()
+        motor_otim.cenario_origem = "Otimista"
+
         return {
             "cenario_ativo": "Conservador",
             "cenario_aprovado": None,
             "usar_cenarios": True,
             "modelo_eficiencia": "profissional",
             "motores": {
-                "Conservador": motor_padrao,
-                "Pessimista": criar_motor_padrao(),
-                "Otimista": criar_motor_padrao()
+                "Conservador": motor_cons,
+                "Pessimista": motor_pess,
+                "Otimista": motor_otim
             },
             "_migrado": True
         }
@@ -1414,8 +1517,12 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
                 )
                 ipca = dados_cenario.get("macro", {}).get("ipca", 0)
                 print(f"[LOAD-CENARIOS] {cenario_nome}: sessões={total_sessoes:.0f}, IPCA={ipca*100:.1f}%")
+            # v1.99.49: CORREÇÃO CRÍTICA - Definir cenario_origem
+            motor.cenario_origem = cenario_nome
+            # v1.99.73: CORREÇÃO - Aplicar fatores do cenário (fator_receita, etc)
+            motor.aplicar_cenario(cenario_nome)
             motores[cenario_nome] = motor
-        
+
         return {
             "cenario_ativo": dados_brutos.get("cenario_ativo", "Conservador"),
             "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
@@ -1428,14 +1535,17 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         # Formato antigo - migra para novo
         motor_base = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_base)
-        
+        motor_base.cenario_origem = "Conservador"  # v1.99.49: CORREÇÃO
+
         # Cria cópias para os outros cenários
         motor_pess = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_pess)
-        
+        motor_pess.cenario_origem = "Pessimista"  # v1.99.49: CORREÇÃO
+
         motor_otim = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_otim)
-        
+        motor_otim.cenario_origem = "Otimista"  # v1.99.49: CORREÇÃO
+
         return {
             "cenario_ativo": dados_brutos.get("cenario_oficial", "Conservador"),
             "cenario_aprovado": dados_brutos.get("cenario_aprovado", None),
