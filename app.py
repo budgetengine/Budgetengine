@@ -42,7 +42,7 @@ except ImportError:
     def show_user_menu(): pass
     def pagina_admin(): 
         st.warning("Módulo de administração não disponível")
-from motor_calculo import MotorCalculo, criar_motor_padrao, criar_motor_vazio, Investimento, FinanciamentoExistente, Servico, Fisioterapeuta, FuncionarioCLT, DespesaFixa, Profissional
+from motor_calculo import MotorCalculo, criar_motor_padrao, criar_motor_vazio, Investimento, FinanciamentoExistente, Servico, Fisioterapeuta, FuncionarioCLT, DespesaFixa, Profissional, SocioProLabore
 from modules.cliente_manager import ClienteManager, motor_para_dict, dict_para_motor
 from realizado_manager import RealizadoManager, LancamentoMesRealizado, RealizadoAnual, AnaliseVariacao, criar_dre_comparativo
 import traceback
@@ -165,6 +165,34 @@ CODIGOS_ERRO = {
 
 # Changelog do Sistema
 CHANGELOG = [
+    {
+        "versao": "1.99.53",
+        "data": "2024-12-30",
+        "tipo": "fix",
+        "descricao": "CRÍTICO: Proteção contra contaminação ENTRE FILIAIS",
+        "detalhes": [
+            "PROBLEMA: Dados de Leblon contaminavam Copacabana ao trocar de filial",
+            "CAUSA: Motor não tinha identificação de qual filial pertencia",
+            "SOLUÇÃO 1: motor.filial_origem marca de qual filial o motor foi carregado",
+            "SOLUÇÃO 2: VERIFICAÇÃO 6 em _sincronizar_motor_para_cenario()",
+            "VERIFICAÇÃO: motor.filial_origem == filial_atual (bloqueia se diferente)",
+            "LOG: [SYNC-BLOQUEADO-FILIAL] quando contaminação é detectada",
+            "PROTEÇÃO: Agora são 6 camadas de proteção (era 5)"
+        ]
+    },
+    {
+        "versao": "1.99.52",
+        "data": "2024-12-30",
+        "tipo": "fix",
+        "descricao": "Proteção contra cópia acidental do Conservador",
+        "detalhes": [
+            "PROBLEMA: Botão 'Copiar do Conservador' era clicado acidentalmente",
+            "CAUSA: Não havia confirmação antes de sobrescrever todas as premissas",
+            "SOLUÇÃO: Modal de confirmação obrigatória com aviso explícito",
+            "AVISO: 'Esta ação vai SOBRESCREVER todas as premissas do cenário X'",
+            "BOTÕES: 'Sim, sobrescrever tudo' e 'Cancelar' para evitar acidentes"
+        ]
+    },
     {
         "versao": "1.99.17",
         "data": "2024-12-29",
@@ -1332,10 +1360,10 @@ def limpar_log_erros():
 # FUNÇÃO DE CONSOLIDAÇÃO DE FILIAIS
 # ============================================
 
-def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: str = "Cliente") -> MotorCalculo:
+def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: str = "Cliente", cenario: str = "Conservador") -> MotorCalculo:
     """
     Consolida os dados de todas as filiais de um cliente em um único motor.
-    Usa o cenário Conservador de cada filial para consolidação.
+    Usa o cenário especificado de cada filial para consolidação.
     """
     from modules.cliente_manager import carregar_motores_cenarios
     
@@ -1358,7 +1386,18 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
     profissionais_consolidados = {}  # ESTRUTURA ANTIGA - NECESSÁRIA!
     fisioterapeutas_consolidados = {}
     funcionarios_consolidados = {}
+    socios_consolidados = {}  # CORREÇÃO: Adiciona consolidação de sócios pró-labore
     despesas_consolidadas = {}
+    faturamento_anterior_consolidado = [0.0] * 12  # CORREÇÃO BUG #4: Consolidar faturamento 2025
+    # CORREÇÃO BUG #5: Saldos iniciais do Fluxo de Caixa
+    caixa_inicial_consolidado = 0.0
+    saldo_aplicacoes_consolidado = 0.0
+    # CORREÇÃO BUG #6: Investimentos e Financiamentos de todas as filiais
+    investimentos_consolidados = []
+    financiamentos_consolidados = []
+    # CORREÇÃO BUG #9: Valores por tipo (proprietário/profissional)
+    valores_prop_consolidados = {}
+    valores_prof_consolidados = {}
     primeira_filial_processada = False
     
     # Iterar sobre cada filial
@@ -1371,8 +1410,11 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
             resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
             motores = resultado.get("motores", {})
             
-            # Usa cenário Conservador para consolidação (ou o que estiver disponível)
-            motor_filial = motores.get("Conservador") or motores.get("Pessimista") or motores.get("Otimista")
+            # Usa o cenário passado para consolidação (ou fallback se não disponível)
+            motor_filial = motores.get(cenario)
+            if not motor_filial:
+                # Fallback: tenta outros cenários
+                motor_filial = motores.get("Conservador") or motores.get("Pessimista") or motores.get("Otimista")
             
             if not motor_filial:
                 continue
@@ -1400,7 +1442,23 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
                     'sessoes_mes_base': getattr(srv, 'sessoes_mes_base', 0),
                     'pct_crescimento': getattr(srv, 'pct_crescimento', 0.0),
                 }
-        
+            else:
+                # CORREÇÃO: Soma sessões de todas as filiais para consolidação correta
+                servicos_consolidados[nome_srv]['sessoes_mes_base'] += getattr(srv, 'sessoes_mes_base', 0)
+
+        # ===== CONSOLIDAR VALORES POR TIPO (BUG #9) =====
+        for srv_nome in motor_filial.servicos.keys():
+            # Valores proprietário (usa da primeira filial que tiver)
+            if srv_nome not in valores_prop_consolidados:
+                val_prop = motor_filial.valores_proprietario.get(srv_nome, {})
+                if val_prop:
+                    valores_prop_consolidados[srv_nome] = dict(val_prop)
+            # Valores profissional
+            if srv_nome not in valores_prof_consolidados:
+                val_prof = motor_filial.valores_profissional.get(srv_nome, {})
+                if val_prof:
+                    valores_prof_consolidados[srv_nome] = dict(val_prof)
+
         # ===== CONSOLIDAR PROPRIETÁRIOS (ESTRUTURA ANTIGA - CRÍTICO!) =====
         for nome_prop, prop in motor_filial.proprietarios.items():
             nome_unico = f"{nome_prop} ({filial_nome_atual})"
@@ -1458,7 +1516,7 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
         # ===== CONSOLIDAR FUNCIONÁRIOS =====
         for nome_func, func in motor_filial.funcionarios_clt.items():
             nome_unico = f"{nome_func} ({filial_nome_atual})"
-            
+
             if nome_unico not in funcionarios_consolidados:
                 funcionarios_consolidados[nome_unico] = {
                     'nome': nome_unico,
@@ -1472,12 +1530,32 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
                     'mes_admissao': getattr(func, 'mes_admissao', 1),
                     'ativo': getattr(func, 'ativo', True),
                 }
-        
+
+        # ===== CONSOLIDAR SÓCIOS PRÓ-LABORE (CORREÇÃO BUG #3) =====
+        for nome_socio, socio in motor_filial.socios_prolabore.items():
+            nome_unico = f"{nome_socio} ({filial_nome_atual})"
+
+            if nome_unico not in socios_consolidados:
+                socios_consolidados[nome_unico] = {
+                    'nome': nome_unico,
+                    'prolabore': getattr(socio, 'prolabore', 0),
+                    'dependentes_ir': getattr(socio, 'dependentes_ir', 0),
+                    'mes_reajuste': getattr(socio, 'mes_reajuste', 5),
+                    'pct_aumento': getattr(socio, 'pct_aumento', 0.0),
+                    'ativo': getattr(socio, 'ativo', True),
+                    'participacao': getattr(socio, 'participacao', 1.0),
+                    'capital': getattr(socio, 'capital', 10000.0),
+                }
+
         # ===== CONSOLIDAR DESPESAS FIXAS =====
         for nome_desp, desp in motor_filial.despesas_fixas.items():
             if nome_desp in despesas_consolidadas:
                 # Soma valores se já existe
                 despesas_consolidadas[nome_desp]['valor_mensal'] += getattr(desp, 'valor_mensal', 0)
+                # CORREÇÃO: Soma valores_2025 também (para sazonalidade correta)
+                valores_2025_desp = list(getattr(desp, 'valores_2025', [0.0] * 12))
+                for m in range(12):
+                    despesas_consolidadas[nome_desp]['valores_2025'][m] += valores_2025_desp[m]
                 # Para despesas variáveis, pct_receita deve ser mantido (não somado)
             else:
                 despesas_consolidadas[nome_desp] = {
@@ -1499,6 +1577,34 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
                     'base_variavel': getattr(desp, 'base_variavel', 'receita'),
                 }
         
+        # ===== CONSOLIDAR FATURAMENTO ANTERIOR (2025) - BUG #4 =====
+        fat_ant_filial = getattr(motor_filial, 'faturamento_anterior', [0.0] * 12)
+        if fat_ant_filial:
+            for m in range(12):
+                faturamento_anterior_consolidado[m] += fat_ant_filial[m]
+
+        # ===== CONSOLIDAR SALDOS FINANCEIROS (BUG #5) =====
+        if hasattr(motor_filial, 'premissas_fc'):
+            caixa_inicial_consolidado += getattr(motor_filial.premissas_fc, 'caixa_inicial', 0.0)
+        if hasattr(motor_filial, 'premissas_financeiras') and hasattr(motor_filial.premissas_financeiras, 'aplicacoes'):
+            saldo_aplicacoes_consolidado += getattr(motor_filial.premissas_financeiras.aplicacoes, 'saldo_inicial', 0.0)
+
+        # ===== CONSOLIDAR INVESTIMENTOS E FINANCIAMENTOS (BUG #6) =====
+        if hasattr(motor_filial, 'premissas_financeiras'):
+            pf = motor_filial.premissas_financeiras
+            # Investimentos - adiciona com identificação da filial
+            for inv in getattr(pf, 'investimentos', []):
+                if inv.ativo:
+                    inv_copia = copy.deepcopy(inv)
+                    inv_copia.descricao = f"{inv.descricao} ({filial_nome_atual})"
+                    investimentos_consolidados.append(inv_copia)
+            # Financiamentos - adiciona com identificação da filial
+            for fin in getattr(pf, 'financiamentos', []):
+                if fin.ativo:
+                    fin_copia = copy.deepcopy(fin)
+                    fin_copia.descricao = f"{fin.descricao} ({filial_nome_atual})"
+                    financiamentos_consolidados.append(fin_copia)
+
         # ===== COPIAR PREMISSAS (usa da primeira filial) =====
         if not primeira_filial_processada:
             # IMPORTANTE: Usar deepcopy para evitar referências compartilhadas!
@@ -1582,7 +1688,20 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
             mes_admissao=dados['mes_admissao'],
             ativo=dados['ativo'],
         )
-    
+
+    # Sócios Pró-Labore (CORREÇÃO BUG #3)
+    for nome, dados in socios_consolidados.items():
+        motor_consolidado.socios_prolabore[nome] = SocioProLabore(
+            nome=dados['nome'],
+            prolabore=dados['prolabore'],
+            dependentes_ir=dados['dependentes_ir'],
+            mes_reajuste=dados['mes_reajuste'],
+            pct_aumento=dados['pct_aumento'],
+            ativo=dados['ativo'],
+            participacao=dados['participacao'],
+            capital=dados['capital'],
+        )
+
     # Despesas Fixas
     for nome, dados in despesas_consolidadas.items():
         motor_consolidado.despesas_fixas[nome] = DespesaFixa(
@@ -1606,7 +1725,27 @@ def consolidar_filiais(manager: ClienteManager, cliente_id: str, cliente_nome: s
     
     # Atualizar premissas operacionais com totais
     motor_consolidado.operacional.num_fisioterapeutas = len(fisioterapeutas_consolidados) + len(proprietarios_consolidados) + len(profissionais_consolidados)
-    
+
+    # Aplicar faturamento anterior consolidado (BUG #4)
+    motor_consolidado.faturamento_anterior = faturamento_anterior_consolidado
+    motor_consolidado.usar_comparativo_anterior = True
+    motor_consolidado.ano_anterior = 2025
+
+    # Aplicar saldos financeiros consolidados (BUG #5)
+    if hasattr(motor_consolidado, 'premissas_fc'):
+        motor_consolidado.premissas_fc.caixa_inicial = caixa_inicial_consolidado
+    if hasattr(motor_consolidado, 'premissas_financeiras') and hasattr(motor_consolidado.premissas_financeiras, 'aplicacoes'):
+        motor_consolidado.premissas_financeiras.aplicacoes.saldo_inicial = saldo_aplicacoes_consolidado
+
+    # Aplicar investimentos e financiamentos consolidados (BUG #6)
+    if hasattr(motor_consolidado, 'premissas_financeiras'):
+        motor_consolidado.premissas_financeiras.investimentos = investimentos_consolidados
+        motor_consolidado.premissas_financeiras.financiamentos = financiamentos_consolidados
+
+    # Aplicar valores por tipo consolidados (BUG #9)
+    motor_consolidado.valores_proprietario = valores_prop_consolidados
+    motor_consolidado.valores_profissional = valores_prof_consolidados
+
     return motor_consolidado
 
 # ============================================
@@ -1936,7 +2075,7 @@ def _copiar_motor(motor, cenario_nome: str = None):
     # CORREÇÃO v1.99.1: Usa deepcopy COMPLETO do motor para garantir isolamento total
     # Isso copia TODOS os objetos internos (fisioterapeutas, servicos, despesas, etc.)
     novo_motor = copy.deepcopy(motor)
-    
+
     # CORREÇÃO v1.98.8: Marca de qual cenário este motor foi carregado
     # Isso permite verificar se o motor realmente pertence ao cenário antes de sincronizar
     if cenario_nome:
@@ -1945,7 +2084,16 @@ def _copiar_motor(motor, cenario_nome: str = None):
     else:
         # Se não especificado, herda do motor original
         novo_motor.cenario_origem = getattr(motor, 'cenario_origem', 'Conservador')
-    
+
+    # CORREÇÃO v1.99.53: Marca de qual FILIAL este motor pertence
+    # Isso evita contaminação entre filiais (ex: Leblon → Copacabana)
+    filial_atual = st.session_state.get('filial_id')
+    if filial_atual and filial_atual != "consolidado":
+        novo_motor.filial_origem = filial_atual
+    else:
+        # Se não especificado, herda do motor original
+        novo_motor.filial_origem = getattr(motor, 'filial_origem', None)
+
     return novo_motor
 
 def _limpar_keys_widgets(motivo: str = ""):
@@ -1960,7 +2108,12 @@ def _limpar_keys_widgets(motivo: str = ""):
     """
     # Lista COMPLETA de prefixos de widgets que podem causar cross-contamination
     # v1.99.12: Varredura FINAL - adicionados 10 prefixos faltantes
+    # v1.99.54: FIX CRÍTICO - Adicionados sliders de MACRO que causavam contaminação!
     prefixos_problematicos = (
+        # v1.99.54: SLIDERS MACRO (CRÍTICO - Fonte de contaminação entre cenários!)
+        'slider_ipca_', 'slider_igpm_', 'slider_dissidio_',
+        'slider_tarifas_', 'slider_contratos_',
+        'slider_taxa_credito_', 'slider_taxa_debito_', 'slider_taxa_antecipacao_',
         # Equipe/sessões (ALTA prioridade)
         'prop_', 'prof_', 'fisio_',
         # Sazonalidade (ALTA)
@@ -2067,16 +2220,17 @@ def _debug_sessoes(local: str, motor=None):
 
 def _sincronizar_motor_para_cenario(motor, cenario_destino: str = None):
     """
-    Sincroniza o motor para motores_cenarios COM PROTEÇÃO QUÍNTUPLA.
+    Sincroniza o motor para motores_cenarios COM PROTEÇÃO SÊXTUPLA.
 
-    CRÍTICO v1.99.15: Verifica CINCO condições:
+    CRÍTICO v1.99.53: Verifica SEIS condições:
     1. cenario_destino == cenario_ativo
     2. motor.cenario_origem deve EXISTIR
     3. motor.cenario_origem deve ser IGUAL a cenario_destino
-    4. Diferença de sessões não pode ser > 50 (proteção contra cross-contamination)
-    5. NOVO: Percentuais macro (IPCA, IGP-M, etc) não podem diferir > 1% do armazenado
+    4. Diferença de sessões não pode ser > 500 (proteção contra cross-contamination)
+    5. Percentuais macro (IPCA, IGP-M, etc) não podem diferir > 1% do armazenado
+    6. NOVO: motor.filial_origem deve ser IGUAL a filial atual (evita contaminação entre filiais)
 
-    Isso evita que dados de um cenário sejam copiados para outro errado.
+    Isso evita que dados de um cenário/filial sejam copiados para outro errado.
 
     Args:
         motor: Motor a ser sincronizado
@@ -2108,6 +2262,17 @@ def _sincronizar_motor_para_cenario(motor, cenario_destino: str = None):
         log_warning(f"[SYNC-BLOQUEADO] motor.cenario_origem={cenario_origem} != cenario_destino={cenario_destino}")
         return False
 
+    # VERIFICAÇÃO 6 (v1.99.53): Proteção contra contaminação ENTRE FILIAIS
+    # Motor deve pertencer à filial atual para ser sincronizado
+    filial_atual = st.session_state.get('filial_id')
+    filial_origem = getattr(motor, 'filial_origem', None)
+
+    if filial_atual and filial_atual != "consolidado" and filial_origem:
+        if filial_origem != filial_atual:
+            log_error(f"[SYNC-BLOQUEADO-FILIAL] ⚠️ Motor de {filial_origem} tentando salvar em {filial_atual}!")
+            log_error(f"[SYNC-BLOQUEADO-FILIAL] CONTAMINAÇÃO ENTRE FILIAIS BLOQUEADA!")
+            return False
+
     # Calcula sessões antes das verificações adicionais
     motor_antigo = st.session_state.motores_cenarios.get(cenario_destino)
     sessoes_motor = sum(sum(f.sessoes_por_servico.values()) for f in motor.fisioterapeutas.values()) if motor.fisioterapeutas else 0
@@ -2115,10 +2280,12 @@ def _sincronizar_motor_para_cenario(motor, cenario_destino: str = None):
     diferenca = abs(sessoes_motor - sessoes_antigo)
 
     # VERIFICAÇÃO 4 (v1.99.14): Proteção contra cross-contamination de sessões
-    # Se a diferença for > 50 sessões, isso é suspeito de contaminação
-    # Exceto se o motor tiver flag de edição legítima
+    # v1.99.51: Aumentado limite de 50 para 500 sessões (menos agressivo)
+    # O limite de 50 era muito baixo e bloqueava edições legítimas
     edicao_legitima = getattr(motor, '_edicao_legitima', False)
-    if diferenca > 50 and not edicao_legitima:
+    filial_nova = sessoes_antigo == 0  # Filial nova/vazia
+
+    if diferenca > 500 and not edicao_legitima and not filial_nova:
         import traceback
         stack = ''.join(traceback.format_stack()[-4:-1])
         log_error(f"[SYNC-BLOQUEADO-CONTAMINACAO] ⚠️ Diferença de {diferenca:.0f} sessões é suspeita!")
@@ -2129,34 +2296,47 @@ def _sincronizar_motor_para_cenario(motor, cenario_destino: str = None):
         st.session_state.motor = _copiar_motor(motor_antigo, cenario_destino)
         _limpar_keys_widgets("CONTAMINACAO-FIX")
         return False
+    elif filial_nova and diferenca > 0:
+        log_info(f"[SYNC-SESSOES] Filial nova - permitindo {sessoes_motor:.0f} sessões (preenchimento inicial)")
 
     # VERIFICAÇÃO 5 (v1.99.15): Proteção contra cross-contamination de PERCENTUAIS
     # Compara IPCA, IGP-M, Dissídio e outras premissas macro
     # Se diferirem mais de 1 ponto percentual, é suspeito de contaminação por widgets
+    # v1.99.48: CORREÇÃO - Não bloquear se motor_antigo tem valores zerados (filial nova)
     if motor_antigo and hasattr(motor, 'macro') and hasattr(motor_antigo, 'macro'):
-        percentuais_check = [
-            ('ipca', 0.01),           # 1% diferença máxima
-            ('igpm', 0.01),
-            ('dissidio', 0.01),
-            ('reajuste_tarifas', 0.01),
-            ('reajuste_contratos', 0.01),
-        ]
+        # Verifica se motor_antigo está zerado (filial nova/vazia)
+        valores_antigos_zerados = all(
+            (getattr(motor_antigo.macro, attr, 0) or 0) == 0
+            for attr in ['ipca', 'igpm', 'dissidio', 'reajuste_tarifas', 'reajuste_contratos']
+        )
 
-        contaminacao_pct = False
-        for attr, limite in percentuais_check:
-            valor_motor = getattr(motor.macro, attr, 0) or 0
-            valor_antigo = getattr(motor_antigo.macro, attr, 0) or 0
-            diff_pct = abs(valor_motor - valor_antigo)
+        # Se valores antigos são zerados, é edição legítima (preenchendo pela primeira vez)
+        if valores_antigos_zerados:
+            log_info(f"[SYNC-BLOQUEADO-PCT] Motor antigo zerado - permitindo edição (preenchimento inicial)")
+        else:
+            percentuais_check = [
+                ('ipca', 0.01),           # 1% diferença máxima
+                ('igpm', 0.01),
+                ('dissidio', 0.01),
+                ('reajuste_tarifas', 0.01),
+                ('reajuste_contratos', 0.01),
+            ]
 
-            if diff_pct > limite and not edicao_legitima:
-                log_warning(f"[SYNC-BLOQUEADO-PCT] {attr}: motor={valor_motor*100:.1f}%, armazenado={valor_antigo*100:.1f}% (diff={diff_pct*100:.1f}%)")
-                contaminacao_pct = True
+            contaminacao_pct = False
+            for attr, limite in percentuais_check:
+                valor_motor = getattr(motor.macro, attr, 0) or 0
+                valor_antigo = getattr(motor_antigo.macro, attr, 0) or 0
+                diff_pct = abs(valor_motor - valor_antigo)
 
-        if contaminacao_pct:
-            log_error(f"[SYNC-BLOQUEADO-PCT] ⚠️ Diferença de percentuais detectada! Recarregando motor...")
-            st.session_state.motor = _copiar_motor(motor_antigo, cenario_destino)
-            _limpar_keys_widgets("CONTAMINACAO-PCT-FIX")
-            return False
+                if diff_pct > limite and not edicao_legitima:
+                    log_warning(f"[SYNC-BLOQUEADO-PCT] {attr}: motor={valor_motor*100:.1f}%, armazenado={valor_antigo*100:.1f}% (diff={diff_pct*100:.1f}%)")
+                    contaminacao_pct = True
+
+            if contaminacao_pct:
+                log_error(f"[SYNC-BLOQUEADO-PCT] ⚠️ Diferença de percentuais detectada! Recarregando motor...")
+                st.session_state.motor = _copiar_motor(motor_antigo, cenario_destino)
+                _limpar_keys_widgets("CONTAMINACAO-PCT-FIX")
+                return False
 
     # TODAS as verificações passaram - sincroniza
     import traceback
@@ -2436,9 +2616,13 @@ def verificar_integridade_cenarios():
     """
     Verifica se os 3 cenários são objetos distintos na memória.
     Se forem o mesmo objeto (bug crítico), cria cópias independentes.
-    
+
     v1.99.6: Também verifica objetos INTERNOS (fisioterapeutas, servicos)
     """
+    # v1.99.53: Ignora verificação no modo consolidado
+    if st.session_state.get('filial_id') == "consolidado":
+        return
+
     motores = st.session_state.get('motores_cenarios', {})
     if not motores or len(motores) < 2:
         return
@@ -2533,10 +2717,14 @@ def verificar_dados_duplicados():
     Verifica se os DADOS (não apenas referências) estão duplicados entre cenários.
     Isso detecta quando Pessimista foi sobrescrito com dados do Conservador.
     """
+    # v1.99.53: Ignora verificação no modo consolidado
+    if st.session_state.get('filial_id') == "consolidado":
+        return
+
     motores = st.session_state.get('motores_cenarios', {})
     if not motores or len(motores) < 2:
         return
-    
+
     motor_cons = motores.get("Conservador")
     motor_pess = motores.get("Pessimista")
     
@@ -3181,23 +3369,33 @@ def render_seletor_cliente_filial():
                     
                     # Carrega motor da filial ou consolida para modo consolidado
                     if novo_filial_id == "consolidado":
-                        # Consolida dados de TODAS as filiais
-                        motor_consolidado = consolidar_filiais(
+                        # CORREÇÃO v1.99.64: Consolida CADA cenário separadamente!
+                        # Isso garante que Otimista use dados Otimista de TODAS as filiais
+                        motor_cons = consolidar_filiais(
                             manager=manager,
                             cliente_id=st.session_state.cliente_id,
-                            cliente_nome=cliente_nome_atual
+                            cliente_nome=cliente_nome_atual,
+                            cenario="Conservador"
                         )
-                        # CORREÇÃO v1.99.1: Usa _copiar_motor para cópias independentes
-                        motor_cons = _copiar_motor(motor_consolidado, "Conservador")
-                        motor_pess = _copiar_motor(motor_consolidado, "Pessimista")
-                        motor_otim = _copiar_motor(motor_consolidado, "Otimista")
-                        
+                        motor_pess = consolidar_filiais(
+                            manager=manager,
+                            cliente_id=st.session_state.cliente_id,
+                            cliente_nome=cliente_nome_atual,
+                            cenario="Pessimista"
+                        )
+                        motor_otim = consolidar_filiais(
+                            manager=manager,
+                            cliente_id=st.session_state.cliente_id,
+                            cliente_nome=cliente_nome_atual,
+                            cenario="Otimista"
+                        )
+
                         st.session_state.motores_cenarios = {
                             "Conservador": motor_cons,
                             "Pessimista": motor_pess,
                             "Otimista": motor_otim
                         }
-                        # Motor atual é CÓPIA independente!
+                        # Motor atual é CÓPIA do Conservador (padrão ao entrar no consolidado)
                         st.session_state.motor = _copiar_motor(motor_cons, "Conservador")
                         
                         # v1.99.11: Limpa keys de widgets
@@ -5165,18 +5363,34 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
         
         # Tabela resumo
         st.markdown("### 📋 Resumo Comparativo")
-        
+
         # Tabela de Resumo HTML estilizada
         margem_pess = (lucro_pess/total_pess*100) if total_pess > 0 else 0
         margem_cons = (lucro_cons/total_cons*100) if total_cons > 0 else 0
         margem_otim = (lucro_otim/total_otim*100) if total_otim > 0 else 0
 
+        # v1.99.57: Calcula total de sessões anuais para Ticket Médio correto
+        def calcular_sessoes_anuais_motor(motor):
+            """Calcula total de sessões anuais considerando sazonalidade"""
+            total = 0
+            for mes in range(1, 13):
+                folha = motor.calcular_folha_fisioterapeutas_mes(mes)
+                for prop in folha.get("proprietarios", []):
+                    total += prop.get("sessoes", 0)
+                for fisio in folha.get("fisioterapeutas", []):
+                    total += fisio.get("sessoes", 0)
+            return total
+
+        sessoes_anuais_pess = calcular_sessoes_anuais_motor(motor_pess)
+        sessoes_anuais_cons = calcular_sessoes_anuais_motor(motor_cons)
+        sessoes_anuais_otim = calcular_sessoes_anuais_motor(motor_otim)
+
         dados_resumo = [
             ("💵 Receita Anual", f"R$ {total_pess:,.2f}", f"R$ {total_cons:,.2f}", f"R$ {total_otim:,.2f}"),
+            ("📅 Sessões/Ano", f"{sessoes_anuais_pess:,.0f}", f"{sessoes_anuais_cons:,.0f}", f"{sessoes_anuais_otim:,.0f}"),
             ("📤 Despesas Anuais", f"R$ {total_desp_pess:,.2f}", f"R$ {total_desp_cons:,.2f}", f"R$ {total_desp_otim:,.2f}"),
             ("📊 Resultado", f"R$ {lucro_pess:,.2f}", f"R$ {lucro_cons:,.2f}", f"R$ {lucro_otim:,.2f}"),
             ("📈 Margem %", f"{margem_pess:.1f}%", f"{margem_cons:.1f}%", f"{margem_otim:.1f}%"),
-            ("🎫 Ticket Médio/Mês", f"R$ {total_pess/12:,.2f}", f"R$ {total_cons/12:,.2f}", f"R$ {total_otim/12:,.2f}"),
         ]
 
         html_resumo = '<table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;">'
@@ -5610,90 +5824,87 @@ Otimista: R$ {total_otim:,.0f} → {cresc_otim_2025:+.2f}% vs 2025""")
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # === TABELA COMPARATIVA MÊS A MÊS ===
-            st.markdown(f"### 📊 Comparativo Mês a Mês: {ano_ant} vs 2026")
-            
-            # Seletor de cenário para comparação
-            cenario_comp = st.selectbox(
-                "Selecione o cenário para comparar:",
-                ["⚠️ Conservador", "📉 Pessimista", "🚀 Otimista"],
-                key="cenario_comp_vs_ant"
-            )
-            
-            # Definir receitas baseado no cenário selecionado
-            if cenario_comp == "📉 Pessimista":
-                receitas_selecionadas = receitas_pess
-            elif cenario_comp == "🚀 Otimista":
-                receitas_selecionadas = receitas_otim
-            else:
-                receitas_selecionadas = receitas_cons
-            
-            # Criar dados da tabela
-            dados_comparativo = []
-            for m in range(12):
-                real_ant = fat_anterior[m] if m < len(fat_anterior) else 0
-                proj_2026 = receitas_selecionadas[m]
-                var_rs = proj_2026 - real_ant
-                var_pct = ((proj_2026 / real_ant) - 1) * 100 if real_ant > 0 else 0
-                
-                dados_comparativo.append({
-                    "Mês": meses_nomes[m],
-                    f"Real {ano_ant}": f"R$ {real_ant:,.0f}",
-                    "Proj. 2026": f"R$ {proj_2026:,.0f}",
-                    "Var (R$)": f"R$ {var_rs:+,.0f}",
-                    "Var (%)": f"{var_pct:+.1f}%"
-                })
-            
-            # Adicionar linha de total
-            total_proj = sum(receitas_selecionadas)
-            var_total_rs = total_proj - total_anterior
-            var_total_pct = ((total_proj / total_anterior) - 1) * 100 if total_anterior > 0 else 0
-            
-            dados_comparativo.append({
-                "Mês": "📊 TOTAL",
-                f"Real {ano_ant}": f"R$ {total_anterior:,.0f}",
-                "Proj. 2026": f"R$ {total_proj:,.0f}",
-                "Var (R$)": f"R$ {var_total_rs:+,.0f}",
-                "Var (%)": f"{var_total_pct:+.1f}%"
-            })
-            
-            df_comp = pd.DataFrame(dados_comparativo)
-            
-            # Estilizar a tabela
-            def highlight_var(val):
-                if isinstance(val, str):
-                    if val.startswith('R$ +') or val.startswith('+'):
-                        return 'color: #28a745; font-weight: bold'
-                    elif val.startswith('R$ -') or (val.startswith('-') and '%' in val):
-                        return 'color: #dc3545; font-weight: bold'
-                return ''
-            
-            st.dataframe(
-                df_comp.style.applymap(highlight_var, subset=["Var (R$)", "Var (%)"]),
-                use_container_width=True,
-                hide_index=True,
-                height=500
-            )
-            
-            # Resumo
+            # === TABELA COMPARATIVA: 2025 vs TODOS OS CENÁRIOS 2026 ===
+            st.markdown(f"### 📊 Faturamento Bruto: {ano_ant} vs Cenários 2026")
+            st.caption("Comparativo completo do faturamento real vs projeções dos 3 cenários")
+
+            # Calcular totais
+            total_pess_ano = sum(receitas_pess)
+            total_cons_ano = sum(receitas_cons)
+            total_otim_ano = sum(receitas_otim)
+
+            # Variações vs 2025
+            var_pess_pct = ((total_pess_ano / total_anterior) - 1) * 100 if total_anterior > 0 else 0
+            var_cons_pct = ((total_cons_ano / total_anterior) - 1) * 100 if total_anterior > 0 else 0
+            var_otim_pct = ((total_otim_ano / total_anterior) - 1) * 100 if total_anterior > 0 else 0
+
+            # Cards de resumo
             st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 10px; color: white; margin-top: 10px;">
-                <div style="display: flex; justify-content: space-around; text-align: center;">
-                    <div>
-                        <div style="font-size: 12px; opacity: 0.8;">Real {ano_ant}</div>
-                        <div style="font-size: 20px; font-weight: bold;">R$ {total_anterior/1000:,.0f}k</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 12px; opacity: 0.8;">Projetado 2026</div>
-                        <div style="font-size: 20px; font-weight: bold;">R$ {total_proj/1000:,.0f}k</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 12px; opacity: 0.8;">Crescimento</div>
-                        <div style="font-size: 20px; font-weight: bold;">{var_total_pct:+.1f}%</div>
-                    </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <div style="flex: 1; background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%); padding: 15px; border-radius: 10px; color: white; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.8;">📅 Real {ano_ant}</div>
+                    <div style="font-size: 22px; font-weight: bold;">R$ {total_anterior/1000:,.0f}k</div>
+                    <div style="font-size: 11px; opacity: 0.7;">Base de comparação</div>
+                </div>
+                <div style="flex: 1; background: linear-gradient(135deg, #c62828 0%, #e53935 100%); padding: 15px; border-radius: 10px; color: white; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.8;">📉 Pessimista 2026</div>
+                    <div style="font-size: 22px; font-weight: bold;">R$ {total_pess_ano/1000:,.0f}k</div>
+                    <div style="font-size: 11px; font-weight: bold;">{var_pess_pct:+.1f}%</div>
+                </div>
+                <div style="flex: 1; background: linear-gradient(135deg, #f9a825 0%, #fbc02d 100%); padding: 15px; border-radius: 10px; color: #1a1a1a; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.8;">⚖️ Conservador 2026</div>
+                    <div style="font-size: 22px; font-weight: bold;">R$ {total_cons_ano/1000:,.0f}k</div>
+                    <div style="font-size: 11px; font-weight: bold;">{var_cons_pct:+.1f}%</div>
+                </div>
+                <div style="flex: 1; background: linear-gradient(135deg, #2e7d32 0%, #43a047 100%); padding: 15px; border-radius: 10px; color: white; text-align: center;">
+                    <div style="font-size: 11px; opacity: 0.8;">🚀 Otimista 2026</div>
+                    <div style="font-size: 22px; font-weight: bold;">R$ {total_otim_ano/1000:,.0f}k</div>
+                    <div style="font-size: 11px; font-weight: bold;">{var_otim_pct:+.1f}%</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+            # Tabela completa mês a mês com todos os cenários
+            html_comp = '<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;">'
+            html_comp += '<thead><tr style="background:linear-gradient(135deg,#1e3a5f 0%,#2c5282 100%);color:white;">'
+            html_comp += f'<th style="padding:10px 8px;text-align:left;font-weight:600;">Mês</th>'
+            html_comp += f'<th style="padding:10px 8px;text-align:right;font-weight:600;">📅 {ano_ant}</th>'
+            html_comp += '<th style="padding:10px 8px;text-align:right;font-weight:600;">📉 Pessimista</th>'
+            html_comp += '<th style="padding:10px 8px;text-align:right;font-weight:600;">⚖️ Conservador</th>'
+            html_comp += '<th style="padding:10px 8px;text-align:right;font-weight:600;">🚀 Otimista</th>'
+            html_comp += '<th style="padding:10px 8px;text-align:right;font-weight:600;">Var Cons %</th>'
+            html_comp += '</tr></thead><tbody>'
+
+            for m in range(12):
+                real_ant = fat_anterior[m] if m < len(fat_anterior) else 0
+                var_cons_mes = ((receitas_cons[m] / real_ant) - 1) * 100 if real_ant > 0 else 0
+                var_color = "#28a745" if var_cons_mes >= 0 else "#dc3545"
+                bg = "background-color:#f8fafc;" if m % 2 == 0 else "background-color:#ffffff;"
+
+                html_comp += f'<tr style="{bg}">'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;font-weight:500;">{meses_nomes[m]}</td>'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#1a365d;font-weight:600;">R$ {real_ant:,.0f}</td>'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#c62828;">R$ {receitas_pess[m]:,.0f}</td>'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#f9a825;">R$ {receitas_cons[m]:,.0f}</td>'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:#2e7d32;">R$ {receitas_otim[m]:,.0f}</td>'
+                html_comp += f'<td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;color:{var_color};font-weight:bold;">{var_cons_mes:+.1f}%</td>'
+                html_comp += '</tr>'
+
+            # Linha de TOTAL
+            html_comp += '<tr style="background:linear-gradient(135deg,#1a365d 0%,#2c5282 100%);color:white;font-weight:700;">'
+            html_comp += '<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;">TOTAL ANUAL</td>'
+            html_comp += f'<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {total_anterior:,.0f}</td>'
+            html_comp += f'<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {total_pess_ano:,.0f}</td>'
+            html_comp += f'<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {total_cons_ano:,.0f}</td>'
+            html_comp += f'<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">R$ {total_otim_ano:,.0f}</td>'
+            html_comp += f'<td style="padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:Consolas,monospace;">{var_cons_pct:+.1f}%</td>'
+            html_comp += '</tr>'
+
+            html_comp += '</tbody></table>'
+            st.markdown(html_comp, unsafe_allow_html=True)
+
+            # Legenda
+            st.caption("💡 **Var Cons %** = Variação do cenário Conservador em relação ao ano anterior")
         
         elif usar_comp and total_anterior == 0:
             st.warning(f"⚠️ Preencha o faturamento de {ano_ant} em **Premissas → Cenários** e clique em **Salvar**")
@@ -12484,13 +12695,29 @@ def pagina_premissas():
                 st.rerun()
         
         with col_ed2:
-            # Botão para copiar do Conservador
+            # Botão para copiar do Conservador - COM CONFIRMAÇÃO OBRIGATÓRIA
             if cenario_selecionado != "Conservador":
-                if st.button(f"📋 Copiar do Conservador", key="btn_copiar_conservador", 
+                if st.button(f"📋 Copiar do Conservador", key="btn_copiar_conservador",
                             help="Copia todas as premissas do Conservador para este cenário"):
+                    st.session_state.show_modal_copiar_cons = True
+
+        # MODAL DE CONFIRMAÇÃO - v1.99.52
+        if st.session_state.get('show_modal_copiar_cons', False) and cenario_selecionado != "Conservador":
+            st.warning(f"""
+            ⚠️ **ATENÇÃO: Esta ação vai SOBRESCREVER todas as premissas do cenário {cenario_selecionado}!**
+
+            - Todos os valores de IPCA, IGP-M, Dissídio serão perdidos
+            - Todas as sessões dos profissionais serão sobrescritas
+            - Todas as despesas serão substituídas
+
+            **Esta ação NÃO pode ser desfeita!**
+            """)
+            col_conf1, col_conf2 = st.columns(2)
+            with col_conf1:
+                if st.button("✅ Sim, sobrescrever tudo", key="btn_confirmar_copiar_cons", type="primary"):
                     # CORREÇÃO v1.98.7: Sincroniza motor atual antes de copiar
                     _sincronizar_motor_para_cenario(st.session_state.motor)
-                    
+
                     from modules.cliente_manager import copiar_cenario
                     copiar_cenario(
                         st.session_state.motores_cenarios["Conservador"],
@@ -12498,13 +12725,18 @@ def pagina_premissas():
                     )
                     # Recarrega o motor com cópia
                     st.session_state.motor = _copiar_motor(st.session_state.motores_cenarios[cenario_selecionado], cenario_selecionado)
-                    
+
                     # CORREÇÃO v1.99.11: Limpa keys de widgets para forçar uso dos novos valores
                     _limpar_keys_widgets("COPIAR-CONS")
-                    
+
                     # Salva no banco
                     salvar_filial_atual()
+                    st.session_state.show_modal_copiar_cons = False
                     st.success(f"✅ Premissas copiadas do Conservador para {cenario_selecionado}!")
+                    st.rerun()
+            with col_conf2:
+                if st.button("❌ Cancelar", key="btn_cancelar_copiar_cons"):
+                    st.session_state.show_modal_copiar_cons = False
                     st.rerun()
         
         # col_ed3 removido - aviso redundante (banner já mostra o cenário)
@@ -12965,11 +13197,12 @@ def pagina_premissas():
                 for i in range(12):
                     motor.sazonalidade.fatores[i] = fatores_sugeridos[i]
                 
-                # Calcula produção COM NOVA SAZONALIDADE
+                # Calcula produção COM NOVA SAZONALIDADE (inclui proprietários v1.99.56)
                 producao_com_nova_sazon = 0
                 for mes in range(1, 13):
                     folha_mes = motor.calcular_folha_fisioterapeutas_mes(mes)
                     producao_com_nova_sazon += sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+                    producao_com_nova_sazon += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
                 
                 # Restaura sazonalidade original (para preview correto)
                 for i in range(12):
@@ -12980,11 +13213,12 @@ def pagina_premissas():
                 # ========================================
                 fator_ajuste = total_2025 / producao_com_nova_sazon if producao_com_nova_sazon > 0 else 1.0
                 
-                # Calcula produção atual (para exibir no diagnóstico)
+                # Calcula produção atual (para exibir no diagnóstico) - inclui proprietários v1.99.56
                 producao_atual_anual = 0
                 for mes in range(1, 13):
                     folha_mes = motor.calcular_folha_fisioterapeutas_mes(mes)
                     producao_atual_anual += sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+                    producao_atual_anual += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
                 
                 # ========================================
                 # 4. CALCULA NOVAS SESSÕES BASE POR FISIO
@@ -13017,6 +13251,7 @@ def pagina_premissas():
                 for mes in range(1, 13):
                     folha_mes = motor.calcular_folha_fisioterapeutas_mes(mes)
                     producao_pos_sync += sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+                    producao_pos_sync += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
                 
                 # Restaura valores originais
                 for nome, fisio in motor.fisioterapeutas.items():
@@ -13315,9 +13550,9 @@ def pagina_premissas():
                     if modo_sessoes == "servico":
                         servico.sessoes_mes_base = st.number_input(
                             "Sessões/Mês (base)",
-                            min_value=0, max_value=1000,
-                            value=servico.sessoes_mes_base,
-                            step=5,
+                            min_value=0.0, max_value=1000.0,
+                            value=float(servico.sessoes_mes_base),
+                            step=5.0,
                             key=f"sess_{servico_nome}_{cenario_key_srv}",
                             help="Quantidade média de sessões por mês"
                         )
@@ -13423,195 +13658,306 @@ def pagina_premissas():
         # ===== PROPRIETÁRIOS =====
         with subtab1:
             st.markdown("#### Proprietários")
-            
-            # Adicionar novo proprietário
-            with st.expander("➕ ADICIONAR PROPRIETÁRIO", expanded=False):
-                novo_prop_nome = st.text_input("Nome do Proprietário", key=f"novo_prop_nome_{cenario_key_equipe}")
 
-                if st.button("✅ Cadastrar Proprietário", key=f"btn_add_prop_{cenario_key_equipe}"):
-                    if novo_prop_nome and novo_prop_nome.strip():
-                        if novo_prop_nome in motor.proprietarios:
-                            st.error(f"❌ '{novo_prop_nome}' já existe!")
-                        else:
-                            from motor_calculo import Profissional
-                            motor.proprietarios[novo_prop_nome] = Profissional(
-                                nome=novo_prop_nome,
-                                tipo="proprietario",
-                                sessoes_por_servico={},
-                                pct_crescimento_por_servico={}
-                            )
-                            # Sincroniza e salva
-                            _sincronizar_motor_para_cenario(motor)
-                            salvar_filial_atual()
-                            st.success(f"✅ Proprietário '{novo_prop_nome}' cadastrado!")
-                            st.rerun()
+            # v1.99.64: Verificar se está no modo consolidado
+            is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+            if is_consolidado:
+                # MODO CONSOLIDADO: Agrupar por filial (somente leitura)
+                st.info("📊 **Modo Consolidado** - Visualização agrupada por filial (somente leitura)")
+
+                # Extrair filial do nome "(Filial)" e agrupar
+                props_por_filial = {}
+                for prop_nome, prop in motor.proprietarios.items():
+                    # Extrai nome da filial do padrão "Nome (Filial)"
+                    if " (" in prop_nome and prop_nome.endswith(")"):
+                        nome_real = prop_nome.rsplit(" (", 1)[0]
+                        filial_nome = prop_nome.rsplit(" (", 1)[1][:-1]
                     else:
-                        st.error("Digite o nome!")
-            
-            st.markdown("---")
-            
-            # Lista de proprietários
-            props_para_remover = []
-            
-            # Verificar modo de cálculo
-            modo_sessoes = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
-            
-            for prop_nome, prop in motor.proprietarios.items():
-                with st.expander(f"👔 {prop_nome}", expanded=True):
-                    st.markdown("**Sessões por Serviço (por mês):**")
-                    
-                    # Grid de serviços
-                    for servico in motor.servicos.keys():
-                        col_srv, col_cresc = st.columns([2, 1])
-                        
-                        with col_srv:
-                            sessoes_atual = int(prop.sessoes_por_servico.get(servico, 0))
-                            novas_sessoes = st.number_input(
-                                servico,
-                                min_value=0, max_value=500,
-                                value=sessoes_atual,
-                                step=1,
-                                key=f"prop_{prop_nome}_{servico}_{cenario_key_equipe}"
-                            )
-                            # DEBUG v1.99.11: Rastrear sobrescrita
-                            if novas_sessoes != sessoes_atual:
-                                print(f"[WIDGET-PROP] {prop_nome}/{servico}: motor tinha {sessoes_atual}, widget retornou {novas_sessoes}, key={f'prop_{prop_nome}_{servico}_{cenario_key_equipe}'}")
-                            if novas_sessoes > 0:
-                                prop.sessoes_por_servico[servico] = novas_sessoes
-                            elif servico in prop.sessoes_por_servico:
-                                del prop.sessoes_por_servico[servico]
-                        
-                        # Crescimento só aparece se modo="profissional" e tem sessões
-                        with col_cresc:
-                            if modo_sessoes == "profissional" and novas_sessoes > 0:
-                                cresc_atual = prop.pct_crescimento_por_servico.get(servico, 0)
-                                novo_cresc = st.number_input(
-                                    "Cresc. %",
-                                    min_value=-20, max_value=50,
-                                    value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
-                                    step=1,
-                                    key=f"prop_cresc_{prop_nome}_{servico}_{cenario_key_equipe}",
-                                    help="Crescimento anual das sessões"
+                        nome_real = prop_nome
+                        filial_nome = "Principal"
+
+                    if filial_nome not in props_por_filial:
+                        props_por_filial[filial_nome] = []
+                    props_por_filial[filial_nome].append({
+                        'nome': nome_real,
+                        'nome_completo': prop_nome,
+                        'prop': prop
+                    })
+
+                # Exibir agrupado por filial
+                for filial_nome, props_lista in sorted(props_por_filial.items()):
+                    st.markdown(f"### 🏢 {filial_nome}")
+
+                    for item in props_lista:
+                        prop = item['prop']
+                        total_sessoes = sum(prop.sessoes_por_servico.values())
+
+                        with st.expander(f"👔 {item['nome']} ({total_sessoes} sessões/mês)", expanded=False):
+                            # Tabela de sessões por serviço
+                            dados_servicos = []
+                            for srv, qtd in prop.sessoes_por_servico.items():
+                                if qtd > 0:
+                                    cresc = prop.pct_crescimento_por_servico.get(srv, 0)
+                                    dados_servicos.append({
+                                        'Serviço': srv,
+                                        'Sessões/mês': int(qtd),
+                                        'Crescimento': f"{cresc*100:.0f}%" if cresc else "-"
+                                    })
+
+                            if dados_servicos:
+                                st.dataframe(pd.DataFrame(dados_servicos), use_container_width=True, hide_index=True)
+                            else:
+                                st.caption("Nenhum serviço configurado")
+
+                    st.markdown("---")
+            else:
+                # MODO NORMAL: Permite edição
+                # Adicionar novo proprietário
+                with st.expander("➕ ADICIONAR PROPRIETÁRIO", expanded=False):
+                    novo_prop_nome = st.text_input("Nome do Proprietário", key=f"novo_prop_nome_{cenario_key_equipe}")
+
+                    if st.button("✅ Cadastrar Proprietário", key=f"btn_add_prop_{cenario_key_equipe}"):
+                        if novo_prop_nome and novo_prop_nome.strip():
+                            if novo_prop_nome in motor.proprietarios:
+                                st.error(f"❌ '{novo_prop_nome}' já existe!")
+                            else:
+                                from motor_calculo import Profissional
+                                motor.proprietarios[novo_prop_nome] = Profissional(
+                                    nome=novo_prop_nome,
+                                    tipo="proprietario",
+                                    sessoes_por_servico={},
+                                    pct_crescimento_por_servico={}
                                 )
-                                prop.pct_crescimento_por_servico[servico] = novo_cresc / 100
-                    
-                    # Resumo e botão remover
-                    total_sessoes = sum(prop.sessoes_por_servico.values())
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.info(f"📊 Total: **{total_sessoes}** sessões/mês")
-                    with col2:
-                        if st.button("🗑️ Remover", key=f"rem_prop_{prop_nome}"):
-                            props_para_remover.append(prop_nome)
-            
-            for p in props_para_remover:
-                if p in motor.proprietarios:
-                    del motor.proprietarios[p]
-                # Também remover de outras estruturas para evitar re-sincronização
-                if p in motor.fisioterapeutas:
-                    del motor.fisioterapeutas[p]
-                if p in motor.socios_prolabore:
-                    del motor.socios_prolabore[p]
-            
-            if props_para_remover:
-                # Sincroniza e salva
-                _sincronizar_motor_para_cenario(motor)
-                salvar_filial_atual()
-                st.rerun()
+                                # Sincroniza e salva
+                                _sincronizar_motor_para_cenario(motor)
+                                salvar_filial_atual()
+                                st.success(f"✅ Proprietário '{novo_prop_nome}' cadastrado!")
+                                st.rerun()
+                        else:
+                            st.error("Digite o nome!")
+
+                st.markdown("---")
+
+                # Lista de proprietários
+                props_para_remover = []
+
+                # Verificar modo de cálculo
+                modo_sessoes = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+
+                for prop_nome, prop in motor.proprietarios.items():
+                    with st.expander(f"👔 {prop_nome}", expanded=True):
+                        st.markdown("**Sessões por Serviço (por mês):**")
+
+                        # Grid de serviços
+                        for servico in motor.servicos.keys():
+                            col_srv, col_cresc = st.columns([2, 1])
+
+                            with col_srv:
+                                sessoes_atual = int(prop.sessoes_por_servico.get(servico, 0))
+                                novas_sessoes = st.number_input(
+                                    servico,
+                                    min_value=0, max_value=500,
+                                    value=sessoes_atual,
+                                    step=1,
+                                    key=f"prop_{prop_nome}_{servico}_{cenario_key_equipe}"
+                                )
+                                # DEBUG v1.99.11: Rastrear sobrescrita
+                                if novas_sessoes != sessoes_atual:
+                                    print(f"[WIDGET-PROP] {prop_nome}/{servico}: motor tinha {sessoes_atual}, widget retornou {novas_sessoes}, key={f'prop_{prop_nome}_{servico}_{cenario_key_equipe}'}")
+                                if novas_sessoes > 0:
+                                    prop.sessoes_por_servico[servico] = novas_sessoes
+                                elif servico in prop.sessoes_por_servico:
+                                    del prop.sessoes_por_servico[servico]
+
+                            # Crescimento só aparece se modo="profissional" e tem sessões
+                            with col_cresc:
+                                if modo_sessoes == "profissional" and novas_sessoes > 0:
+                                    cresc_atual = prop.pct_crescimento_por_servico.get(servico, 0)
+                                    novo_cresc = st.number_input(
+                                        "Cresc. %",
+                                        min_value=-20, max_value=50,
+                                        value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
+                                        step=1,
+                                        key=f"prop_cresc_{prop_nome}_{servico}_{cenario_key_equipe}",
+                                        help="Crescimento anual das sessões"
+                                    )
+                                    prop.pct_crescimento_por_servico[servico] = novo_cresc / 100
+
+                        # Resumo e botão remover
+                        total_sessoes = sum(prop.sessoes_por_servico.values())
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.info(f"📊 Total: **{total_sessoes}** sessões/mês")
+                        with col2:
+                            if st.button("🗑️ Remover", key=f"rem_prop_{prop_nome}"):
+                                props_para_remover.append(prop_nome)
+
+                for p in props_para_remover:
+                    if p in motor.proprietarios:
+                        del motor.proprietarios[p]
+                    # Também remover de outras estruturas para evitar re-sincronização
+                    if p in motor.fisioterapeutas:
+                        del motor.fisioterapeutas[p]
+                    if p in motor.socios_prolabore:
+                        del motor.socios_prolabore[p]
+
+                if props_para_remover:
+                    # Sincroniza e salva
+                    _sincronizar_motor_para_cenario(motor)
+                    salvar_filial_atual()
+                    st.rerun()
         
         # ===== PROFISSIONAIS =====
         with subtab2:
             st.markdown("#### Profissionais (Fisioterapeutas)")
-            
-            # Adicionar novo profissional
-            with st.expander("➕ ADICIONAR PROFISSIONAL", expanded=False):
-                novo_prof_nome = st.text_input("Nome do Profissional", key=f"novo_prof_nome_{cenario_key_equipe}")
 
-                if st.button("✅ Cadastrar Profissional", key=f"btn_add_prof_{cenario_key_equipe}"):
-                    if novo_prof_nome and novo_prof_nome.strip():
-                        if novo_prof_nome in motor.profissionais:
-                            st.error(f"❌ '{novo_prof_nome}' já existe!")
-                        else:
-                            from motor_calculo import Profissional
-                            motor.profissionais[novo_prof_nome] = Profissional(
-                                nome=novo_prof_nome,
-                                tipo="profissional",
-                                sessoes_por_servico={},
-                                pct_crescimento_por_servico={}
-                            )
-                            # Sincroniza e salva
-                            _sincronizar_motor_para_cenario(motor)
-                            salvar_filial_atual()
-                            st.success(f"✅ Profissional '{novo_prof_nome}' cadastrado!")
-                            st.rerun()
+            # v1.99.64: Verificar se está no modo consolidado
+            is_consolidado_prof = st.session_state.get('filial_id') == "consolidado"
+
+            if is_consolidado_prof:
+                # MODO CONSOLIDADO: Agrupar por filial (somente leitura)
+                st.info("📊 **Modo Consolidado** - Visualização agrupada por filial (somente leitura)")
+
+                # Extrair filial do nome "(Filial)" e agrupar
+                profs_por_filial = {}
+                for prof_nome, prof in motor.profissionais.items():
+                    # Extrai nome da filial do padrão "Nome (Filial)"
+                    if " (" in prof_nome and prof_nome.endswith(")"):
+                        nome_real = prof_nome.rsplit(" (", 1)[0]
+                        filial_nome = prof_nome.rsplit(" (", 1)[1][:-1]
                     else:
-                        st.error("Digite o nome!")
-            
-            st.markdown("---")
-            
-            # Lista de profissionais
-            profs_para_remover = []
-            
-            for prof_nome, prof in motor.profissionais.items():
-                with st.expander(f"🩺 {prof_nome}", expanded=False):
-                    st.markdown("**Sessões por Serviço (por mês):**")
-                    
-                    # Grid de serviços
-                    for servico in motor.servicos.keys():
-                        col_srv, col_cresc = st.columns([2, 1])
-                        
-                        with col_srv:
-                            sessoes_atual = int(prof.sessoes_por_servico.get(servico, 0))
-                            novas_sessoes = st.number_input(
-                                servico,
-                                min_value=0, max_value=500,
-                                value=sessoes_atual,
-                                step=1,
-                                key=f"prof_{prof_nome}_{servico}_{cenario_key_equipe}"
-                            )
-                            # DEBUG v1.99.11: Rastrear sobrescrita
-                            if novas_sessoes != sessoes_atual:
-                                print(f"[WIDGET-PROF] {prof_nome}/{servico}: motor tinha {sessoes_atual}, widget retornou {novas_sessoes}")
-                            if novas_sessoes > 0:
-                                prof.sessoes_por_servico[servico] = novas_sessoes
-                            elif servico in prof.sessoes_por_servico:
-                                del prof.sessoes_por_servico[servico]
-                        
-                        # Crescimento só aparece se modo="profissional" e tem sessões
-                        with col_cresc:
-                            if modo_sessoes == "profissional" and novas_sessoes > 0:
-                                cresc_atual = prof.pct_crescimento_por_servico.get(servico, 0)
-                                novo_cresc = st.number_input(
-                                    "Cresc. %",
-                                    min_value=-20, max_value=50,
-                                    value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
-                                    step=1,
-                                    key=f"prof_cresc_{prof_nome}_{servico}_{cenario_key_equipe}",
-                                    help="Crescimento anual das sessões"
+                        nome_real = prof_nome
+                        filial_nome = "Principal"
+
+                    if filial_nome not in profs_por_filial:
+                        profs_por_filial[filial_nome] = []
+                    profs_por_filial[filial_nome].append({
+                        'nome': nome_real,
+                        'nome_completo': prof_nome,
+                        'prof': prof
+                    })
+
+                # Exibir agrupado por filial
+                for filial_nome, profs_lista in sorted(profs_por_filial.items()):
+                    st.markdown(f"### 🏢 {filial_nome}")
+
+                    for item in profs_lista:
+                        prof = item['prof']
+                        total_sessoes = sum(prof.sessoes_por_servico.values())
+
+                        with st.expander(f"🩺 {item['nome']} ({total_sessoes} sessões/mês)", expanded=False):
+                            # Tabela de sessões por serviço
+                            dados_servicos = []
+                            for srv, qtd in prof.sessoes_por_servico.items():
+                                if qtd > 0:
+                                    cresc = prof.pct_crescimento_por_servico.get(srv, 0)
+                                    dados_servicos.append({
+                                        'Serviço': srv,
+                                        'Sessões/mês': int(qtd),
+                                        'Crescimento': f"{cresc*100:.0f}%" if cresc else "-"
+                                    })
+
+                            if dados_servicos:
+                                st.dataframe(pd.DataFrame(dados_servicos), use_container_width=True, hide_index=True)
+                            else:
+                                st.caption("Nenhum serviço configurado")
+
+                    st.markdown("---")
+            else:
+                # MODO NORMAL: Permite edição
+                # Adicionar novo profissional
+                with st.expander("➕ ADICIONAR PROFISSIONAL", expanded=False):
+                    novo_prof_nome = st.text_input("Nome do Profissional", key=f"novo_prof_nome_{cenario_key_equipe}")
+
+                    if st.button("✅ Cadastrar Profissional", key=f"btn_add_prof_{cenario_key_equipe}"):
+                        if novo_prof_nome and novo_prof_nome.strip():
+                            if novo_prof_nome in motor.profissionais:
+                                st.error(f"❌ '{novo_prof_nome}' já existe!")
+                            else:
+                                from motor_calculo import Profissional
+                                motor.profissionais[novo_prof_nome] = Profissional(
+                                    nome=novo_prof_nome,
+                                    tipo="profissional",
+                                    sessoes_por_servico={},
+                                    pct_crescimento_por_servico={}
                                 )
-                                prof.pct_crescimento_por_servico[servico] = novo_cresc / 100
-                    
-                    # Resumo e botão remover
-                    total_sessoes = sum(prof.sessoes_por_servico.values())
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.info(f"📊 Total: **{total_sessoes}** sessões/mês")
-                    with col2:
-                        if st.button("🗑️ Remover", key=f"rem_prof_{prof_nome}"):
-                            profs_para_remover.append(prof_nome)
-            
-            for p in profs_para_remover:
-                if p in motor.profissionais:
-                    del motor.profissionais[p]
-                # Também remover de fisioterapeutas para evitar re-sincronização
-                if p in motor.fisioterapeutas:
-                    del motor.fisioterapeutas[p]
-            
-            if profs_para_remover:
-                # Sincroniza e salva
-                _sincronizar_motor_para_cenario(motor)
-                salvar_filial_atual()
-                st.rerun()
+                                # Sincroniza e salva
+                                _sincronizar_motor_para_cenario(motor)
+                                salvar_filial_atual()
+                                st.success(f"✅ Profissional '{novo_prof_nome}' cadastrado!")
+                                st.rerun()
+                        else:
+                            st.error("Digite o nome!")
+
+                st.markdown("---")
+
+                # Lista de profissionais
+                profs_para_remover = []
+
+                # Verificar modo de cálculo
+                modo_sessoes_prof = getattr(motor.operacional, 'modo_calculo_sessoes', 'servico')
+
+                for prof_nome, prof in motor.profissionais.items():
+                    with st.expander(f"🩺 {prof_nome}", expanded=False):
+                        st.markdown("**Sessões por Serviço (por mês):**")
+
+                        # Grid de serviços
+                        for servico in motor.servicos.keys():
+                            col_srv, col_cresc = st.columns([2, 1])
+
+                            with col_srv:
+                                sessoes_atual = int(prof.sessoes_por_servico.get(servico, 0))
+                                novas_sessoes = st.number_input(
+                                    servico,
+                                    min_value=0, max_value=500,
+                                    value=sessoes_atual,
+                                    step=1,
+                                    key=f"prof_{prof_nome}_{servico}_{cenario_key_equipe}"
+                                )
+                                # DEBUG v1.99.11: Rastrear sobrescrita
+                                if novas_sessoes != sessoes_atual:
+                                    print(f"[WIDGET-PROF] {prof_nome}/{servico}: motor tinha {sessoes_atual}, widget retornou {novas_sessoes}")
+                                if novas_sessoes > 0:
+                                    prof.sessoes_por_servico[servico] = novas_sessoes
+                                elif servico in prof.sessoes_por_servico:
+                                    del prof.sessoes_por_servico[servico]
+
+                            # Crescimento só aparece se modo="profissional" e tem sessões
+                            with col_cresc:
+                                if modo_sessoes_prof == "profissional" and novas_sessoes > 0:
+                                    cresc_atual = prof.pct_crescimento_por_servico.get(servico, 0)
+                                    novo_cresc = st.number_input(
+                                        "Cresc. %",
+                                        min_value=-20, max_value=50,
+                                        value=int(cresc_atual * 100) if isinstance(cresc_atual, float) and cresc_atual < 1 else int(cresc_atual),
+                                        step=1,
+                                        key=f"prof_cresc_{prof_nome}_{servico}_{cenario_key_equipe}",
+                                        help="Crescimento anual das sessões"
+                                    )
+                                    prof.pct_crescimento_por_servico[servico] = novo_cresc / 100
+
+                        # Resumo e botão remover
+                        total_sessoes = sum(prof.sessoes_por_servico.values())
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.info(f"📊 Total: **{total_sessoes}** sessões/mês")
+                        with col2:
+                            if st.button("🗑️ Remover", key=f"rem_prof_{prof_nome}"):
+                                profs_para_remover.append(prof_nome)
+
+                for p in profs_para_remover:
+                    if p in motor.profissionais:
+                        del motor.profissionais[p]
+                    # Também remover de fisioterapeutas para evitar re-sincronização
+                    if p in motor.fisioterapeutas:
+                        del motor.fisioterapeutas[p]
+
+                if profs_para_remover:
+                    # Sincroniza e salva
+                    _sincronizar_motor_para_cenario(motor)
+                    salvar_filial_atual()
+                    st.rerun()
         
         # ===== RESUMO DA EQUIPE =====
         st.markdown("---")
@@ -15235,22 +15581,22 @@ def pagina_premissas():
                             "Nome": f["nome"],
                             "Nível": f["nivel"],
                             "Sessões": f["sessoes"],
-                        "Faturamento": f["faturamento"],
-                        "% Nível": f["pct_nivel"] * 100,
-                        "Remuneração": f["remuneracao"]
-                    })
-                
-                df_fisios = pd.DataFrame(dados_fisios)
-                st.dataframe(
-                    df_fisios.style.format({
-                        "Sessões": "{:.1f}",
-                        "Faturamento": "R$ {:,.2f}",
-                        "% Nível": "{:.0f}%",
-                        "Remuneração": "R$ {:,.2f}"
-                    }),
-                    use_container_width=True,
-                    hide_index=True
-                )
+                            "Faturamento": f["faturamento"],
+                            "% Nível": f["pct_nivel"] * 100,
+                            "Remuneração": f["remuneracao"]
+                        })
+
+                    df_fisios = pd.DataFrame(dados_fisios)
+                    st.dataframe(
+                        df_fisios.style.format({
+                            "Sessões": "{:.1f}",
+                            "Faturamento": "R$ {:,.2f}",
+                            "% Nível": "{:.0f}%",
+                            "Remuneração": "R$ {:,.2f}"
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
             
             # Proprietários
             st.markdown("##### 👔 Proprietário (Janeiro)")
@@ -15514,7 +15860,7 @@ def pagina_premissas():
         else:
             # Conteúdo normal da aba
             st.caption("O **Conservador** usa as premissas cadastradas. Configure ajustes para os cenários Pessimista e Otimista.")
-            
+
             # Inicializa ajustes se não existir
             if not hasattr(motor, 'ajustes_cenarios') or motor.ajustes_cenarios is None:
                 motor.restaurar_ajustes_padrao()
@@ -16257,8 +16603,134 @@ def pagina_atendimentos():
     # ========== PROPRIETÁRIOS ==========
     with tab1:
         st.markdown("### 👔 Evolução - Proprietários")
-        
-        if not motor.proprietarios:
+
+        # v1.99.66: NOVO - Buscar valores calculados direto do banco de cada filial
+        is_consolidado_props = st.session_state.get('filial_id') == "consolidado"
+
+        if is_consolidado_props:
+            # CONSOLIDADO: Busca valores de cada filial e soma
+            st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+            from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+            manager = ClienteManager()
+            cliente_id = st.session_state.get('cliente_id')
+            cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+            if cliente_id:
+                filiais = manager.listar_filiais(cliente_id)
+
+                # Coletar dados de todas as filiais
+                dados_por_filial = {}
+                total_geral = {'sessoes': [0]*12, 'faturamento': [0]*12}
+
+                for filial_info in filiais:
+                    filial_id = filial_info["id"]
+                    filial_nome = filial_info["nome"]
+
+                    try:
+                        resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                        motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                        if not motor_filial:
+                            motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                        if motor_filial and motor_filial.proprietarios:
+                            dados_por_filial[filial_nome] = {'motor': motor_filial, 'props': {}}
+
+                            for prop_nome, prop in motor_filial.proprietarios.items():
+                                sessoes_mes = []
+                                fat_mes = []
+
+                                for mes_idx in range(12):
+                                    # Usa método do motor que já aplica sazonalidade
+                                    sess = 0
+                                    fat = 0
+                                    for srv, qtd_base in prop.sessoes_por_servico.items():
+                                        pct_cresc = prop.pct_crescimento_por_servico.get(srv, 0.0)
+                                        if pct_cresc > 0:
+                                            crescimento_qtd = qtd_base * pct_cresc
+                                            cresc_mensal = crescimento_qtd / 13.1
+                                            qtd = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                                        else:
+                                            qtd = qtd_base
+                                        # Aplica sazonalidade do motor DA FILIAL
+                                        fator = motor_filial.sazonalidade.fatores[mes_idx] if hasattr(motor_filial, 'sazonalidade') else 1.0
+                                        qtd = qtd * fator
+                                        sess += qtd
+                                        # Faturamento
+                                        valor = motor_filial.calcular_valor_servico_mes(srv, mes_idx, 'proprietario')
+                                        fat += qtd * valor
+
+                                    sessoes_mes.append(round(sess, 2))
+                                    fat_mes.append(round(fat, 2))
+                                    total_geral['sessoes'][mes_idx] += sess
+                                    total_geral['faturamento'][mes_idx] += fat
+
+                                dados_por_filial[filial_nome]['props'][prop_nome] = {
+                                    'sessoes': sessoes_mes,
+                                    'faturamento': fat_mes
+                                }
+                    except Exception as e:
+                        st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+                # Exibe tabelas agrupadas por filial
+                st.markdown("#### 📅 Sessões por Mês")
+                for filial_nome, dados in sorted(dados_por_filial.items()):
+                    st.markdown(f"##### 🏢 {filial_nome}")
+                    rows = []
+                    subtotal = [0]*12
+                    for prop_nome, valores in dados['props'].items():
+                        row = {'Proprietário': f"👔 {prop_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row[mes] = valores['sessoes'][i]
+                            subtotal[i] += valores['sessoes'][i]
+                        row['Total Ano'] = round(sum(valores['sessoes']), 2)
+                        rows.append(row)
+                    # Subtotal filial
+                    if len(rows) > 0:
+                        row_sub = {'Proprietário': f"📊 Subtotal {filial_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row_sub[mes] = round(subtotal[i], 2)
+                        row_sub['Total Ano'] = round(sum(subtotal), 2)
+                        rows.append(row_sub)
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                # Total Geral
+                st.markdown("##### 📊 TOTAL CONSOLIDADO")
+                row_total = {'Proprietário': '📊 TOTAL GERAL'}
+                for i, mes in enumerate(MESES_ABREV):
+                    row_total[mes] = round(total_geral['sessoes'][i], 2)
+                row_total['Total Ano'] = round(sum(total_geral['sessoes']), 2)
+                st.dataframe(pd.DataFrame([row_total]), use_container_width=True, hide_index=True)
+
+                # Faturamento
+                st.markdown("#### 💰 Faturamento por Mês")
+                for filial_nome, dados in sorted(dados_por_filial.items()):
+                    st.markdown(f"##### 🏢 {filial_nome}")
+                    rows = []
+                    subtotal = [0]*12
+                    for prop_nome, valores in dados['props'].items():
+                        row = {'Proprietário': f"👔 {prop_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row[mes] = format_currency(valores['faturamento'][i], prefix="")
+                            subtotal[i] += valores['faturamento'][i]
+                        row['Total Ano'] = format_currency(sum(valores['faturamento']), prefix="")
+                        rows.append(row)
+                    if len(rows) > 0:
+                        row_sub = {'Proprietário': f"📊 Subtotal {filial_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row_sub[mes] = format_currency(subtotal[i], prefix="")
+                        row_sub['Total Ano'] = format_currency(sum(subtotal), prefix="")
+                        rows.append(row_sub)
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                st.markdown("##### 📊 TOTAL CONSOLIDADO")
+                row_total = {'Proprietário': '📊 TOTAL GERAL'}
+                for i, mes in enumerate(MESES_ABREV):
+                    row_total[mes] = format_currency(total_geral['faturamento'][i], prefix="")
+                row_total['Total Ano'] = format_currency(sum(total_geral['faturamento']), prefix="")
+                st.dataframe(pd.DataFrame([row_total]), use_container_width=True, hide_index=True)
+
+        elif not motor.proprietarios:
             st.info("Nenhum proprietário cadastrado. Vá em Premissas → Equipe para cadastrar.")
         else:
             # Tabela de sessões por proprietário
@@ -16288,93 +16760,130 @@ def pagina_atendimentos():
                 dados_sessoes.append(row)
             
             if dados_sessoes:
-                st.dataframe(pd.DataFrame(dados_sessoes), use_container_width=True, hide_index=True)
-            
+                # Adiciona linha de TOTAL
+                df_sessoes = pd.DataFrame(dados_sessoes)
+                total_row = {'Profissional': '📊 TOTAL'}
+                for col in df_sessoes.columns:
+                    if col != 'Profissional':
+                        total_row[col] = round(df_sessoes[col].sum(), 2)
+                df_sessoes = pd.concat([df_sessoes, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(df_sessoes, use_container_width=True, hide_index=True)
+
             # Tabela de faturamento por proprietário
             st.markdown("#### 💰 Faturamento por Mês")
-            
+
             dados_faturamento = []
+            totais_fat = {mes: 0 for mes in MESES_ABREV}
+            totais_fat['Total Ano'] = 0
+
             for prop_nome, prop in motor.proprietarios.items():
                 row = {'Profissional': f"👔 {prop_nome}"}
                 total_ano = 0
-                
+
                 for mes_idx, mes in enumerate(MESES_ABREV):
                     faturamento_mes = 0
-                    
+
                     for servico, qtd_base in prop.sessoes_por_servico.items():
                         # Calcula sessões
                         pct_cresc = prop.pct_crescimento_por_servico.get(servico, 0.0)
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                        
+
                         # APLICA SAZONALIDADE nas sessões
                         fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
                         sessoes = sessoes * fator_saz
-                        
+
                         # Calcula valor (antes/depois do reajuste)
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                         faturamento_mes += sessoes * valor
-                    
+
                     row[mes] = format_currency(faturamento_mes, prefix="")
+                    totais_fat[mes] += faturamento_mes
                     total_ano += faturamento_mes
-                
+
                 row['Total Ano'] = format_currency(total_ano, prefix="")
+                totais_fat['Total Ano'] += total_ano
                 dados_faturamento.append(row)
-            
+
             if dados_faturamento:
+                # Adiciona linha de TOTAL
+                total_row = {'Profissional': '📊 TOTAL'}
+                for mes in MESES_ABREV:
+                    total_row[mes] = format_currency(totais_fat[mes], prefix="")
+                total_row['Total Ano'] = format_currency(totais_fat['Total Ano'], prefix="")
+                dados_faturamento.append(total_row)
                 st.dataframe(pd.DataFrame(dados_faturamento), use_container_width=True, hide_index=True)
             
             # Tabela de ticket médio por proprietário
             st.markdown("#### 🎫 Ticket Médio por Mês")
             st.caption("Faturamento ÷ Sessões = Valor médio por atendimento")
-            
+
             dados_ticket = []
+            totais_fat_ticket = {mes: 0 for mes in MESES_ABREV}
+            totais_sess_ticket = {mes: 0 for mes in MESES_ABREV}
+            grand_total_fat = 0
+            grand_total_sess = 0
+
             for prop_nome, prop in motor.proprietarios.items():
                 row = {'Profissional': f"👔 {prop_nome}"}
                 total_faturamento = 0
                 total_sessoes = 0
-                
+
                 for mes_idx, mes in enumerate(MESES_ABREV):
                     faturamento_mes = 0
                     sessoes_mes = 0
-                    
+
                     for servico, qtd_base in prop.sessoes_por_servico.items():
                         # Calcula sessões
                         pct_cresc = prop.pct_crescimento_por_servico.get(servico, 0.0)
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                        
+
                         # APLICA SAZONALIDADE
                         fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
                         sessoes = sessoes * fator_saz
-                        
+
                         sessoes_mes += sessoes
-                        
+
                         # Calcula valor (antes/depois do reajuste)
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                         faturamento_mes += sessoes * valor
-                    
+
                     ticket = faturamento_mes / sessoes_mes if sessoes_mes > 0 else 0
                     row[mes] = format_currency(ticket, prefix="")
+                    totais_fat_ticket[mes] += faturamento_mes
+                    totais_sess_ticket[mes] += sessoes_mes
                     total_faturamento += faturamento_mes
                     total_sessoes += sessoes_mes
-                
+
                 ticket_medio_ano = total_faturamento / total_sessoes if total_sessoes > 0 else 0
                 row['Média Ano'] = format_currency(ticket_medio_ano, prefix="")
+                grand_total_fat += total_faturamento
+                grand_total_sess += total_sessoes
                 dados_ticket.append(row)
-            
+
             if dados_ticket:
+                # Adiciona linha de TOTAL (ticket médio ponderado)
+                total_row = {'Profissional': '📊 TOTAL'}
+                for mes in MESES_ABREV:
+                    ticket_total = totais_fat_ticket[mes] / totais_sess_ticket[mes] if totais_sess_ticket[mes] > 0 else 0
+                    total_row[mes] = format_currency(ticket_total, prefix="")
+                ticket_medio_geral = grand_total_fat / grand_total_sess if grand_total_sess > 0 else 0
+                total_row['Média Ano'] = format_currency(ticket_medio_geral, prefix="")
+                dados_ticket.append(total_row)
                 st.dataframe(pd.DataFrame(dados_ticket), use_container_width=True, hide_index=True)
             
             # Gráfico de evolução
             st.markdown("#### 📈 Gráfico de Evolução")
-            
+
             fig = go.Figure()
+            totais_grafico = [0] * 12  # Para acumular TOTAL
+
             for prop_nome, prop in motor.proprietarios.items():
                 valores_mes = []
-                
+
                 for mes_idx in range(12):
                     faturamento_mes = 0
                     for servico, qtd_base in prop.sessoes_por_servico.items():
@@ -16382,22 +16891,34 @@ def pagina_atendimentos():
                         crescimento_qtd = qtd_base * pct_cresc
                         cresc_mensal = crescimento_qtd / 13.1
                         sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                        
+
                         # APLICA SAZONALIDADE
                         fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
                         sessoes = sessoes * fator_saz
-                        
+
                         valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
                         faturamento_mes += sessoes * valor
                     valores_mes.append(faturamento_mes)
-                
+                    totais_grafico[mes_idx] += faturamento_mes
+
                 fig.add_trace(go.Scatter(
                     x=MESES_ABREV,
                     y=valores_mes,
                     mode='lines+markers',
                     name=prop_nome
                 ))
-            
+
+            # Adiciona linha de TOTAL (mais grossa, tracejada)
+            if len(motor.proprietarios) > 1:
+                fig.add_trace(go.Scatter(
+                    x=MESES_ABREV,
+                    y=totais_grafico,
+                    mode='lines+markers',
+                    name='📊 TOTAL',
+                    line=dict(width=3, dash='dash', color='#1a365d'),
+                    marker=dict(size=8)
+                ))
+
             fig.update_layout(
                 title="Faturamento Mensal - Proprietários",
                 xaxis_title="Mês",
@@ -16410,101 +16931,221 @@ def pagina_atendimentos():
     # ========== PROFISSIONAIS ==========
     with tab2:
         st.markdown("### 🩺 Evolução - Profissionais")
-        
-        if not motor.profissionais:
+
+        # v1.99.66: Verificar se está no modo consolidado
+        is_consolidado_profs = st.session_state.get('filial_id') == "consolidado"
+
+        if is_consolidado_profs:
+            # CONSOLIDADO: Busca valores de cada filial e soma
+            st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+            from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+            manager = ClienteManager()
+            cliente_id = st.session_state.get('cliente_id')
+            cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+            if cliente_id:
+                filiais = manager.listar_filiais(cliente_id)
+
+                # Coletar dados de todas as filiais
+                dados_por_filial = {}
+                total_geral = {'sessoes': [0]*12, 'faturamento': [0]*12}
+
+                for filial_info in filiais:
+                    filial_id = filial_info["id"]
+                    filial_nome = filial_info["nome"]
+
+                    try:
+                        resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                        motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                        if not motor_filial:
+                            motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                        if motor_filial and motor_filial.profissionais:
+                            dados_por_filial[filial_nome] = {'motor': motor_filial, 'profs': {}}
+
+                            for prof_nome, prof in motor_filial.profissionais.items():
+                                sessoes_mes = []
+                                fat_mes = []
+
+                                for mes_idx in range(12):
+                                    sess = 0
+                                    fat = 0
+                                    for srv, qtd_base in prof.sessoes_por_servico.items():
+                                        pct_cresc = prof.pct_crescimento_por_servico.get(srv, 0.0)
+                                        if pct_cresc > 0:
+                                            crescimento_qtd = qtd_base * pct_cresc
+                                            cresc_mensal = crescimento_qtd / 13.1
+                                            qtd = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                                        else:
+                                            qtd = qtd_base
+                                        # Aplica sazonalidade do motor DA FILIAL
+                                        fator = motor_filial.sazonalidade.fatores[mes_idx] if hasattr(motor_filial, 'sazonalidade') else 1.0
+                                        qtd = qtd * fator
+                                        sess += qtd
+                                        # Faturamento
+                                        valor = motor_filial.calcular_valor_servico_mes(srv, mes_idx, 'profissional')
+                                        fat += qtd * valor
+
+                                    sessoes_mes.append(round(sess, 2))
+                                    fat_mes.append(round(fat, 2))
+                                    total_geral['sessoes'][mes_idx] += sess
+                                    total_geral['faturamento'][mes_idx] += fat
+
+                                dados_por_filial[filial_nome]['profs'][prof_nome] = {
+                                    'sessoes': sessoes_mes,
+                                    'faturamento': fat_mes
+                                }
+                    except Exception as e:
+                        st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+                # Exibe tabelas agrupadas por filial - SESSÕES
+                st.markdown("#### 📅 Sessões por Mês")
+                for filial_nome, dados in sorted(dados_por_filial.items()):
+                    st.markdown(f"##### 🏢 {filial_nome}")
+                    rows = []
+                    subtotal = [0]*12
+                    for prof_nome, valores in dados['profs'].items():
+                        row = {'Profissional': f"🩺 {prof_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row[mes] = valores['sessoes'][i]
+                            subtotal[i] += valores['sessoes'][i]
+                        row['Total Ano'] = round(sum(valores['sessoes']), 2)
+                        rows.append(row)
+                    if len(rows) > 0:
+                        row_sub = {'Profissional': f"📊 Subtotal {filial_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row_sub[mes] = round(subtotal[i], 2)
+                        row_sub['Total Ano'] = round(sum(subtotal), 2)
+                        rows.append(row_sub)
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                st.markdown("##### 📊 TOTAL CONSOLIDADO")
+                row_total = {'Profissional': '📊 TOTAL GERAL'}
+                for i, mes in enumerate(MESES_ABREV):
+                    row_total[mes] = round(total_geral['sessoes'][i], 2)
+                row_total['Total Ano'] = round(sum(total_geral['sessoes']), 2)
+                st.dataframe(pd.DataFrame([row_total]), use_container_width=True, hide_index=True)
+
+                # FATURAMENTO
+                st.markdown("#### 💰 Faturamento por Mês")
+                for filial_nome, dados in sorted(dados_por_filial.items()):
+                    st.markdown(f"##### 🏢 {filial_nome}")
+                    rows = []
+                    subtotal = [0]*12
+                    for prof_nome, valores in dados['profs'].items():
+                        row = {'Profissional': f"🩺 {prof_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row[mes] = format_currency(valores['faturamento'][i], prefix="")
+                            subtotal[i] += valores['faturamento'][i]
+                        row['Total Ano'] = format_currency(sum(valores['faturamento']), prefix="")
+                        rows.append(row)
+                    if len(rows) > 0:
+                        row_sub = {'Profissional': f"📊 Subtotal {filial_nome}"}
+                        for i, mes in enumerate(MESES_ABREV):
+                            row_sub[mes] = format_currency(subtotal[i], prefix="")
+                        row_sub['Total Ano'] = format_currency(sum(subtotal), prefix="")
+                        rows.append(row_sub)
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+                st.markdown("##### 📊 TOTAL CONSOLIDADO")
+                row_total = {'Profissional': '📊 TOTAL GERAL'}
+                for i, mes in enumerate(MESES_ABREV):
+                    row_total[mes] = format_currency(total_geral['faturamento'][i], prefix="")
+                row_total['Total Ano'] = format_currency(sum(total_geral['faturamento']), prefix="")
+                st.dataframe(pd.DataFrame([row_total]), use_container_width=True, hide_index=True)
+
+        elif not motor.profissionais:
             st.info("Nenhum profissional cadastrado. Vá em Premissas → Equipe para cadastrar.")
         else:
-            # Filtro de profissional
+            # MODO NORMAL (filial individual)
             profs_ativos = [n for n, p in motor.profissionais.items() if sum(p.sessoes_por_servico.values()) > 0]
-            
+
             prof_selecionado = st.selectbox(
                 "Selecione o Profissional",
                 ["Todos"] + profs_ativos,
                 key="filtro_prof"
             )
-            
+
+            # Função auxiliar para calcular sessões
+            def _calcular_sessoes_prof(prof_obj):
+                rows = []
+                for mes_idx in range(12):
+                    sessoes_mes = 0
+                    for servico, qtd_base in prof_obj.sessoes_por_servico.items():
+                        pct_cresc = prof_obj.pct_crescimento_por_servico.get(servico, 0.0)
+                        if pct_cresc > 0:
+                            crescimento_qtd = qtd_base * pct_cresc
+                            cresc_mensal = crescimento_qtd / 13.1
+                            sessoes_mes += qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        else:
+                            sessoes_mes += qtd_base
+                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                    rows.append(round(sessoes_mes * fator_saz, 2))
+                return rows
+
+            def _calcular_faturamento_prof(prof_obj):
+                valores = []
+                for mes_idx in range(12):
+                    fat_mes = 0
+                    for servico, qtd_base in prof_obj.sessoes_por_servico.items():
+                        pct_cresc = prof_obj.pct_crescimento_por_servico.get(servico, 0.0)
+                        if pct_cresc > 0:
+                            crescimento_qtd = qtd_base * pct_cresc
+                            cresc_mensal = crescimento_qtd / 13.1
+                            sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
+                        else:
+                            sessoes = qtd_base
+                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
+                        sessoes = sessoes * fator_saz
+                        valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
+                        fat_mes += sessoes * valor
+                    valores.append(fat_mes)
+                return valores
+
             # Tabela de sessões
             st.markdown("#### 📅 Sessões por Mês")
-            
             dados_sessoes = []
-            profs_mostrar = motor.profissionais.items() if prof_selecionado == "Todos" else [(prof_selecionado, motor.profissionais[prof_selecionado])]
-            
+            if prof_selecionado == "Todos":
+                profs_mostrar = [(n, motor.profissionais[n]) for n in profs_ativos]
+            else:
+                profs_mostrar = [(prof_selecionado, motor.profissionais[prof_selecionado])]
+
             for prof_nome, prof in profs_mostrar:
                 if sum(prof.sessoes_por_servico.values()) == 0:
                     continue
-                    
+                sessoes = _calcular_sessoes_prof(prof)
                 row = {'Profissional': f"🩺 {prof_nome}"}
-                total_ano = 0
-                
-                for mes_idx, mes in enumerate(MESES_ABREV):
-                    sessoes_mes = 0
-                    for servico, qtd_base in prof.sessoes_por_servico.items():
-                        pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.0)
-                        crescimento_qtd = qtd_base * pct_cresc
-                        cresc_mensal = crescimento_qtd / 13.1
-                        sessoes_mes += qtd_base + cresc_mensal * (mes_idx + 0.944)
-                    
-                    # APLICA SAZONALIDADE
-                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                    sessoes_mes = sessoes_mes * fator_saz
-                    
-                    row[mes] = round(sessoes_mes, 2)
-                    total_ano += sessoes_mes
-                
-                row['Total Ano'] = round(total_ano, 2)
+                for i, mes in enumerate(MESES_ABREV):
+                    row[mes] = sessoes[i]
+                row['Total Ano'] = round(sum(sessoes), 2)
                 dados_sessoes.append(row)
-            
-            # Linha de total
+
             if len(dados_sessoes) > 1:
                 row_total = {'Profissional': '📊 TOTAL'}
                 for mes in MESES_ABREV:
                     row_total[mes] = round(sum(r[mes] for r in dados_sessoes), 2)
                 row_total['Total Ano'] = round(sum(r['Total Ano'] for r in dados_sessoes), 2)
                 dados_sessoes.append(row_total)
-            
+
             if dados_sessoes:
                 st.dataframe(pd.DataFrame(dados_sessoes), use_container_width=True, hide_index=True)
-            
+
             # Tabela de faturamento
             st.markdown("#### 💰 Faturamento por Mês")
-            
             dados_faturamento = []
-            
             for prof_nome, prof in profs_mostrar:
                 if sum(prof.sessoes_por_servico.values()) == 0:
                     continue
-                    
+                valores = _calcular_faturamento_prof(prof)
                 row = {'Profissional': f"🩺 {prof_nome}"}
-                total_ano = 0
-                valores_numericos = []
-                
-                for mes_idx, mes in enumerate(MESES_ABREV):
-                    faturamento_mes = 0
-                    for servico, qtd_base in prof.sessoes_por_servico.items():
-                        # Calcula sessões com crescimento linear
-                        pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.0)
-                        crescimento_qtd = qtd_base * pct_cresc
-                        cresc_mensal = crescimento_qtd / 13.1
-                        sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                        
-                        # APLICA SAZONALIDADE nas sessões
-                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                        sessoes = sessoes * fator_saz
-                        
-                        # Calcula valor (antes/depois do reajuste)
-                        valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
-                        faturamento_mes += sessoes * valor
-                    
-                    row[mes] = format_currency(faturamento_mes, prefix="")
-                    valores_numericos.append(faturamento_mes)
-                    total_ano += faturamento_mes
-                
-                row['Total Ano'] = format_currency(total_ano, prefix="")
-                row['_valores'] = valores_numericos
-                row['_total'] = total_ano
+                for i, mes in enumerate(MESES_ABREV):
+                    row[mes] = format_currency(valores[i], prefix="")
+                row['Total Ano'] = format_currency(sum(valores), prefix="")
+                row['_total'] = sum(valores)
+                row['_valores'] = valores
                 dados_faturamento.append(row)
-            
-            # Linha de total
+
             if len(dados_faturamento) > 1:
                 row_total = {'Profissional': '📊 TOTAL'}
                 for i, mes in enumerate(MESES_ABREV):
@@ -16512,63 +17153,36 @@ def pagina_atendimentos():
                     row_total[mes] = format_currency(total_mes, prefix="")
                 row_total['Total Ano'] = format_currency(sum(r['_total'] for r in dados_faturamento), prefix="")
                 dados_faturamento.append(row_total)
-            
-            # Remove colunas auxiliares
+
             for r in dados_faturamento:
                 r.pop('_valores', None)
                 r.pop('_total', None)
-            
+
             if dados_faturamento:
                 st.dataframe(pd.DataFrame(dados_faturamento), use_container_width=True, hide_index=True)
-            
+
             # Tabela de ticket médio
             st.markdown("#### 🎫 Ticket Médio por Mês")
             st.caption("Faturamento ÷ Sessões = Valor médio por atendimento")
-            
+
             dados_ticket = []
             totais_ticket = {'faturamento': [0]*12, 'sessoes': [0]*12}
-            
+
             for prof_nome, prof in profs_mostrar:
                 if sum(prof.sessoes_por_servico.values()) == 0:
                     continue
-                    
+                sessoes_prof = _calcular_sessoes_prof(prof)
+                faturamento_prof = _calcular_faturamento_prof(prof)
                 row = {'Profissional': f"🩺 {prof_nome}"}
-                total_faturamento = 0
-                total_sessoes = 0
-                
-                for mes_idx, mes in enumerate(MESES_ABREV):
-                    faturamento_mes = 0
-                    sessoes_mes = 0
-                    
-                    for servico, qtd_base in prof.sessoes_por_servico.items():
-                        # Calcula sessões com crescimento linear
-                        pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.0)
-                        crescimento_qtd = qtd_base * pct_cresc
-                        cresc_mensal = crescimento_qtd / 13.1
-                        sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                        
-                        # APLICA SAZONALIDADE
-                        fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                        sessoes = sessoes * fator_saz
-                        
-                        sessoes_mes += sessoes
-                        
-                        # Calcula valor (antes/depois do reajuste)
-                        valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
-                        faturamento_mes += sessoes * valor
-                    
-                    ticket = faturamento_mes / sessoes_mes if sessoes_mes > 0 else 0
+                for i, mes in enumerate(MESES_ABREV):
+                    ticket = faturamento_prof[i] / sessoes_prof[i] if sessoes_prof[i] > 0 else 0
                     row[mes] = format_currency(ticket, prefix="")
-                    total_faturamento += faturamento_mes
-                    total_sessoes += sessoes_mes
-                    totais_ticket['faturamento'][mes_idx] += faturamento_mes
-                    totais_ticket['sessoes'][mes_idx] += sessoes_mes
-                
-                ticket_medio_ano = total_faturamento / total_sessoes if total_sessoes > 0 else 0
-                row['Média Ano'] = format_currency(ticket_medio_ano, prefix="")
+                    totais_ticket['faturamento'][i] += faturamento_prof[i]
+                    totais_ticket['sessoes'][i] += sessoes_prof[i]
+                media_ano = sum(faturamento_prof) / sum(sessoes_prof) if sum(sessoes_prof) > 0 else 0
+                row['Média Ano'] = format_currency(media_ano, prefix="")
                 dados_ticket.append(row)
-            
-            # Linha de média geral
+
             if len(dados_ticket) > 1:
                 row_media = {'Profissional': '📊 MÉDIA GERAL'}
                 for i, mes in enumerate(MESES_ABREV):
@@ -16577,15 +17191,15 @@ def pagina_atendimentos():
                 ticket_ano = sum(totais_ticket['faturamento']) / sum(totais_ticket['sessoes']) if sum(totais_ticket['sessoes']) > 0 else 0
                 row_media['Média Ano'] = format_currency(ticket_ano, prefix="")
                 dados_ticket.append(row_media)
-            
+
             if dados_ticket:
                 st.dataframe(pd.DataFrame(dados_ticket), use_container_width=True, hide_index=True)
-            
+
             # Gráfico
             st.markdown("#### 📈 Gráfico de Evolução")
-            
+
             fig = go.Figure()
-            
+
             for prof_nome, prof in profs_mostrar:
                 if sum(prof.sessoes_por_servico.values()) == 0:
                     continue
@@ -16626,89 +17240,153 @@ def pagina_atendimentos():
     # ========== CONSOLIDADO ==========
     with tab3:
         st.markdown("### 📊 Visão Consolidada")
-        
-        # Calcula totais
-        dados_consolidado = []
-        
-        # Linha Proprietários
-        row_prop = {'Categoria': '👔 Proprietários'}
-        total_prop = 0
-        for mes_idx, mes in enumerate(MESES_ABREV):
-            faturamento_mes = 0
-            for prop in motor.proprietarios.values():
-                for servico, qtd_base in prop.sessoes_por_servico.items():
-                    pct_cresc = prop.pct_crescimento_por_servico.get(servico, 0.0)
-                    crescimento_qtd = qtd_base * pct_cresc
-                    cresc_mensal = crescimento_qtd / 13.1
-                    sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                    # APLICA SAZONALIDADE
-                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                    sessoes = sessoes * fator_saz
-                    valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'proprietario')
-                    faturamento_mes += sessoes * valor
-            row_prop[mes] = faturamento_mes
-            total_prop += faturamento_mes
-        row_prop['Total Ano'] = total_prop
-        dados_consolidado.append(row_prop)
-        
-        # Linha Profissionais
-        row_prof = {'Categoria': '🩺 Profissionais'}
-        total_prof = 0
-        for mes_idx, mes in enumerate(MESES_ABREV):
-            faturamento_mes = 0
-            for prof in motor.profissionais.values():
-                for servico, qtd_base in prof.sessoes_por_servico.items():
-                    pct_cresc = prof.pct_crescimento_por_servico.get(servico, 0.0)
-                    crescimento_qtd = qtd_base * pct_cresc
-                    cresc_mensal = crescimento_qtd / 13.1
-                    sessoes = qtd_base + cresc_mensal * (mes_idx + 0.944)
-                    # APLICA SAZONALIDADE
-                    fator_saz = motor.sazonalidade.fatores[mes_idx] if hasattr(motor, 'sazonalidade') else 1.0
-                    sessoes = sessoes * fator_saz
-                    valor = motor.calcular_valor_servico_mes(servico, mes_idx, 'profissional')
-                    faturamento_mes += sessoes * valor
-            row_prof[mes] = faturamento_mes
-            total_prof += faturamento_mes
-        row_prof['Total Ano'] = total_prof
-        dados_consolidado.append(row_prof)
-        
-        # Linha Total
-        row_total = {'Categoria': '📊 TOTAL GERAL'}
-        for mes in MESES_ABREV:
-            row_total[mes] = row_prop[mes] + row_prof[mes]
-        row_total['Total Ano'] = total_prop + total_prof
-        dados_consolidado.append(row_total)
-        
+
+        # v1.99.67: Verificar se está no modo consolidado
+        is_consolidado_tab3 = st.session_state.get('filial_id') == "consolidado"
+
+        if is_consolidado_tab3:
+            # CONSOLIDADO: Busca valores de cada filial e soma
+            st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+            from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+            manager = ClienteManager()
+            cliente_id = st.session_state.get('cliente_id')
+            cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+            # Totais consolidados
+            total_prop_mes = [0]*12
+            total_prof_mes = [0]*12
+            total_geral_mes = [0]*12
+            total_sessoes_prop = 0
+            total_sessoes_prof = 0
+
+            if cliente_id:
+                filiais = manager.listar_filiais(cliente_id)
+
+                for filial_info in filiais:
+                    filial_id = filial_info["id"]
+                    filial_nome = filial_info["nome"]
+
+                    try:
+                        resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                        motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                        if not motor_filial:
+                            motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                        if motor_filial:
+                            for mes_idx in range(12):
+                                folha = motor_filial.calcular_folha_fisioterapeutas_mes(mes_idx + 1)
+                                # Proprietários
+                                fat_prop = sum(p.get("producao_propria", 0) for p in folha.get("proprietarios", []))
+                                sess_prop = sum(p.get("sessoes", 0) for p in folha.get("proprietarios", []))
+                                total_prop_mes[mes_idx] += fat_prop
+                                total_sessoes_prop += sess_prop
+                                # Profissionais
+                                fat_prof = sum(f.get("faturamento", 0) for f in folha.get("fisioterapeutas", []))
+                                sess_prof = sum(f.get("sessoes", 0) for f in folha.get("fisioterapeutas", []))
+                                total_prof_mes[mes_idx] += fat_prof
+                                total_sessoes_prof += sess_prof
+                                # Total
+                                total_geral_mes[mes_idx] += fat_prop + fat_prof
+                    except Exception as e:
+                        st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+            # Monta tabela
+            dados_consolidado = []
+            row_prop = {'Categoria': '👔 Proprietários'}
+            row_prof = {'Categoria': '🩺 Profissionais'}
+            row_total = {'Categoria': '📊 TOTAL GERAL'}
+
+            for mes_idx, mes in enumerate(MESES_ABREV):
+                row_prop[mes] = total_prop_mes[mes_idx]
+                row_prof[mes] = total_prof_mes[mes_idx]
+                row_total[mes] = total_geral_mes[mes_idx]
+
+            row_prop['Total Ano'] = sum(total_prop_mes)
+            row_prof['Total Ano'] = sum(total_prof_mes)
+            row_total['Total Ano'] = sum(total_geral_mes)
+
+            dados_consolidado = [row_prop, row_prof, row_total]
+            total_prop = sum(total_prop_mes)
+            total_prof = sum(total_prof_mes)
+            total_geral = sum(total_geral_mes)
+            total_sessoes = total_sessoes_prop + total_sessoes_prof
+
+        else:
+            # MODO NORMAL: Usa motor local
+            dre = motor.calcular_dre()
+            receita_dre = dre.get("Receita Bruta Total", [0]*12)
+
+            dados_consolidado = []
+
+            # Linha Proprietários
+            row_prop = {'Categoria': '👔 Proprietários'}
+            total_prop = 0
+            for mes_idx, mes in enumerate(MESES_ABREV):
+                folha = motor.calcular_folha_fisioterapeutas_mes(mes_idx + 1)
+                faturamento_mes = sum(p.get("producao_propria", 0) for p in folha.get("proprietarios", []))
+                row_prop[mes] = faturamento_mes
+                total_prop += faturamento_mes
+            row_prop['Total Ano'] = total_prop
+            dados_consolidado.append(row_prop)
+
+            # Linha Profissionais
+            row_prof = {'Categoria': '🩺 Profissionais'}
+            total_prof = 0
+            for mes_idx, mes in enumerate(MESES_ABREV):
+                folha = motor.calcular_folha_fisioterapeutas_mes(mes_idx + 1)
+                faturamento_mes = sum(f.get("faturamento", 0) for f in folha.get("fisioterapeutas", []))
+                row_prof[mes] = faturamento_mes
+                total_prof += faturamento_mes
+            row_prof['Total Ano'] = total_prof
+            dados_consolidado.append(row_prof)
+
+            # Linha Total
+            row_total = {'Categoria': '📊 TOTAL GERAL'}
+            total_geral = 0
+            for mes_idx, mes in enumerate(MESES_ABREV):
+                row_total[mes] = receita_dre[mes_idx]
+                total_geral += receita_dre[mes_idx]
+            row_total['Total Ano'] = total_geral
+            dados_consolidado.append(row_total)
+
+            # Calcula sessões
+            total_sessoes = 0
+            for mes in range(1, 13):
+                folha = motor.calcular_folha_fisioterapeutas_mes(mes)
+                total_sessoes += sum(p.get("sessoes", 0) for p in folha.get("proprietarios", []))
+                total_sessoes += sum(f.get("sessoes", 0) for f in folha.get("fisioterapeutas", []))
+
         # Formata para exibição
         df_consolidado = pd.DataFrame(dados_consolidado)
         for col in df_consolidado.columns[1:]:
             df_consolidado[col] = df_consolidado[col].apply(lambda x: format_currency(x, prefix=""))
-        
+
         st.dataframe(df_consolidado, use_container_width=True, hide_index=True)
-        
+
         # Gráfico comparativo
         st.markdown("#### 📈 Comparativo Proprietários x Profissionais")
-        
+
         fig = go.Figure()
-        
+
         # Valores proprietários
         valores_prop = [row_prop[mes] for mes in MESES_ABREV]
         valores_prof = [row_prof[mes] for mes in MESES_ABREV]
-        
+
         fig.add_trace(go.Bar(
             x=MESES_ABREV,
             y=valores_prop,
             name='Proprietários',
             marker_color='#1e3a5f'
         ))
-        
+
         fig.add_trace(go.Bar(
             x=MESES_ABREV,
             y=valores_prof,
             name='Profissionais',
             marker_color='#38a169'
         ))
-        
+
         fig.update_layout(
             title="Faturamento Mensal - Proprietários x Profissionais",
             xaxis_title="Mês",
@@ -16718,27 +17396,25 @@ def pagina_atendimentos():
             height=400
         )
         st.plotly_chart(fig, use_container_width=True)
-        
+
         # KPIs
         st.markdown("#### 📊 Resumo")
-        
+
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
-            pct_prop = (total_prop / (total_prop + total_prof) * 100) if (total_prop + total_prof) > 0 else 0
+            pct_prop = (total_prop / total_geral * 100) if total_geral > 0 else 0
             st.metric("% Proprietários", f"{pct_prop:.1f}%")
-        
+
         with col2:
-            pct_prof = (total_prof / (total_prop + total_prof) * 100) if (total_prop + total_prof) > 0 else 0
+            pct_prof = (total_prof / total_geral * 100) if total_geral > 0 else 0
             st.metric("% Profissionais", f"{pct_prof:.1f}%")
-        
+
         with col3:
-            total_sessoes_prop = sum(sum(p.sessoes_por_servico.values()) for p in motor.proprietarios.values()) * 12
-            total_sessoes_prof = sum(sum(p.sessoes_por_servico.values()) for p in motor.profissionais.values()) * 12
-            st.metric("Total Sessões/Ano", f"{int(total_sessoes_prop + total_sessoes_prof):,}")
-        
+            st.metric("Total Sessões/Ano", f"{int(total_sessoes):,}")
+
         with col4:
-            ticket_medio = (total_prop + total_prof) / (total_sessoes_prop + total_sessoes_prof) if (total_sessoes_prop + total_sessoes_prof) > 0 else 0
+            ticket_medio = total_geral / total_sessoes if total_sessoes > 0 else 0
             st.metric("Ticket Médio", format_currency(ticket_medio))
 
 
@@ -16749,178 +17425,338 @@ def pagina_atendimentos():
 def pagina_folha_funcionarios():
     """Página de Resumo da Folha de Funcionários"""
     render_header()
-    
+
     st.markdown('<div class="section-header"><h3>👔 Folha de Pagamento - Funcionários</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
     pf = motor.premissas_folha
-    
-    # Calcular projeção anual
-    projecao = []
-    for mes in range(1, 13):
-        folha = motor.calcular_folha_mes(mes)
-        projecao.append({
-            'mes': MESES[mes-1],
-            'salarios_clt': folha['clt']['salarios_brutos'],
-            'salarios_inf': folha['informal']['salarios_brutos'],
-            'inss': folha['clt']['inss'] + folha['prolabore']['inss'],
-            'irrf': folha['clt']['irrf'] + folha['prolabore']['irrf'],
-            'fgts': folha['clt']['fgts'],
-            'provisao_13': folha['clt']['provisao_13'],
-            'provisao_ferias': folha['clt']['provisao_ferias'],
-            'prolabore': folha['prolabore']['bruto'],
-            'total_sal': folha['clt']['salarios_brutos'] + folha['informal']['salarios_brutos'],
-            'total_encargos': folha['clt']['fgts'] + folha['clt']['provisao_13'] + folha['clt']['provisao_ferias'],
-        })
-    
-    # Totais anuais
-    total_sal = sum(p['total_sal'] for p in projecao)
-    total_encargos = sum(p['total_encargos'] for p in projecao)
-    total_prolabore = sum(p['prolabore'] for p in projecao)
-    total_inss = sum(p['inss'] for p in projecao)
-    total_fgts = sum(p['fgts'] for p in projecao)
-    total_geral = total_sal + total_encargos + total_prolabore
-    
-    # Cards de resumo
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        render_metric_card("👥 Salários (Anual)", format_currency(total_sal), card_type="default")
-    with col2:
-        render_metric_card("📋 Encargos CLT", format_currency(total_encargos), card_type="warning")
-    with col3:
-        render_metric_card("👔 Pró-Labore", format_currency(total_prolabore), card_type="default")
-    with col4:
-        render_metric_card("💰 TOTAL GERAL", format_currency(total_geral), card_type="success")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de cards
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        n_clt = len([f for f in motor.funcionarios_clt.values() if f.tipo_vinculo == "clt" and f.ativo])
-        st.metric("Funcionários CLT", n_clt)
-    with col2:
-        n_inf = len([f for f in motor.funcionarios_clt.values() if f.tipo_vinculo == "informal" and f.ativo])
-        st.metric("Informais", n_inf)
-    with col3:
-        n_socios = len([s for s in motor.socios_prolabore.values() if s.ativo])
-        st.metric("Sócios", n_socios)
-    with col4:
-        st.metric("INSS Total (Anual)", format_currency(total_inss))
-    
-    st.markdown("---")
-    
-    # ===== TABELA POR FUNCIONÁRIO MÊS A MÊS =====
-    st.markdown("#### 👥 Remuneração por Funcionário (Mês a Mês)")
-    st.caption("💡 Apenas CLT tem encargos (FGTS, 13º, Férias). Informais recebem apenas salário.")
-    
-    # Construir dados por funcionário
-    dados_funcionarios = []
-    
-    for nome, func in motor.funcionarios_clt.items():
-        if not func.ativo:
-            continue
-        
-        salarios_mes = []
+
+    # v1.99.68: Verificar se está no modo consolidado
+    is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+    if is_consolidado:
+        # CONSOLIDADO: Busca valores de cada filial e soma
+        st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+        from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+        manager = ClienteManager()
+        cliente_id = st.session_state.get('cliente_id')
+        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+        # Totais consolidados por mês
+        projecao = []
         for mes in range(1, 13):
-            # Salário com dissídio
-            salario = func.salario_base
-            if mes >= pf.mes_dissidio:
-                salario = salario * (1 + pf.pct_dissidio)
-            salarios_mes.append(salario)
-        
-        dados_funcionarios.append({
-            'Nome': nome,
-            'Cargo': func.cargo or '-',
-            'Vínculo': func.tipo_vinculo.upper(),
-            'Sal. Base': func.salario_base,
-            **{MESES[i]: salarios_mes[i] for i in range(12)},
-            'TOTAL': sum(salarios_mes)
-        })
-    
-    # Adicionar sócios (pró-labore)
-    for nome, socio in motor.socios_prolabore.items():
-        if not socio.ativo:
-            continue
-        
-        prolabore_mes = []
-        for mes in range(1, 13):
-            pl = socio.prolabore
-            if mes >= socio.mes_reajuste:
-                pl = pl * (1 + pf.pct_dissidio)
-            prolabore_mes.append(pl)
-        
-        dados_funcionarios.append({
-            'Nome': nome,
-            'Cargo': 'Sócio',
-            'Vínculo': 'PRÓ-LABORE',
-            'Sal. Base': socio.prolabore,
-            **{MESES[i]: prolabore_mes[i] for i in range(12)},
-            'TOTAL': sum(prolabore_mes)
-        })
-    
-    if dados_funcionarios:
-        df_func = pd.DataFrame(dados_funcionarios)
-        
-        # Ordenar por vínculo (CLT primeiro, depois Informal, depois PL)
-        ordem_vinculo = {'CLT': 0, 'INFORMAL': 1, 'PRÓ-LABORE': 2}
-        df_func['_ordem'] = df_func['Vínculo'].map(ordem_vinculo)
-        df_func = df_func.sort_values('_ordem').drop('_ordem', axis=1)
-        
-        # Linha de total
-        total_row = {'Nome': 'TOTAL', 'Cargo': '', 'Vínculo': '', 'Sal. Base': df_func['Sal. Base'].sum()}
-        for mes in MESES:
-            total_row[mes] = df_func[mes].sum()
-        total_row['TOTAL'] = df_func['TOTAL'].sum()
-        
-        df_func = pd.concat([df_func, pd.DataFrame([total_row])], ignore_index=True)
-        
-        # Formatação
-        format_dict = {'Sal. Base': 'R$ {:,.2f}', 'TOTAL': 'R$ {:,.2f}'}
-        for mes in MESES:
-            format_dict[mes] = 'R$ {:,.2f}'
-        
-        st.dataframe(
-            df_func.style.format(format_dict),
-            use_container_width=True,
-            hide_index=True,
-            height=500
-        )
-        
-        # Resumo por tipo de vínculo
-        st.markdown("##### 📊 Resumo por Tipo de Vínculo")
-        col1, col2, col3 = st.columns(3)
-        
+            projecao.append({
+                'mes': MESES[mes-1],
+                'salarios_clt': 0, 'salarios_inf': 0, 'inss': 0, 'irrf': 0,
+                'fgts': 0, 'provisao_13': 0, 'provisao_ferias': 0, 'prolabore': 0,
+                'total_sal': 0, 'total_encargos': 0
+            })
+
+        # Dados por funcionário agrupados por filial
+        dados_por_filial = {}
+        totais_vinculo = {'n_clt': 0, 'n_inf': 0, 'n_socios': 0, 'total_clt': 0, 'total_inf': 0, 'total_pl': 0}
+
+        if cliente_id:
+            filiais = manager.listar_filiais(cliente_id)
+
+            for filial_info in filiais:
+                filial_id = filial_info["id"]
+                filial_nome = filial_info["nome"]
+
+                try:
+                    resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                    motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                    if not motor_filial:
+                        motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                    if motor_filial:
+                        pf_filial = motor_filial.premissas_folha
+                        dados_por_filial[filial_nome] = []
+
+                        # Soma projeção mensal
+                        for mes in range(1, 13):
+                            folha = motor_filial.calcular_folha_mes(mes)
+                            projecao[mes-1]['salarios_clt'] += folha['clt']['salarios_brutos']
+                            projecao[mes-1]['salarios_inf'] += folha['informal']['salarios_brutos']
+                            projecao[mes-1]['inss'] += folha['clt']['inss'] + folha['prolabore']['inss']
+                            projecao[mes-1]['irrf'] += folha['clt']['irrf'] + folha['prolabore']['irrf']
+                            projecao[mes-1]['fgts'] += folha['clt']['fgts']
+                            projecao[mes-1]['provisao_13'] += folha['clt']['provisao_13']
+                            projecao[mes-1]['provisao_ferias'] += folha['clt']['provisao_ferias']
+                            projecao[mes-1]['prolabore'] += folha['prolabore']['bruto']
+                            projecao[mes-1]['total_sal'] += folha['clt']['salarios_brutos'] + folha['informal']['salarios_brutos']
+                            projecao[mes-1]['total_encargos'] += folha['clt']['fgts'] + folha['clt']['provisao_13'] + folha['clt']['provisao_ferias']
+
+                        # Funcionários CLT/Informal
+                        for nome, func in motor_filial.funcionarios_clt.items():
+                            if not func.ativo:
+                                continue
+                            salarios_mes = []
+                            for mes in range(1, 13):
+                                salario = func.salario_base
+                                if mes >= pf_filial.mes_dissidio:
+                                    salario = salario * (1 + pf_filial.pct_dissidio)
+                                salarios_mes.append(salario)
+                            dados_por_filial[filial_nome].append({
+                                'Nome': nome, 'Cargo': func.cargo or '-',
+                                'Vínculo': func.tipo_vinculo.upper(), 'Sal. Base': func.salario_base,
+                                **{MESES[i]: salarios_mes[i] for i in range(12)}, 'TOTAL': sum(salarios_mes)
+                            })
+                            if func.tipo_vinculo == "clt":
+                                totais_vinculo['n_clt'] += 1
+                                totais_vinculo['total_clt'] += func.salario_base
+                            else:
+                                totais_vinculo['n_inf'] += 1
+                                totais_vinculo['total_inf'] += func.salario_base
+
+                        # Sócios (pró-labore)
+                        for nome, socio in motor_filial.socios_prolabore.items():
+                            if not socio.ativo:
+                                continue
+                            prolabore_mes = []
+                            for mes in range(1, 13):
+                                pl = socio.prolabore
+                                if mes >= socio.mes_reajuste:
+                                    pl = pl * (1 + pf_filial.pct_dissidio)
+                                prolabore_mes.append(pl)
+                            dados_por_filial[filial_nome].append({
+                                'Nome': nome, 'Cargo': 'Sócio', 'Vínculo': 'PRÓ-LABORE',
+                                'Sal. Base': socio.prolabore,
+                                **{MESES[i]: prolabore_mes[i] for i in range(12)}, 'TOTAL': sum(prolabore_mes)
+                            })
+                            totais_vinculo['n_socios'] += 1
+                            totais_vinculo['total_pl'] += socio.prolabore
+
+                except Exception as e:
+                    st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+        # Totais anuais
+        total_sal = sum(p['total_sal'] for p in projecao)
+        total_encargos = sum(p['total_encargos'] for p in projecao)
+        total_prolabore = sum(p['prolabore'] for p in projecao)
+        total_inss = sum(p['inss'] for p in projecao)
+        total_geral = total_sal + total_encargos + total_prolabore
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            total_clt = sum(f.salario_base for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "clt")
-            n_clt = len([f for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "clt"])
-            st.metric(f"👔 CLT ({n_clt})", format_currency(total_clt * 12.48))  # com dissídio
-        
+            render_metric_card("👥 Salários (Anual)", format_currency(total_sal), card_type="default")
         with col2:
-            total_inf = sum(f.salario_base for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "informal")
-            n_inf = len([f for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "informal"])
-            st.metric(f"📋 Informal ({n_inf})", format_currency(total_inf * 12.48))
-        
+            render_metric_card("📋 Encargos CLT", format_currency(total_encargos), card_type="warning")
         with col3:
-            total_pl = sum(s.prolabore for s in motor.socios_prolabore.values() if s.ativo)
-            n_pl = len([s for s in motor.socios_prolabore.values() if s.ativo])
-            st.metric(f"💼 Pró-Labore ({n_pl})", format_currency(total_pl * 12.48))
-        
+            render_metric_card("👔 Pró-Labore", format_currency(total_prolabore), card_type="default")
+        with col4:
+            render_metric_card("💰 TOTAL GERAL", format_currency(total_geral), card_type="success")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Segunda linha de cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Funcionários CLT", totais_vinculo['n_clt'])
+        with col2:
+            st.metric("Informais", totais_vinculo['n_inf'])
+        with col3:
+            st.metric("Sócios", totais_vinculo['n_socios'])
+        with col4:
+            st.metric("INSS Total (Anual)", format_currency(total_inss))
+
+        st.markdown("---")
+
+        # ===== TABELA POR FUNCIONÁRIO AGRUPADA POR FILIAL =====
+        st.markdown("#### 👥 Remuneração por Funcionário (Mês a Mês)")
+        st.caption("💡 Agrupado por filial. CLT tem encargos (FGTS, 13º, Férias). Informais recebem apenas salário.")
+
+        for filial_nome, funcionarios in sorted(dados_por_filial.items()):
+            if funcionarios:
+                st.markdown(f"##### 🏢 {filial_nome}")
+                df_func = pd.DataFrame(funcionarios)
+                ordem_vinculo = {'CLT': 0, 'INFORMAL': 1, 'PRÓ-LABORE': 2}
+                df_func['_ordem'] = df_func['Vínculo'].map(ordem_vinculo)
+                df_func = df_func.sort_values('_ordem').drop('_ordem', axis=1)
+
+                # Subtotal da filial
+                subtotal_row = {'Nome': f'Subtotal {filial_nome}', 'Cargo': '', 'Vínculo': '', 'Sal. Base': df_func['Sal. Base'].sum()}
+                for mes in MESES:
+                    subtotal_row[mes] = df_func[mes].sum()
+                subtotal_row['TOTAL'] = df_func['TOTAL'].sum()
+                df_func = pd.concat([df_func, pd.DataFrame([subtotal_row])], ignore_index=True)
+
+                format_dict = {'Sal. Base': 'R$ {:,.2f}', 'TOTAL': 'R$ {:,.2f}'}
+                for mes in MESES:
+                    format_dict[mes] = 'R$ {:,.2f}'
+                st.dataframe(df_func.style.format(format_dict), use_container_width=True, hide_index=True)
+
+        # Resumo por tipo de vínculo
+        st.markdown("##### 📊 Resumo por Tipo de Vínculo (Consolidado)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(f"👔 CLT ({totais_vinculo['n_clt']})", format_currency(totais_vinculo['total_clt'] * 12.48))
+        with col2:
+            st.metric(f"📋 Informal ({totais_vinculo['n_inf']})", format_currency(totais_vinculo['total_inf'] * 12.48))
+        with col3:
+            st.metric(f"💼 Pró-Labore ({totais_vinculo['n_socios']})", format_currency(totais_vinculo['total_pl'] * 12.48))
+
     else:
-        st.info("Nenhum funcionário cadastrado.")
-    
+        # MODO NORMAL: Filial individual
+        # Calcular projeção anual
+        projecao = []
+        for mes in range(1, 13):
+            folha = motor.calcular_folha_mes(mes)
+            projecao.append({
+                'mes': MESES[mes-1],
+                'salarios_clt': folha['clt']['salarios_brutos'],
+                'salarios_inf': folha['informal']['salarios_brutos'],
+                'inss': folha['clt']['inss'] + folha['prolabore']['inss'],
+                'irrf': folha['clt']['irrf'] + folha['prolabore']['irrf'],
+                'fgts': folha['clt']['fgts'],
+                'provisao_13': folha['clt']['provisao_13'],
+                'provisao_ferias': folha['clt']['provisao_ferias'],
+                'prolabore': folha['prolabore']['bruto'],
+                'total_sal': folha['clt']['salarios_brutos'] + folha['informal']['salarios_brutos'],
+                'total_encargos': folha['clt']['fgts'] + folha['clt']['provisao_13'] + folha['clt']['provisao_ferias'],
+            })
+
+        # Totais anuais
+        total_sal = sum(p['total_sal'] for p in projecao)
+        total_encargos = sum(p['total_encargos'] for p in projecao)
+        total_prolabore = sum(p['prolabore'] for p in projecao)
+        total_inss = sum(p['inss'] for p in projecao)
+        total_fgts = sum(p['fgts'] for p in projecao)
+        total_geral = total_sal + total_encargos + total_prolabore
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            render_metric_card("👥 Salários (Anual)", format_currency(total_sal), card_type="default")
+        with col2:
+            render_metric_card("📋 Encargos CLT", format_currency(total_encargos), card_type="warning")
+        with col3:
+            render_metric_card("👔 Pró-Labore", format_currency(total_prolabore), card_type="default")
+        with col4:
+            render_metric_card("💰 TOTAL GERAL", format_currency(total_geral), card_type="success")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Segunda linha de cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            n_clt = len([f for f in motor.funcionarios_clt.values() if f.tipo_vinculo == "clt" and f.ativo])
+            st.metric("Funcionários CLT", n_clt)
+        with col2:
+            n_inf = len([f for f in motor.funcionarios_clt.values() if f.tipo_vinculo == "informal" and f.ativo])
+            st.metric("Informais", n_inf)
+        with col3:
+            n_socios = len([s for s in motor.socios_prolabore.values() if s.ativo])
+            st.metric("Sócios", n_socios)
+        with col4:
+            st.metric("INSS Total (Anual)", format_currency(total_inss))
+
+        st.markdown("---")
+
+        # ===== TABELA POR FUNCIONÁRIO MÊS A MÊS =====
+        st.markdown("#### 👥 Remuneração por Funcionário (Mês a Mês)")
+        st.caption("💡 Apenas CLT tem encargos (FGTS, 13º, Férias). Informais recebem apenas salário.")
+
+        # Construir dados por funcionário
+        dados_funcionarios = []
+
+        for nome, func in motor.funcionarios_clt.items():
+            if not func.ativo:
+                continue
+
+            salarios_mes = []
+            for mes in range(1, 13):
+                salario = func.salario_base
+                if mes >= pf.mes_dissidio:
+                    salario = salario * (1 + pf.pct_dissidio)
+                salarios_mes.append(salario)
+
+            dados_funcionarios.append({
+                'Nome': nome,
+                'Cargo': func.cargo or '-',
+                'Vínculo': func.tipo_vinculo.upper(),
+                'Sal. Base': func.salario_base,
+                **{MESES[i]: salarios_mes[i] for i in range(12)},
+                'TOTAL': sum(salarios_mes)
+            })
+
+        # Adicionar sócios (pró-labore)
+        for nome, socio in motor.socios_prolabore.items():
+            if not socio.ativo:
+                continue
+
+            prolabore_mes = []
+            for mes in range(1, 13):
+                pl = socio.prolabore
+                if mes >= socio.mes_reajuste:
+                    pl = pl * (1 + pf.pct_dissidio)
+                prolabore_mes.append(pl)
+
+            dados_funcionarios.append({
+                'Nome': nome,
+                'Cargo': 'Sócio',
+                'Vínculo': 'PRÓ-LABORE',
+                'Sal. Base': socio.prolabore,
+                **{MESES[i]: prolabore_mes[i] for i in range(12)},
+                'TOTAL': sum(prolabore_mes)
+            })
+
+        if dados_funcionarios:
+            df_func = pd.DataFrame(dados_funcionarios)
+
+            ordem_vinculo = {'CLT': 0, 'INFORMAL': 1, 'PRÓ-LABORE': 2}
+            df_func['_ordem'] = df_func['Vínculo'].map(ordem_vinculo)
+            df_func = df_func.sort_values('_ordem').drop('_ordem', axis=1)
+
+            total_row = {'Nome': 'TOTAL', 'Cargo': '', 'Vínculo': '', 'Sal. Base': df_func['Sal. Base'].sum()}
+            for mes in MESES:
+                total_row[mes] = df_func[mes].sum()
+            total_row['TOTAL'] = df_func['TOTAL'].sum()
+
+            df_func = pd.concat([df_func, pd.DataFrame([total_row])], ignore_index=True)
+
+            format_dict = {'Sal. Base': 'R$ {:,.2f}', 'TOTAL': 'R$ {:,.2f}'}
+            for mes in MESES:
+                format_dict[mes] = 'R$ {:,.2f}'
+
+            st.dataframe(df_func.style.format(format_dict), use_container_width=True, hide_index=True, height=500)
+
+            # Resumo por tipo de vínculo
+            st.markdown("##### 📊 Resumo por Tipo de Vínculo")
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                total_clt = sum(f.salario_base for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "clt")
+                n_clt = len([f for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "clt"])
+                st.metric(f"👔 CLT ({n_clt})", format_currency(total_clt * 12.48))
+
+            with col2:
+                total_inf = sum(f.salario_base for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "informal")
+                n_inf = len([f for f in motor.funcionarios_clt.values() if f.ativo and f.tipo_vinculo == "informal"])
+                st.metric(f"📋 Informal ({n_inf})", format_currency(total_inf * 12.48))
+
+            with col3:
+                total_pl = sum(s.prolabore for s in motor.socios_prolabore.values() if s.ativo)
+                n_pl = len([s for s in motor.socios_prolabore.values() if s.ativo])
+                st.metric(f"💼 Pró-Labore ({n_pl})", format_currency(total_pl * 12.48))
+
+        else:
+            st.info("Nenhum funcionário cadastrado.")
+
     st.markdown("---")
-    
+
     # Gráfico de evolução mensal
     st.markdown("#### 📈 Evolução Mensal (Totais)")
-    
+
     df_chart = pd.DataFrame(projecao)
-    
+
     fig = go.Figure()
     fig.add_trace(go.Bar(name='Salários', x=df_chart['mes'], y=df_chart['total_sal'], marker_color='#3498db'))
     fig.add_trace(go.Bar(name='Encargos', x=df_chart['mes'], y=df_chart['total_encargos'], marker_color='#e74c3c'))
     fig.add_trace(go.Bar(name='Pró-Labore', x=df_chart['mes'], y=df_chart['prolabore'], marker_color='#2ecc71'))
-    
+
     fig.update_layout(
         barmode='stack',
         height=350,
@@ -16928,12 +17764,12 @@ def pagina_folha_funcionarios():
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
     st.plotly_chart(fig, use_container_width=True)
-    
+
     st.markdown("---")
-    
+
     # Tabela resumo mensal
     st.markdown("#### 📊 Resumo Mensal (Encargos)")
-    
+
     df_tabela = pd.DataFrame([{
         'Mês': p['mes'],
         'Salários CLT': p['salarios_clt'],
@@ -16945,7 +17781,7 @@ def pagina_folha_funcionarios():
         'INSS': p['inss'],
         'TOTAL': p['total_sal'] + p['total_encargos'] + p['prolabore']
     } for p in projecao])
-    
+
     # Linha de total
     total_row = pd.DataFrame([{
         'Mês': 'TOTAL',
@@ -16959,7 +17795,7 @@ def pagina_folha_funcionarios():
         'TOTAL': df_tabela['TOTAL'].sum()
     }])
     df_tabela = pd.concat([df_tabela, total_row], ignore_index=True)
-    
+
     st.dataframe(
         df_tabela.style.format({
             'Salários CLT': 'R$ {:,.2f}',
@@ -16983,167 +17819,293 @@ def pagina_folha_funcionarios():
 def pagina_folha_fisioterapeutas():
     """Página de Resumo da Folha de Fisioterapeutas"""
     render_header()
-    
+
     st.markdown('<div class="section-header"><h3>🏥 Folha de Pagamento - Fisioterapeutas</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
-    
-    # Verificar se há profissionais com R$ Fixo sem valores configurados
-    fisios_sem_valores = []
-    for nome, fisio in motor.fisioterapeutas.items():
-        if fisio.cargo != "Proprietário" and fisio.ativo:
-            if fisio.tipo_remuneracao in ["valor_fixo", "misto"]:
-                servicos_atendidos = [s for s in fisio.sessoes_por_servico.keys() if fisio.sessoes_por_servico.get(s, 0) > 0]
-                valores_configurados = [s for s in servicos_atendidos if fisio.valores_fixos_por_servico.get(s, 0) > 0]
-                # Para valor_fixo, precisa de todos os valores; para misto, é opcional
-                if fisio.tipo_remuneracao == "valor_fixo" and servicos_atendidos and len(valores_configurados) < len(servicos_atendidos):
-                    fisios_sem_valores.append(nome)
-    
-    if fisios_sem_valores:
-        st.error(f"⚠️ **ATENÇÃO:** Profissionais com 'R$ Fixo' sem valores configurados: **{', '.join(fisios_sem_valores)}**. Isso resulta em R$ 0,00 de remuneração! Configure em Premissas > Folha Fisioterapeutas > Cadastro.")
-    
-    # Calcular projeção anual
-    projecao = motor.projetar_folha_fisioterapeutas_anual()
-    
-    # Totais anuais
-    total_fisio = sum(p['total_fisioterapeutas'] for p in projecao)
-    total_prop = sum(p['total_proprietarios'] for p in projecao)
-    total_producao = sum(p['producao_bruta'] for p in projecao)
-    total_margem = sum(p['margem_clinica'] for p in projecao)
-    total_geral = total_fisio + total_prop
-    
-    # Cards de resumo
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        render_metric_card("🩺 Fisioterapeutas", format_currency(total_fisio), card_type="default")
-    with col2:
-        render_metric_card("👔 Proprietários", format_currency(total_prop), card_type="default")
-    with col3:
-        render_metric_card("📈 Produção Bruta", format_currency(total_producao), card_type="success")
-    with col4:
-        render_metric_card("💰 Margem Clínica", format_currency(total_margem), card_type="success")
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha de cards
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        n_fisio = len([f for f in motor.fisioterapeutas.values() if f.cargo in ["Fisioterapeuta", "Gerente"] and f.ativo])
-        st.metric("Qtd. Fisioterapeutas", n_fisio)
-    with col2:
-        n_prop = len([f for f in motor.fisioterapeutas.values() if f.cargo == "Proprietário" and f.ativo])
-        st.metric("Qtd. Proprietários", n_prop)
-    with col3:
-        pct_margem = (total_margem / total_producao * 100) if total_producao > 0 else 0
-        st.metric("% Margem s/ Produção", f"{pct_margem:.1f}%")
-    with col4:
-        render_metric_card("💰 TOTAL FOLHA", format_currency(total_geral), card_type="warning")
-    
-    st.markdown("---")
-    
-    # ===== TABELA POR FISIOTERAPEUTA MÊS A MÊS =====
-    st.markdown("#### 🩺 Remuneração por Fisioterapeuta (Mês a Mês)")
-    
-    # Obter detalhamento mensal por profissional
-    dados_fisios = []
-    niveis_pct = {0: 0, 1: 0.25, 2: 0.30, 3: 0.35, 4: 0.40}
-    
-    for nome, fisio in motor.fisioterapeutas.items():
-        if not fisio.ativo:
-            continue
-        
-        # Determinar tipo de remuneração para exibição
-        if fisio.cargo == "Proprietário":
-            tipo_rem = "Prop"
-        elif fisio.tipo_remuneracao == "valor_fixo":
-            # Mostra "R$ Fixo" para valor fixo
-            tipo_rem = "R$ Fixo"
-        elif fisio.tipo_remuneracao == "misto":
-            # Mostra o nível + indicador de misto
-            nivel_pct = {1: "35%", 2: "30%", 3: "25%", 4: "20%"}.get(fisio.nivel, "?")
-            tipo_rem = f"Misto Nv{fisio.nivel}"
-        else:
-            # Mostra o nível e percentual
-            nivel_pct = {1: "35%", 2: "30%", 3: "25%", 4: "20%"}.get(fisio.nivel, "?")
-            tipo_rem = f"Nv{fisio.nivel} ({nivel_pct})"
-        
-        # Calcular remuneração mês a mês
-        remuneracao_mes = []
-        for mes_idx, proj in enumerate(projecao):
-            if fisio.cargo == "Proprietário":
-                # Proprietário: pega do detalhamento
-                rem = proj['detalhes_proprietarios'].get(nome, {}).get('total', 0)
-            else:
-                # Fisioterapeuta/Gerente: pega do detalhamento
-                rem = proj['detalhes_fisioterapeutas'].get(nome, {}).get('total', 0)
-            remuneracao_mes.append(rem)
-        
-        dados_fisios.append({
-            'Nome': nome,
-            'Cargo': fisio.cargo,
-            'Tipo': tipo_rem,
-            **{MESES[i]: remuneracao_mes[i] for i in range(12)},
-            'TOTAL': sum(remuneracao_mes)
-        })
-    
-    if dados_fisios:
-        df_fisios = pd.DataFrame(dados_fisios)
-        
-        # Ordenar por cargo (Proprietário primeiro, depois por total)
-        df_fisios['_ordem'] = df_fisios['Cargo'].map({'Proprietário': 0, 'Gerente': 1, 'Fisioterapeuta': 2})
-        df_fisios = df_fisios.sort_values(['_ordem', 'TOTAL'], ascending=[True, False]).drop('_ordem', axis=1)
-        
-        # Linha de total
-        total_row = {'Nome': 'TOTAL', 'Cargo': '', 'Tipo': ''}
-        for mes in MESES:
-            total_row[mes] = df_fisios[mes].sum()
-        total_row['TOTAL'] = df_fisios['TOTAL'].sum()
-        
-        df_fisios = pd.concat([df_fisios, pd.DataFrame([total_row])], ignore_index=True)
-        
-        # Formatação
-        format_dict = {'TOTAL': 'R$ {:,.2f}'}
-        for mes in MESES:
-            format_dict[mes] = 'R$ {:,.2f}'
-        
-        st.dataframe(
-            df_fisios.style.format(format_dict),
-            use_container_width=True,
-            hide_index=True,
-            height=400
-        )
+
+    # v1.99.69: Verificar se está no modo consolidado
+    is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+    if is_consolidado:
+        # CONSOLIDADO: Busca valores de cada filial e soma
+        st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+        from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+        manager = ClienteManager()
+        cliente_id = st.session_state.get('cliente_id')
+        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+        # Projeção consolidada
+        projecao = []
+        for mes in range(12):
+            projecao.append({
+                'total_fisioterapeutas': 0, 'total_proprietarios': 0,
+                'producao_bruta': 0, 'margem_clinica': 0,
+                'detalhes_fisioterapeutas': {}, 'detalhes_proprietarios': {}
+            })
+
+        # Dados agrupados por filial
+        dados_por_filial = {}
+        totais_contagem = {'n_fisio': 0, 'n_prop': 0}
+
+        if cliente_id:
+            filiais = manager.listar_filiais(cliente_id)
+
+            for filial_info in filiais:
+                filial_id = filial_info["id"]
+                filial_nome = filial_info["nome"]
+
+                try:
+                    resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                    motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                    if not motor_filial:
+                        motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                    if motor_filial:
+                        # Projeção da filial
+                        proj_filial = motor_filial.projetar_folha_fisioterapeutas_anual()
+                        dados_por_filial[filial_nome] = {'projecao': proj_filial, 'fisios': []}
+
+                        # Soma projeção
+                        for mes_idx in range(12):
+                            projecao[mes_idx]['total_fisioterapeutas'] += proj_filial[mes_idx]['total_fisioterapeutas']
+                            projecao[mes_idx]['total_proprietarios'] += proj_filial[mes_idx]['total_proprietarios']
+                            projecao[mes_idx]['producao_bruta'] += proj_filial[mes_idx]['producao_bruta']
+                            projecao[mes_idx]['margem_clinica'] += proj_filial[mes_idx]['margem_clinica']
+
+                        # Dados por fisioterapeuta
+                        for nome, fisio in motor_filial.fisioterapeutas.items():
+                            if not fisio.ativo:
+                                continue
+
+                            # Tipo de remuneração
+                            if fisio.cargo == "Proprietário":
+                                tipo_rem = "Prop"
+                                totais_contagem['n_prop'] += 1
+                            elif fisio.tipo_remuneracao == "valor_fixo":
+                                tipo_rem = "R$ Fixo"
+                                totais_contagem['n_fisio'] += 1
+                            elif fisio.tipo_remuneracao == "misto":
+                                tipo_rem = f"Misto Nv{fisio.nivel}"
+                                totais_contagem['n_fisio'] += 1
+                            else:
+                                nivel_pct = {1: "35%", 2: "30%", 3: "25%", 4: "20%"}.get(fisio.nivel, "?")
+                                tipo_rem = f"Nv{fisio.nivel} ({nivel_pct})"
+                                totais_contagem['n_fisio'] += 1
+
+                            # Remuneração mês a mês
+                            remuneracao_mes = []
+                            for mes_idx in range(12):
+                                if fisio.cargo == "Proprietário":
+                                    rem = proj_filial[mes_idx]['detalhes_proprietarios'].get(nome, {}).get('total', 0)
+                                else:
+                                    rem = proj_filial[mes_idx]['detalhes_fisioterapeutas'].get(nome, {}).get('total', 0)
+                                remuneracao_mes.append(rem)
+
+                            dados_por_filial[filial_nome]['fisios'].append({
+                                'Nome': nome, 'Cargo': fisio.cargo, 'Tipo': tipo_rem,
+                                **{MESES[i]: remuneracao_mes[i] for i in range(12)},
+                                'TOTAL': sum(remuneracao_mes)
+                            })
+
+                except Exception as e:
+                    st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+        # Totais anuais
+        total_fisio = sum(p['total_fisioterapeutas'] for p in projecao)
+        total_prop = sum(p['total_proprietarios'] for p in projecao)
+        total_producao = sum(p['producao_bruta'] for p in projecao)
+        total_margem = sum(p['margem_clinica'] for p in projecao)
+        total_geral = total_fisio + total_prop
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            render_metric_card("🩺 Fisioterapeutas", format_currency(total_fisio), card_type="default")
+        with col2:
+            render_metric_card("👔 Proprietários", format_currency(total_prop), card_type="default")
+        with col3:
+            render_metric_card("📈 Produção Bruta", format_currency(total_producao), card_type="success")
+        with col4:
+            render_metric_card("💰 Margem Clínica", format_currency(total_margem), card_type="success")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Segunda linha de cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Qtd. Fisioterapeutas", totais_contagem['n_fisio'])
+        with col2:
+            st.metric("Qtd. Proprietários", totais_contagem['n_prop'])
+        with col3:
+            pct_margem = (total_margem / total_producao * 100) if total_producao > 0 else 0
+            st.metric("% Margem s/ Produção", f"{pct_margem:.1f}%")
+        with col4:
+            render_metric_card("💰 TOTAL FOLHA", format_currency(total_geral), card_type="warning")
+
+        st.markdown("---")
+
+        # ===== TABELA POR FISIOTERAPEUTA AGRUPADA POR FILIAL =====
+        st.markdown("#### 🩺 Remuneração por Fisioterapeuta (Mês a Mês)")
+        st.caption("💡 Agrupado por filial")
+
+        for filial_nome, dados in sorted(dados_por_filial.items()):
+            if dados['fisios']:
+                st.markdown(f"##### 🏢 {filial_nome}")
+                df_fisios = pd.DataFrame(dados['fisios'])
+
+                # Ordenar
+                df_fisios['_ordem'] = df_fisios['Cargo'].map({'Proprietário': 0, 'Gerente': 1, 'Fisioterapeuta': 2})
+                df_fisios = df_fisios.sort_values(['_ordem', 'TOTAL'], ascending=[True, False]).drop('_ordem', axis=1)
+
+                # Subtotal
+                subtotal_row = {'Nome': f'Subtotal {filial_nome}', 'Cargo': '', 'Tipo': ''}
+                for mes in MESES:
+                    subtotal_row[mes] = df_fisios[mes].sum()
+                subtotal_row['TOTAL'] = df_fisios['TOTAL'].sum()
+                df_fisios = pd.concat([df_fisios, pd.DataFrame([subtotal_row])], ignore_index=True)
+
+                format_dict = {'TOTAL': 'R$ {:,.2f}'}
+                for mes in MESES:
+                    format_dict[mes] = 'R$ {:,.2f}'
+                st.dataframe(df_fisios.style.format(format_dict), use_container_width=True, hide_index=True)
+
     else:
-        st.info("Nenhum fisioterapeuta cadastrado.")
-    
+        # MODO NORMAL: Filial individual
+
+        # Verificar se há profissionais com R$ Fixo sem valores configurados
+        fisios_sem_valores = []
+        for nome, fisio in motor.fisioterapeutas.items():
+            if fisio.cargo != "Proprietário" and fisio.ativo:
+                if fisio.tipo_remuneracao in ["valor_fixo", "misto"]:
+                    servicos_atendidos = [s for s in fisio.sessoes_por_servico.keys() if fisio.sessoes_por_servico.get(s, 0) > 0]
+                    valores_configurados = [s for s in servicos_atendidos if fisio.valores_fixos_por_servico.get(s, 0) > 0]
+                    if fisio.tipo_remuneracao == "valor_fixo" and servicos_atendidos and len(valores_configurados) < len(servicos_atendidos):
+                        fisios_sem_valores.append(nome)
+
+        if fisios_sem_valores:
+            st.error(f"⚠️ **ATENÇÃO:** Profissionais com 'R$ Fixo' sem valores configurados: **{', '.join(fisios_sem_valores)}**. Isso resulta em R$ 0,00 de remuneração! Configure em Premissas > Folha Fisioterapeutas > Cadastro.")
+
+        # Calcular projeção anual
+        projecao = motor.projetar_folha_fisioterapeutas_anual()
+
+        # Totais anuais
+        total_fisio = sum(p['total_fisioterapeutas'] for p in projecao)
+        total_prop = sum(p['total_proprietarios'] for p in projecao)
+        total_producao = sum(p['producao_bruta'] for p in projecao)
+        total_margem = sum(p['margem_clinica'] for p in projecao)
+        total_geral = total_fisio + total_prop
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            render_metric_card("🩺 Fisioterapeutas", format_currency(total_fisio), card_type="default")
+        with col2:
+            render_metric_card("👔 Proprietários", format_currency(total_prop), card_type="default")
+        with col3:
+            render_metric_card("📈 Produção Bruta", format_currency(total_producao), card_type="success")
+        with col4:
+            render_metric_card("💰 Margem Clínica", format_currency(total_margem), card_type="success")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Segunda linha de cards
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            n_fisio = len([f for f in motor.fisioterapeutas.values() if f.cargo in ["Fisioterapeuta", "Gerente"] and f.ativo])
+            st.metric("Qtd. Fisioterapeutas", n_fisio)
+        with col2:
+            n_prop = len([f for f in motor.fisioterapeutas.values() if f.cargo == "Proprietário" and f.ativo])
+            st.metric("Qtd. Proprietários", n_prop)
+        with col3:
+            pct_margem = (total_margem / total_producao * 100) if total_producao > 0 else 0
+            st.metric("% Margem s/ Produção", f"{pct_margem:.1f}%")
+        with col4:
+            render_metric_card("💰 TOTAL FOLHA", format_currency(total_geral), card_type="warning")
+
+        st.markdown("---")
+
+        # ===== TABELA POR FISIOTERAPEUTA MÊS A MÊS =====
+        st.markdown("#### 🩺 Remuneração por Fisioterapeuta (Mês a Mês)")
+
+        dados_fisios = []
+        for nome, fisio in motor.fisioterapeutas.items():
+            if not fisio.ativo:
+                continue
+
+            if fisio.cargo == "Proprietário":
+                tipo_rem = "Prop"
+            elif fisio.tipo_remuneracao == "valor_fixo":
+                tipo_rem = "R$ Fixo"
+            elif fisio.tipo_remuneracao == "misto":
+                tipo_rem = f"Misto Nv{fisio.nivel}"
+            else:
+                nivel_pct = {1: "35%", 2: "30%", 3: "25%", 4: "20%"}.get(fisio.nivel, "?")
+                tipo_rem = f"Nv{fisio.nivel} ({nivel_pct})"
+
+            remuneracao_mes = []
+            for mes_idx, proj in enumerate(projecao):
+                if fisio.cargo == "Proprietário":
+                    rem = proj['detalhes_proprietarios'].get(nome, {}).get('total', 0)
+                else:
+                    rem = proj['detalhes_fisioterapeutas'].get(nome, {}).get('total', 0)
+                remuneracao_mes.append(rem)
+
+            dados_fisios.append({
+                'Nome': nome, 'Cargo': fisio.cargo, 'Tipo': tipo_rem,
+                **{MESES[i]: remuneracao_mes[i] for i in range(12)},
+                'TOTAL': sum(remuneracao_mes)
+            })
+
+        if dados_fisios:
+            df_fisios = pd.DataFrame(dados_fisios)
+            df_fisios['_ordem'] = df_fisios['Cargo'].map({'Proprietário': 0, 'Gerente': 1, 'Fisioterapeuta': 2})
+            df_fisios = df_fisios.sort_values(['_ordem', 'TOTAL'], ascending=[True, False]).drop('_ordem', axis=1)
+
+            total_row = {'Nome': 'TOTAL', 'Cargo': '', 'Tipo': ''}
+            for mes in MESES:
+                total_row[mes] = df_fisios[mes].sum()
+            total_row['TOTAL'] = df_fisios['TOTAL'].sum()
+            df_fisios = pd.concat([df_fisios, pd.DataFrame([total_row])], ignore_index=True)
+
+            format_dict = {'TOTAL': 'R$ {:,.2f}'}
+            for mes in MESES:
+                format_dict[mes] = 'R$ {:,.2f}'
+
+            st.dataframe(df_fisios.style.format(format_dict), use_container_width=True, hide_index=True, height=400)
+        else:
+            st.info("Nenhum fisioterapeuta cadastrado.")
+
     st.markdown("---")
-    
+
     # Gráfico de evolução mensal
     st.markdown("#### 📈 Evolução Mensal (Totais)")
-    
+
     meses_chart = [MESES[i] for i in range(12)]
-    
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        name='Fisioterapeutas', 
-        x=meses_chart, 
-        y=[p['total_fisioterapeutas'] for p in projecao], 
+        name='Fisioterapeutas',
+        x=meses_chart,
+        y=[p['total_fisioterapeutas'] for p in projecao],
         marker_color='#3498db'
     ))
     fig.add_trace(go.Bar(
-        name='Proprietários', 
-        x=meses_chart, 
-        y=[p['total_proprietarios'] for p in projecao], 
+        name='Proprietários',
+        x=meses_chart,
+        y=[p['total_proprietarios'] for p in projecao],
         marker_color='#9b59b6'
     ))
     fig.add_trace(go.Scatter(
-        name='Margem Clínica', 
-        x=meses_chart, 
-        y=[p['margem_clinica'] for p in projecao], 
+        name='Margem Clínica',
+        x=meses_chart,
+        y=[p['margem_clinica'] for p in projecao],
         mode='lines+markers',
         line=dict(color='#2ecc71', width=3),
         yaxis='y2'
     ))
-    
+
     fig.update_layout(
         barmode='stack',
         height=350,
@@ -17156,12 +18118,12 @@ def pagina_folha_fisioterapeutas():
         )
     )
     st.plotly_chart(fig, use_container_width=True)
-    
+
     st.markdown("---")
-    
+
     # Tabela resumo mensal
     st.markdown("#### 📊 Resumo Mensal")
-    
+
     df_tabela = pd.DataFrame([{
         'Mês': MESES[i],
         'Produção Bruta': p['producao_bruta'],
@@ -17171,7 +18133,7 @@ def pagina_folha_fisioterapeutas():
         'Margem Clínica': p['margem_clinica'],
         '% Margem': (p['margem_clinica'] / p['producao_bruta'] * 100) if p['producao_bruta'] > 0 else 0
     } for i, p in enumerate(projecao)])
-    
+
     # Linha de total
     total_row = pd.DataFrame([{
         'Mês': 'TOTAL',
@@ -17183,7 +18145,7 @@ def pagina_folha_fisioterapeutas():
         '% Margem': (df_tabela['Margem Clínica'].sum() / df_tabela['Produção Bruta'].sum() * 100) if df_tabela['Produção Bruta'].sum() > 0 else 0
     }])
     df_tabela = pd.concat([df_tabela, total_row], ignore_index=True)
-    
+
     st.dataframe(
         df_tabela.style.format({
             'Produção Bruta': 'R$ {:,.2f}',
@@ -17268,12 +18230,14 @@ def pagina_simulador_metas():
     # ========================================================================
     # AVISO: DIFERENÇA ENTRE FAT 2025 E PRODUÇÃO ATUAL
     # ========================================================================
-    # Calcula produção atual dos fisios
+    # Calcula produção atual dos fisios E proprietários (v1.99.55)
     prod_atual_ano = 0
     for mes in range(1, 13):
         try:
             folha = motor.calcular_folha_fisioterapeutas_mes(mes)
             prod_atual_ano += sum(f["faturamento"] for f in folha["fisioterapeutas"])
+            # v1.99.55: Inclui proprietários no cálculo!
+            prod_atual_ano += sum(p.get("faturamento", 0) for p in folha.get("proprietarios", []))
         except:
             pass
     
@@ -18008,285 +18972,449 @@ def pagina_simulador_metas():
 def pagina_simples_nacional():
     """Página de cálculo do Simples Nacional e Carnê Leão"""
     render_header()
-    
+
     st.markdown('<div class="section-header"><h3>💼 Simples Nacional / Carnê Leão</h3></div>', unsafe_allow_html=True)
-    
+
     motor = st.session_state.motor
     ps = motor.premissas_simples
-    
-    # ===== PROCESSAR PREMISSAS PRIMEIRO (usando session_state para valores persistentes) =====
-    # Isso garante que os valores sejam aplicados antes do cálculo
-    
-    # Inicializa valores no session_state se não existirem
-    if 'sn_limite_fator_r' not in st.session_state:
-        st.session_state.sn_limite_fator_r = ps.limite_fator_r
-    if 'sn_faturamento_pf_anual' not in st.session_state:
-        st.session_state.sn_faturamento_pf_anual = ps.faturamento_pf_anual
-    if 'sn_aliquota_inss_pf' not in st.session_state:
-        st.session_state.sn_aliquota_inss_pf = ps.aliquota_inss_pf
-    
-    # Aplica valores do session_state ao motor (valores mais recentes)
-    ps.limite_fator_r = st.session_state.sn_limite_fator_r
-    ps.faturamento_pf_anual = st.session_state.sn_faturamento_pf_anual
-    ps.aliquota_inss_pf = st.session_state.sn_aliquota_inss_pf
-    
-    # ===== EXIBE REGIME (somente leitura - configurado nas Premissas) =====
-    st.markdown("#### ⚙️ Regime Tributário")
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        regime_atual = motor.operacional.modelo_tributario if motor.operacional.modelo_tributario else "PJ - Simples Nacional"
-        
-        # Exibe como info box (não editável)
-        st.info(f"📋 **Regime Selecionado:** {regime_atual}")
-    
-    with col2:
-        if "Simples" in regime_atual or "PJ" in regime_atual:
-            st.success("📊 PJ - DAS")
-        else:
-            st.warning("📋 PF - IRRF")
-    
-    with col3:
-        st.caption("⚙️ Para alterar o regime, vá em:")
-        st.caption("**Premissas → Operacional**")
-    
-    st.markdown("---")
-    
-    # Calcular
-    calc = motor.calcular_simples_nacional_anual()
-    
-    # Cards de resumo
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        render_metric_card("📈 Receita Anual", format_currency(calc['receita_total']), card_type="success")
-    with col2:
-        render_metric_card("🏢 DAS (PJ)", format_currency(calc['total_pj']), card_type="warning")
-    with col3:
-        render_metric_card("👤 IR+INSS (PF)", format_currency(calc['total_pf']), card_type="default")
-    with col4:
-        card_type = "success" if calc['mais_vantajoso'] == "PF" else "warning"
-        render_metric_card("✅ Mais Vantajoso", calc['mais_vantajoso'], card_type=card_type)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Segunda linha - comparativo
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        aliq_media_pj = calc['total_pj'] / calc['receita_total'] * 100 if calc['receita_total'] > 0 else 0
-        st.metric("Alíquota Média PJ", f"{aliq_media_pj:.2f}%")
-    with col2:
-        # Usa a receita do próprio cálculo PF (soma das receitas mensais)
-        receita_pf_total = sum(p['receita_mensal'] for p in calc['projecao_pf'])
-        aliq_media_pf = calc['total_pf'] / receita_pf_total * 100 if receita_pf_total > 0 else 0
-        st.metric("Alíquota Média PF", f"{aliq_media_pf:.2f}%")
-    with col3:
-        st.metric("Economia", format_currency(abs(calc['diferenca'])))
-    with col4:
-        imposto_dre = sum(motor.get_impostos_para_dre_anual())
-        st.metric("→ Imposto p/ DRE", format_currency(imposto_dre))
-    
-    st.markdown("---")
-    
-    # Tabs para PJ e PF
-    tab1, tab2, tab3 = st.tabs(["🏢 Simples Nacional (PJ)", "👤 Carnê Leão (PF)", "⚙️ Premissas"])
-    
-    with tab1:
-        st.markdown("#### 📊 Cálculo DAS - Simples Nacional")
-        
-        df_pj = pd.DataFrame([{
-            'Mês': MESES[p['mes']-1],
-            'Receita': p['receita_mensal'],
-            'Folha': p['folha_mensal'],
-            'RBT12': p['rbt12'],
-            'Folha 12m': p['folha_12m'],
-            'Fator r': p['fator_r'],
-            'Anexo': p['anexo'],
-            'Alíq. Efetiva': p['aliquota_efetiva'],
-            'DAS': p['das']
-        } for p in calc['projecao_pj']])
-        
-        # Linha de total
-        total_row = pd.DataFrame([{
-            'Mês': 'TOTAL',
-            'Receita': df_pj['Receita'].sum(),
-            'Folha': df_pj['Folha'].sum(),
-            'RBT12': '',
-            'Folha 12m': '',
-            'Fator r': '',
-            'Anexo': '',
-            'Alíq. Efetiva': df_pj['DAS'].sum() / df_pj['Receita'].sum() if df_pj['Receita'].sum() > 0 else 0,
-            'DAS': df_pj['DAS'].sum()
-        }])
-        df_pj = pd.concat([df_pj, total_row], ignore_index=True)
-        
-        st.dataframe(
-            df_pj.style.format({
-                'Receita': 'R$ {:,.2f}',
-                'Folha': 'R$ {:,.2f}',
-                'RBT12': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
-                'Folha 12m': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
-                'Fator r': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) and x != '' else '',
-                'Alíq. Efetiva': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) else '',
-                'DAS': 'R$ {:,.2f}'
-            }),
-            use_container_width=True,
-            hide_index=True,
-            height=500
-        )
-        
-        # Gráfico
-        st.markdown("#### 📈 Evolução DAS e Alíquota")
-        
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            name='DAS',
-            x=[MESES[p['mes']-1] for p in calc['projecao_pj']],
-            y=[p['das'] for p in calc['projecao_pj']],
-            marker_color='#e74c3c'
-        ))
-        fig.add_trace(go.Scatter(
-            name='Alíquota Efetiva',
-            x=[MESES[p['mes']-1] for p in calc['projecao_pj']],
-            y=[p['aliquota_efetiva'] * 100 for p in calc['projecao_pj']],
-            mode='lines+markers',
-            line=dict(color='#3498db', width=3),
-            yaxis='y2'
-        ))
-        
-        fig.update_layout(
-            height=350,
-            margin=dict(l=20, r=20, t=40, b=20),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-            yaxis2=dict(title='Alíquota (%)', overlaying='y', side='right')
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with tab2:
-        st.markdown("#### 📊 Cálculo Carnê Leão - Pessoa Física")
-        st.caption(f"💡 Faturamento PF anual: R$ {ps.faturamento_pf_anual:,.2f} (editável nas premissas)")
-        
-        df_pf = pd.DataFrame([{
-            'Mês': MESES[p['mes']-1],
-            'Receita PF': p['receita_mensal'],
-            'INSS': p['inss'],
-            'Base IR': p['base_ir'],
-            'IR': p['ir'],
-            'Status': p['status'],
-            'Total': p['total'],
-            'Alíq. Efetiva': p['aliquota_efetiva']
-        } for p in calc['projecao_pf']])
-        
-        # Linha de total
-        total_row = pd.DataFrame([{
-            'Mês': 'TOTAL',
-            'Receita PF': df_pf['Receita PF'].sum(),
-            'INSS': df_pf['INSS'].sum(),
-            'Base IR': '',
-            'IR': df_pf['IR'].sum(),
-            'Status': '',
-            'Total': df_pf['Total'].sum(),
-            'Alíq. Efetiva': df_pf['Total'].sum() / df_pf['Receita PF'].sum() if df_pf['Receita PF'].sum() > 0 else 0
-        }])
-        df_pf = pd.concat([df_pf, total_row], ignore_index=True)
-        
-        st.dataframe(
-            df_pf.style.format({
-                'Receita PF': 'R$ {:,.2f}',
-                'INSS': 'R$ {:,.2f}',
-                'Base IR': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
-                'IR': 'R$ {:,.2f}',
-                'Total': 'R$ {:,.2f}',
-                'Alíq. Efetiva': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) else ''
-            }),
-            use_container_width=True,
-            hide_index=True,
-            height=500
-        )
-    
-    with tab3:
-        st.markdown("#### ⚙️ Premissas Simples Nacional")
-        
-        col1, col2 = st.columns(2)
-        
+
+    # v1.99.70: Verificar se está no modo consolidado
+    is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+    if is_consolidado:
+        # CONSOLIDADO: Busca valores de cada filial e soma
+        st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+        from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+        manager = ClienteManager()
+        cliente_id = st.session_state.get('cliente_id')
+        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+        # Totais consolidados
+        receita_total = 0
+        total_pj = 0
+        total_pf = 0
+        imposto_dre_total = 0
+
+        # Projeções consolidadas
+        projecao_pj = []
+        projecao_pf = []
+        for mes in range(12):
+            projecao_pj.append({
+                'mes': mes+1, 'receita_mensal': 0, 'folha_mensal': 0,
+                'rbt12': 0, 'folha_12m': 0, 'fator_r': 0, 'anexo': '',
+                'aliquota_efetiva': 0, 'das': 0
+            })
+            projecao_pf.append({
+                'mes': mes+1, 'receita_mensal': 0, 'inss': 0, 'base_ir': 0,
+                'ir': 0, 'status': '', 'total': 0, 'aliquota_efetiva': 0
+            })
+
+        if cliente_id:
+            filiais = manager.listar_filiais(cliente_id)
+
+            for filial_info in filiais:
+                filial_id = filial_info["id"]
+                filial_nome = filial_info["nome"]
+
+                try:
+                    resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                    motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                    if not motor_filial:
+                        motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                    if motor_filial:
+                        calc_filial = motor_filial.calcular_simples_nacional_anual()
+
+                        receita_total += calc_filial['receita_total']
+                        total_pj += calc_filial['total_pj']
+                        total_pf += calc_filial['total_pf']
+                        imposto_dre_total += sum(motor_filial.get_impostos_para_dre_anual())
+
+                        # Soma projeções
+                        for mes_idx in range(12):
+                            pj = calc_filial['projecao_pj'][mes_idx]
+                            pf = calc_filial['projecao_pf'][mes_idx]
+
+                            projecao_pj[mes_idx]['receita_mensal'] += pj['receita_mensal']
+                            projecao_pj[mes_idx]['folha_mensal'] += pj['folha_mensal']
+                            projecao_pj[mes_idx]['das'] += pj['das']
+
+                            projecao_pf[mes_idx]['receita_mensal'] += pf['receita_mensal']
+                            projecao_pf[mes_idx]['inss'] += pf['inss']
+                            projecao_pf[mes_idx]['ir'] += pf['ir']
+                            projecao_pf[mes_idx]['total'] += pf['total']
+
+                except Exception as e:
+                    st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+        # Determina mais vantajoso
+        diferenca = total_pj - total_pf
+        mais_vantajoso = "PF" if total_pf < total_pj else "PJ"
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.markdown("##### 🏢 Parâmetros Gerais")
-            novo_limite_fator_r = st.number_input(
-                "Limite Fator R (para Anexo III)",
-                min_value=0.0, max_value=1.0, value=float(st.session_state.sn_limite_fator_r),
-                step=0.01, format="%.2f",
-                key="input_limite_fator_r"
-            )
-            if novo_limite_fator_r != st.session_state.sn_limite_fator_r:
-                st.session_state.sn_limite_fator_r = novo_limite_fator_r
-                ps.limite_fator_r = novo_limite_fator_r
-                # Sincroniza e salva
-                _sincronizar_motor_para_cenario(motor)
-                salvar_filial_atual()
-                st.rerun()
-            st.caption("Se Fator r >= 28% → Anexo III (mais favorável)")
-        
+            render_metric_card("📈 Receita Anual", format_currency(receita_total), card_type="success")
         with col2:
-            st.markdown("##### 👤 Carnê Leão (PF)")
-            novo_faturamento_pf = st.number_input(
-                "Faturamento PF Anual (R$)",
-                min_value=0.0, max_value=5000000.0, value=float(st.session_state.sn_faturamento_pf_anual),
-                step=1000.0, format="%.2f",
-                key="input_fat_pf_anual",
-                help="Se zerado, usa a mesma receita do PJ para comparação"
-            )
-            if novo_faturamento_pf != st.session_state.sn_faturamento_pf_anual:
-                st.session_state.sn_faturamento_pf_anual = novo_faturamento_pf
-                ps.faturamento_pf_anual = novo_faturamento_pf
-                # Sincroniza e salva
-                _sincronizar_motor_para_cenario(motor)
-                salvar_filial_atual()
-                st.rerun()
-            
-            aliq_inss_opcoes = {"Sem INSS (0%)": 0.0, "Simplificado (11%)": 0.11, "Normal (20%)": 0.20}
-            aliq_atual = next((k for k, v in aliq_inss_opcoes.items() if abs(v - st.session_state.sn_aliquota_inss_pf) < 0.001), "Simplificado (11%)")
-            nova_aliq = st.selectbox("Alíquota INSS PF", list(aliq_inss_opcoes.keys()), 
-                                     index=list(aliq_inss_opcoes.keys()).index(aliq_atual),
-                                     key="input_aliq_inss_pf")
-            nova_aliq_valor = aliq_inss_opcoes[nova_aliq]
-            if abs(nova_aliq_valor - st.session_state.sn_aliquota_inss_pf) > 0.001:
-                st.session_state.sn_aliquota_inss_pf = nova_aliq_valor
-                ps.aliquota_inss_pf = nova_aliq_valor
-                # Sincroniza e salva
-                _sincronizar_motor_para_cenario(motor)
-                salvar_filial_atual()
-                st.rerun()
-        
-        st.markdown("---")
-        
-        # Tabelas de Alíquotas
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("##### 📋 Tabela Anexo III (Fator r ≥ 28%)")
-            df_anexo3 = pd.DataFrame([
-                {"Faixa RBT12": f"Até R$ {l:,.0f}", "Alíquota": f"{a*100:.1f}%", "Dedução": f"R$ {d:,.0f}"}
-                for l, a, d in ps.tabela_anexo_iii
-            ])
-            st.dataframe(df_anexo3, use_container_width=True, hide_index=True)
-        
-        with col2:
-            st.markdown("##### 📋 Tabela Anexo V (Fator r < 28%)")
-            df_anexo5 = pd.DataFrame([
-                {"Faixa RBT12": f"Até R$ {l:,.0f}", "Alíquota": f"{a*100:.1f}%", "Dedução": f"R$ {d:,.0f}"}
-                for l, a, d in ps.tabela_anexo_v
-            ])
-            st.dataframe(df_anexo5, use_container_width=True, hide_index=True)
-        
-        st.markdown("---")
-        st.markdown("##### 📋 Premissas IR 2026 (Lei 15.270/2025)")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Limite Isenção", f"R$ {ps.limite_isencao_ir:,.2f}")
-        with col2:
-            st.metric("Teto Redutor", f"R$ {ps.teto_redutor_ir:,.2f}")
+            render_metric_card("🏢 DAS (PJ)", format_currency(total_pj), card_type="warning")
         with col3:
-            st.metric("Dedução Fixa", f"R$ {ps.deducao_fixa_ir:,.2f}")
+            render_metric_card("👤 IR+INSS (PF)", format_currency(total_pf), card_type="default")
+        with col4:
+            card_type = "success" if mais_vantajoso == "PF" else "warning"
+            render_metric_card("✅ Mais Vantajoso", mais_vantajoso, card_type=card_type)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Segunda linha
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            aliq_media_pj = total_pj / receita_total * 100 if receita_total > 0 else 0
+            st.metric("Alíquota Média PJ", f"{aliq_media_pj:.2f}%")
+        with col2:
+            receita_pf_total = sum(p['receita_mensal'] for p in projecao_pf)
+            aliq_media_pf = total_pf / receita_pf_total * 100 if receita_pf_total > 0 else 0
+            st.metric("Alíquota Média PF", f"{aliq_media_pf:.2f}%")
+        with col3:
+            st.metric("Economia", format_currency(abs(diferenca)))
+        with col4:
+            st.metric("→ Imposto p/ DRE", format_currency(imposto_dre_total))
+
+        st.markdown("---")
+
+        # Tabs (sem premissas no consolidado)
+        tab1, tab2 = st.tabs(["🏢 Simples Nacional (PJ)", "👤 Carnê Leão (PF)"])
+
+        with tab1:
+            st.markdown("#### 📊 Cálculo DAS - Simples Nacional (Consolidado)")
+
+            df_pj = pd.DataFrame([{
+                'Mês': MESES[p['mes']-1],
+                'Receita': p['receita_mensal'],
+                'Folha': p['folha_mensal'],
+                'DAS': p['das']
+            } for p in projecao_pj])
+
+            total_row = pd.DataFrame([{
+                'Mês': 'TOTAL',
+                'Receita': df_pj['Receita'].sum(),
+                'Folha': df_pj['Folha'].sum(),
+                'DAS': df_pj['DAS'].sum()
+            }])
+            df_pj = pd.concat([df_pj, total_row], ignore_index=True)
+
+            st.dataframe(
+                df_pj.style.format({
+                    'Receita': 'R$ {:,.2f}',
+                    'Folha': 'R$ {:,.2f}',
+                    'DAS': 'R$ {:,.2f}'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # Gráfico
+            st.markdown("#### 📈 Evolução DAS")
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name='DAS',
+                x=[MESES[p['mes']-1] for p in projecao_pj],
+                y=[p['das'] for p in projecao_pj],
+                marker_color='#e74c3c'
+            ))
+            fig.update_layout(height=350, margin=dict(l=20, r=20, t=40, b=20))
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab2:
+            st.markdown("#### 📊 Cálculo Carnê Leão - Pessoa Física (Consolidado)")
+
+            df_pf = pd.DataFrame([{
+                'Mês': MESES[p['mes']-1],
+                'Receita PF': p['receita_mensal'],
+                'INSS': p['inss'],
+                'IR': p['ir'],
+                'Total': p['total']
+            } for p in projecao_pf])
+
+            total_row = pd.DataFrame([{
+                'Mês': 'TOTAL',
+                'Receita PF': df_pf['Receita PF'].sum(),
+                'INSS': df_pf['INSS'].sum(),
+                'IR': df_pf['IR'].sum(),
+                'Total': df_pf['Total'].sum()
+            }])
+            df_pf = pd.concat([df_pf, total_row], ignore_index=True)
+
+            st.dataframe(
+                df_pf.style.format({
+                    'Receita PF': 'R$ {:,.2f}',
+                    'INSS': 'R$ {:,.2f}',
+                    'IR': 'R$ {:,.2f}',
+                    'Total': 'R$ {:,.2f}'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+
+    else:
+        # MODO NORMAL: Filial individual
+
+        # ===== PROCESSAR PREMISSAS PRIMEIRO =====
+        if 'sn_limite_fator_r' not in st.session_state:
+            st.session_state.sn_limite_fator_r = ps.limite_fator_r
+        if 'sn_faturamento_pf_anual' not in st.session_state:
+            st.session_state.sn_faturamento_pf_anual = ps.faturamento_pf_anual
+        if 'sn_aliquota_inss_pf' not in st.session_state:
+            st.session_state.sn_aliquota_inss_pf = ps.aliquota_inss_pf
+
+        ps.limite_fator_r = st.session_state.sn_limite_fator_r
+        ps.faturamento_pf_anual = st.session_state.sn_faturamento_pf_anual
+        ps.aliquota_inss_pf = st.session_state.sn_aliquota_inss_pf
+
+        # ===== EXIBE REGIME =====
+        st.markdown("#### ⚙️ Regime Tributário")
+
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            regime_atual = motor.operacional.modelo_tributario if motor.operacional.modelo_tributario else "PJ - Simples Nacional"
+            st.info(f"📋 **Regime Selecionado:** {regime_atual}")
+
+        with col2:
+            if "Simples" in regime_atual or "PJ" in regime_atual:
+                st.success("📊 PJ - DAS")
+            else:
+                st.warning("📋 PF - IRRF")
+
+        with col3:
+            st.caption("⚙️ Para alterar o regime, vá em:")
+            st.caption("**Premissas → Operacional**")
+
+        st.markdown("---")
+
+        # Calcular
+        calc = motor.calcular_simples_nacional_anual()
+
+        # Cards de resumo
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            render_metric_card("📈 Receita Anual", format_currency(calc['receita_total']), card_type="success")
+        with col2:
+            render_metric_card("🏢 DAS (PJ)", format_currency(calc['total_pj']), card_type="warning")
+        with col3:
+            render_metric_card("👤 IR+INSS (PF)", format_currency(calc['total_pf']), card_type="default")
+        with col4:
+            card_type = "success" if calc['mais_vantajoso'] == "PF" else "warning"
+            render_metric_card("✅ Mais Vantajoso", calc['mais_vantajoso'], card_type=card_type)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            aliq_media_pj = calc['total_pj'] / calc['receita_total'] * 100 if calc['receita_total'] > 0 else 0
+            st.metric("Alíquota Média PJ", f"{aliq_media_pj:.2f}%")
+        with col2:
+            receita_pf_total = sum(p['receita_mensal'] for p in calc['projecao_pf'])
+            aliq_media_pf = calc['total_pf'] / receita_pf_total * 100 if receita_pf_total > 0 else 0
+            st.metric("Alíquota Média PF", f"{aliq_media_pf:.2f}%")
+        with col3:
+            st.metric("Economia", format_currency(abs(calc['diferenca'])))
+        with col4:
+            imposto_dre = sum(motor.get_impostos_para_dre_anual())
+            st.metric("→ Imposto p/ DRE", format_currency(imposto_dre))
+
+        st.markdown("---")
+
+        # Tabs
+        tab1, tab2, tab3 = st.tabs(["🏢 Simples Nacional (PJ)", "👤 Carnê Leão (PF)", "⚙️ Premissas"])
+
+        with tab1:
+            st.markdown("#### 📊 Cálculo DAS - Simples Nacional")
+
+            df_pj = pd.DataFrame([{
+                'Mês': MESES[p['mes']-1],
+                'Receita': p['receita_mensal'],
+                'Folha': p['folha_mensal'],
+                'RBT12': p['rbt12'],
+                'Folha 12m': p['folha_12m'],
+                'Fator r': p['fator_r'],
+                'Anexo': p['anexo'],
+                'Alíq. Efetiva': p['aliquota_efetiva'],
+                'DAS': p['das']
+            } for p in calc['projecao_pj']])
+
+            total_row = pd.DataFrame([{
+                'Mês': 'TOTAL',
+                'Receita': df_pj['Receita'].sum(),
+                'Folha': df_pj['Folha'].sum(),
+                'RBT12': '',
+                'Folha 12m': '',
+                'Fator r': '',
+                'Anexo': '',
+                'Alíq. Efetiva': df_pj['DAS'].sum() / df_pj['Receita'].sum() if df_pj['Receita'].sum() > 0 else 0,
+                'DAS': df_pj['DAS'].sum()
+            }])
+            df_pj = pd.concat([df_pj, total_row], ignore_index=True)
+
+            st.dataframe(
+                df_pj.style.format({
+                    'Receita': 'R$ {:,.2f}',
+                    'Folha': 'R$ {:,.2f}',
+                    'RBT12': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
+                    'Folha 12m': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
+                    'Fator r': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) and x != '' else '',
+                    'Alíq. Efetiva': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) else '',
+                    'DAS': 'R$ {:,.2f}'
+                }),
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+
+            st.markdown("#### 📈 Evolução DAS e Alíquota")
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name='DAS',
+                x=[MESES[p['mes']-1] for p in calc['projecao_pj']],
+                y=[p['das'] for p in calc['projecao_pj']],
+                marker_color='#e74c3c'
+            ))
+            fig.add_trace(go.Scatter(
+                name='Alíquota Efetiva',
+                x=[MESES[p['mes']-1] for p in calc['projecao_pj']],
+                y=[p['aliquota_efetiva'] * 100 for p in calc['projecao_pj']],
+                mode='lines+markers',
+                line=dict(color='#3498db', width=3),
+                yaxis='y2'
+            ))
+            fig.update_layout(
+                height=350,
+                margin=dict(l=20, r=20, t=40, b=20),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                yaxis2=dict(title='Alíquota (%)', overlaying='y', side='right')
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tab2:
+            st.markdown("#### 📊 Cálculo Carnê Leão - Pessoa Física")
+            st.caption(f"💡 Faturamento PF anual: R$ {ps.faturamento_pf_anual:,.2f} (editável nas premissas)")
+
+            df_pf = pd.DataFrame([{
+                'Mês': MESES[p['mes']-1],
+                'Receita PF': p['receita_mensal'],
+                'INSS': p['inss'],
+                'Base IR': p['base_ir'],
+                'IR': p['ir'],
+                'Status': p['status'],
+                'Total': p['total'],
+                'Alíq. Efetiva': p['aliquota_efetiva']
+            } for p in calc['projecao_pf']])
+
+            total_row = pd.DataFrame([{
+                'Mês': 'TOTAL',
+                'Receita PF': df_pf['Receita PF'].sum(),
+                'INSS': df_pf['INSS'].sum(),
+                'Base IR': '',
+                'IR': df_pf['IR'].sum(),
+                'Status': '',
+                'Total': df_pf['Total'].sum(),
+                'Alíq. Efetiva': df_pf['Total'].sum() / df_pf['Receita PF'].sum() if df_pf['Receita PF'].sum() > 0 else 0
+            }])
+            df_pf = pd.concat([df_pf, total_row], ignore_index=True)
+
+            st.dataframe(
+                df_pf.style.format({
+                    'Receita PF': 'R$ {:,.2f}',
+                    'INSS': 'R$ {:,.2f}',
+                    'Base IR': lambda x: f'R$ {x:,.2f}' if isinstance(x, (int, float)) else '',
+                    'IR': 'R$ {:,.2f}',
+                    'Total': 'R$ {:,.2f}',
+                    'Alíq. Efetiva': lambda x: f'{x*100:.2f}%' if isinstance(x, (int, float)) else ''
+                }),
+                use_container_width=True,
+                hide_index=True,
+                height=500
+            )
+
+        with tab3:
+            st.markdown("#### ⚙️ Premissas Simples Nacional")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("##### 🏢 Parâmetros Gerais")
+                novo_limite_fator_r = st.number_input(
+                    "Limite Fator R (para Anexo III)",
+                    min_value=0.0, max_value=1.0, value=float(st.session_state.sn_limite_fator_r),
+                    step=0.01, format="%.2f",
+                    key="input_limite_fator_r"
+                )
+                if novo_limite_fator_r != st.session_state.sn_limite_fator_r:
+                    st.session_state.sn_limite_fator_r = novo_limite_fator_r
+                    ps.limite_fator_r = novo_limite_fator_r
+                    _sincronizar_motor_para_cenario(motor)
+                    salvar_filial_atual()
+                    st.rerun()
+                st.caption("Se Fator r >= 28% → Anexo III (mais favorável)")
+
+            with col2:
+                st.markdown("##### 👤 Carnê Leão (PF)")
+                novo_faturamento_pf = st.number_input(
+                    "Faturamento PF Anual (R$)",
+                    min_value=0.0, max_value=5000000.0, value=float(st.session_state.sn_faturamento_pf_anual),
+                    step=1000.0, format="%.2f",
+                    key="input_fat_pf_anual",
+                    help="Se zerado, usa a mesma receita do PJ para comparação"
+                )
+                if novo_faturamento_pf != st.session_state.sn_faturamento_pf_anual:
+                    st.session_state.sn_faturamento_pf_anual = novo_faturamento_pf
+                    ps.faturamento_pf_anual = novo_faturamento_pf
+                    _sincronizar_motor_para_cenario(motor)
+                    salvar_filial_atual()
+                    st.rerun()
+
+                aliq_inss_opcoes = {"Sem INSS (0%)": 0.0, "Simplificado (11%)": 0.11, "Normal (20%)": 0.20}
+                aliq_atual = next((k for k, v in aliq_inss_opcoes.items() if abs(v - st.session_state.sn_aliquota_inss_pf) < 0.001), "Simplificado (11%)")
+                nova_aliq = st.selectbox("Alíquota INSS PF", list(aliq_inss_opcoes.keys()),
+                                         index=list(aliq_inss_opcoes.keys()).index(aliq_atual),
+                                         key="input_aliq_inss_pf")
+                nova_aliq_valor = aliq_inss_opcoes[nova_aliq]
+                if abs(nova_aliq_valor - st.session_state.sn_aliquota_inss_pf) > 0.001:
+                    st.session_state.sn_aliquota_inss_pf = nova_aliq_valor
+                    ps.aliquota_inss_pf = nova_aliq_valor
+                    _sincronizar_motor_para_cenario(motor)
+                    salvar_filial_atual()
+                    st.rerun()
+
+            st.markdown("---")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("##### 📋 Tabela Anexo III (Fator r ≥ 28%)")
+                df_anexo3 = pd.DataFrame([
+                    {"Faixa RBT12": f"Até R$ {l:,.0f}", "Alíquota": f"{a*100:.1f}%", "Dedução": f"R$ {d:,.0f}"}
+                    for l, a, d in ps.tabela_anexo_iii
+                ])
+                st.dataframe(df_anexo3, use_container_width=True, hide_index=True)
+
+            with col2:
+                st.markdown("##### 📋 Tabela Anexo V (Fator r < 28%)")
+                df_anexo5 = pd.DataFrame([
+                    {"Faixa RBT12": f"Até R$ {l:,.0f}", "Alíquota": f"{a*100:.1f}%", "Dedução": f"R$ {d:,.0f}"}
+                    for l, a, d in ps.tabela_anexo_v
+                ])
+                st.dataframe(df_anexo5, use_container_width=True, hide_index=True)
+
+            st.markdown("---")
+            st.markdown("##### 📋 Premissas IR 2026 (Lei 15.270/2025)")
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Limite Isenção", f"R$ {ps.limite_isencao_ir:,.2f}")
+            with col2:
+                st.metric("Teto Redutor", f"R$ {ps.teto_redutor_ir:,.2f}")
+            with col3:
+                st.metric("Dedução Fixa", f"R$ {ps.deducao_fixa_ir:,.2f}")
 
 
 def pagina_financeiro():
@@ -18300,20 +19428,320 @@ def pagina_financeiro():
 
     motor = st.session_state.motor
     pf = motor.premissas_financeiras
-    
+
+    # v1.99.71: Verificar se está no modo consolidado
+    is_consolidado = st.session_state.get('filial_id') == "consolidado"
+
+    if is_consolidado:
+        # CONSOLIDADO: Busca valores de cada filial e soma
+        st.info("📊 **Modo Consolidado** - Valores calculados de cada filial")
+
+        from modules.cliente_manager import ClienteManager, carregar_motores_cenarios
+        manager = ClienteManager()
+        cliente_id = st.session_state.get('cliente_id')
+        cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+        # Totais consolidados
+        total_despesas_fin = 0
+        total_receitas_fin = 0
+        resultado_liquido = 0
+        saldo_aplicacoes = 0
+
+        # v1.99.72: Dados para tabelas de volumes
+        dados_aplicacoes = []
+        dados_capex = []
+        dados_financiamentos = []
+        dados_cheque = []
+
+        # Mensal consolidado
+        mensal = {
+            "juros_investimentos": [0]*12,
+            "juros_financiamentos": [0]*12,
+            "juros_cheque": [0]*12,
+            "total_despesas": [0]*12,
+            "rendimentos_aplicacoes": [0]*12,
+            "resultado_liquido": [0]*12
+        }
+
+        if cliente_id:
+            filiais = manager.listar_filiais(cliente_id)
+
+            for filial_info in filiais:
+                filial_id = filial_info["id"]
+                filial_nome = filial_info["nome"]
+
+                try:
+                    resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+                    motor_filial = resultado.get("motores", {}).get(cenario_ativo)
+                    if not motor_filial:
+                        motor_filial = resultado.get("motores", {}).get("Conservador")
+
+                    if motor_filial:
+                        motor_filial.calcular_fluxo_caixa()
+                        resumo_filial = motor_filial.get_resumo_financeiro()
+                        pf_filial = motor_filial.premissas_financeiras
+
+                        total_despesas_fin += resumo_filial["resumo"]["total_despesas_financeiras"]
+                        total_receitas_fin += resumo_filial["resumo"]["total_receitas_financeiras"]
+                        resultado_liquido += resumo_filial["resumo"]["resultado_financeiro_liquido"]
+                        saldo_aplicacoes += resumo_filial["aplicacoes"]["saldo_final"]
+
+                        # Aplicações
+                        dados_aplicacoes.append({
+                            'Filial': filial_nome,
+                            'Saldo Inicial': resumo_filial["aplicacoes"]["saldo_inicial"],
+                            'Rendimentos': sum(mensal["rendimentos_aplicacoes"]) if not dados_aplicacoes else resumo_filial["resumo"]["total_receitas_financeiras"],
+                            'Saldo Final': resumo_filial["aplicacoes"]["saldo_final"]
+                        })
+
+                        # CAPEX (investimentos)
+                        for inv in pf_filial.investimentos:
+                            if inv.ativo:
+                                dados_capex.append({
+                                    'Filial': filial_nome,
+                                    'Descrição': inv.descricao or 'Investimento',
+                                    'Categoria': inv.categoria,
+                                    'Valor Total': inv.valor_total,
+                                    'Entrada': inv.entrada,
+                                    'Parcelas': inv.parcelas,
+                                    'Taxa a.m.': f"{inv.taxa_juros*100:.2f}%"
+                                })
+
+                        # Financiamentos
+                        for fin in pf_filial.financiamentos:
+                            if fin.ativo:
+                                dados_financiamentos.append({
+                                    'Filial': filial_nome,
+                                    'Descrição': fin.descricao or 'Financiamento',
+                                    'Saldo Devedor': fin.saldo_devedor,
+                                    'Parcelas Rest.': fin.parcelas_restantes,
+                                    'Taxa a.m.': f"{fin.taxa_juros*100:.2f}%",
+                                    'Parcela': fin.valor_parcela
+                                })
+
+                        # Cheque especial
+                        if hasattr(pf_filial, 'cheque_especial') and pf_filial.cheque_especial:
+                            ce = pf_filial.cheque_especial
+                            # Cheque especial não tem atributo 'ativo', usar limite > 0
+                            if getattr(ce, 'limite', 0) > 0:
+                                dados_cheque.append({
+                                    'Filial': filial_nome,
+                                    'Limite': ce.limite,
+                                    'Taxa a.m.': f"{ce.taxa_juros*100:.2f}%",
+                                    'Juros Ano': sum(resumo_filial["mensal"]["juros_cheque"])
+                                })
+
+                        # Soma mensal
+                        for m in range(12):
+                            mensal["juros_investimentos"][m] += resumo_filial["mensal"]["juros_investimentos"][m]
+                            mensal["juros_financiamentos"][m] += resumo_filial["mensal"]["juros_financiamentos"][m]
+                            mensal["juros_cheque"][m] += resumo_filial["mensal"]["juros_cheque"][m]
+                            mensal["total_despesas"][m] += resumo_filial["mensal"]["total_despesas"][m]
+                            mensal["rendimentos_aplicacoes"][m] += resumo_filial["mensal"]["rendimentos_aplicacoes"][m]
+                            mensal["resultado_liquido"][m] += resumo_filial["mensal"]["resultado_liquido"][m]
+
+                except Exception as e:
+                    st.warning(f"Erro ao carregar {filial_nome}: {e}")
+
+        # ========== CARDS DE RESUMO ==========
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            render_metric_card("📉 Despesas Financeiras", format_currency(total_despesas_fin), card_type="danger")
+        with col2:
+            render_metric_card("📈 Receitas Financeiras", format_currency(total_receitas_fin), card_type="success")
+        with col3:
+            card_type = "success" if resultado_liquido >= 0 else "danger"
+            render_metric_card("💰 Resultado Financeiro", format_currency(resultado_liquido), card_type=card_type)
+        with col4:
+            render_metric_card("🏦 Saldo Aplicações (Dez)", format_currency(saldo_aplicacoes), card_type="default")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ========== TABS DE VOLUMES ==========
+        tab_resumo, tab_aplic, tab_capex, tab_fin, tab_cheque = st.tabs([
+            "📊 Resumo Mensal", "📈 Aplicações", "🏗️ CAPEX", "📋 Financiamentos", "💳 Cheque Especial"
+        ])
+
+        # ========== TAB APLICAÇÕES ==========
+        with tab_aplic:
+            st.markdown("#### 📈 Aplicações por Filial")
+            if dados_aplicacoes:
+                df_aplic = pd.DataFrame(dados_aplicacoes)
+                # Linha total
+                total_row = {
+                    'Filial': 'TOTAL',
+                    'Saldo Inicial': df_aplic['Saldo Inicial'].sum(),
+                    'Rendimentos': sum(mensal["rendimentos_aplicacoes"]),
+                    'Saldo Final': df_aplic['Saldo Final'].sum()
+                }
+                df_aplic = pd.concat([df_aplic, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(
+                    df_aplic.style.format({
+                        'Saldo Inicial': 'R$ {:,.2f}',
+                        'Rendimentos': 'R$ {:,.2f}',
+                        'Saldo Final': 'R$ {:,.2f}'
+                    }),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.info("Nenhuma aplicação cadastrada nas filiais.")
+
+        # ========== TAB CAPEX ==========
+        with tab_capex:
+            st.markdown("#### 🏗️ Investimentos (CAPEX) por Filial")
+            if dados_capex:
+                df_capex = pd.DataFrame(dados_capex)
+                # Linha total
+                total_row = {
+                    'Filial': 'TOTAL', 'Descrição': f'{len(dados_capex)} investimentos',
+                    'Categoria': '', 'Valor Total': df_capex['Valor Total'].sum(),
+                    'Entrada': df_capex['Entrada'].sum(), 'Parcelas': '', 'Taxa a.m.': ''
+                }
+                df_capex = pd.concat([df_capex, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(
+                    df_capex.style.format({
+                        'Valor Total': 'R$ {:,.2f}',
+                        'Entrada': 'R$ {:,.2f}'
+                    }),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.info("Nenhum investimento cadastrado nas filiais.")
+
+        # ========== TAB FINANCIAMENTOS ==========
+        with tab_fin:
+            st.markdown("#### 📋 Financiamentos por Filial")
+            if dados_financiamentos:
+                df_fin = pd.DataFrame(dados_financiamentos)
+                # Linha total
+                total_row = {
+                    'Filial': 'TOTAL', 'Descrição': f'{len(dados_financiamentos)} contratos',
+                    'Saldo Devedor': df_fin['Saldo Devedor'].sum(),
+                    'Parcelas Rest.': '', 'Taxa a.m.': '',
+                    'Parcela': df_fin['Parcela'].sum()
+                }
+                df_fin = pd.concat([df_fin, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(
+                    df_fin.style.format({
+                        'Saldo Devedor': 'R$ {:,.2f}',
+                        'Parcela': 'R$ {:,.2f}'
+                    }),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.info("Nenhum financiamento cadastrado nas filiais.")
+
+        # ========== TAB CHEQUE ESPECIAL ==========
+        with tab_cheque:
+            st.markdown("#### 💳 Cheque Especial por Filial")
+            if dados_cheque:
+                df_cheque = pd.DataFrame(dados_cheque)
+                # Linha total
+                total_row = {
+                    'Filial': 'TOTAL',
+                    'Limite': df_cheque['Limite'].sum(),
+                    'Taxa a.m.': '',
+                    'Juros Ano': df_cheque['Juros Ano'].sum()
+                }
+                df_cheque = pd.concat([df_cheque, pd.DataFrame([total_row])], ignore_index=True)
+                st.dataframe(
+                    df_cheque.style.format({
+                        'Limite': 'R$ {:,.2f}',
+                        'Juros Ano': 'R$ {:,.2f}'
+                    }),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.info("Nenhum cheque especial cadastrado nas filiais.")
+
+        # ========== TAB RESUMO MENSAL ==========
+        with tab_resumo:
+            st.markdown("#### 📊 Resumo Financeiro Mensal (Consolidado)")
+
+            # ===== TABELA ESTILIZADA DE RESUMO =====
+            html = '<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">'
+
+            html += '<tr style="background:linear-gradient(135deg, #1a365d 0%, #2c5282 100%); color:white;">'
+            html += '<th style="padding:10px 8px; text-align:left; font-weight:600;">Mês</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">💰 Juros Invest.</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">🏦 Juros Financ.</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">💳 Juros Cheque</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">📉 Total Despesas</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">📈 Rendimentos</th>'
+            html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">💵 Resultado</th>'
+            html += '</tr>'
+
+            for m in range(12):
+                bg_color = "#f7fafc" if m % 2 == 0 else "#edf2f7"
+                juros_inv = mensal["juros_investimentos"][m]
+                juros_fin = mensal["juros_financiamentos"][m]
+                juros_chq = mensal["juros_cheque"][m]
+                total_desp = mensal["total_despesas"][m]
+                rendim = mensal["rendimentos_aplicacoes"][m]
+                resultado_mes = mensal["resultado_liquido"][m]
+
+                result_color = "#276749" if resultado_mes >= 0 else "#c53030"
+
+                html += f'<tr style="background:{bg_color};">'
+                html += f'<td style="padding:8px; text-align:left; font-weight:600;">{MESES_ABREV[m]}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:#c53030;">R$ {juros_inv:,.0f}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:#c53030;">R$ {juros_fin:,.0f}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:#c53030;">R$ {juros_chq:,.0f}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:#c53030; font-weight:600;">R$ {total_desp:,.0f}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:#276749;">R$ {rendim:,.0f}</td>'
+                html += f'<td style="padding:8px; text-align:right; color:{result_color}; font-weight:600;">R$ {resultado_mes:,.0f}</td>'
+                html += '</tr>'
+
+            # Linha TOTAL
+            total_juros_inv = sum(mensal["juros_investimentos"])
+            total_juros_fin = sum(mensal["juros_financiamentos"])
+            total_juros_chq = sum(mensal["juros_cheque"])
+            total_desp = sum(mensal["total_despesas"])
+            total_rend = sum(mensal["rendimentos_aplicacoes"])
+            total_result = sum(mensal["resultado_liquido"])
+
+            result_color_total = "#9ae6b4" if total_result >= 0 else "#feb2b2"
+
+            html += f'<tr style="background:linear-gradient(135deg, #2c5282 0%, #2b6cb0 100%); color:white; font-weight:bold;">'
+            html += f'<td style="padding:10px 8px; text-align:left;">TOTAL</td>'
+            html += f'<td style="padding:10px 8px; text-align:right;">R$ {total_juros_inv:,.0f}</td>'
+            html += f'<td style="padding:10px 8px; text-align:right;">R$ {total_juros_fin:,.0f}</td>'
+            html += f'<td style="padding:10px 8px; text-align:right;">R$ {total_juros_chq:,.0f}</td>'
+            html += f'<td style="padding:10px 8px; text-align:right;">R$ {total_desp:,.0f}</td>'
+            html += f'<td style="padding:10px 8px; text-align:right; color:#9ae6b4;">R$ {total_rend:,.0f}</td>'
+            html += f'<td style="padding:10px 8px; text-align:right; color:{result_color_total};">R$ {total_result:,.0f}</td>'
+            html += '</tr>'
+            html += '</table>'
+            st.markdown(html, unsafe_allow_html=True)
+
+            # Gráfico
+            st.markdown("---")
+            st.markdown("#### 📈 Evolução Mensal")
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name='Despesas Financeiras', x=MESES_ABREV, y=[-v for v in mensal["total_despesas"]], marker_color='#c53030'))
+            fig.add_trace(go.Bar(name='Receitas Financeiras', x=MESES_ABREV, y=mensal["rendimentos_aplicacoes"], marker_color='#38a169'))
+            fig.add_trace(go.Scatter(name='Resultado Líquido', x=MESES_ABREV, y=mensal["resultado_liquido"], mode='lines+markers', line=dict(color='#2c5282', width=3)))
+
+            fig.update_layout(barmode='relative', height=400, legend=dict(orientation="h", yanchor="bottom", y=1.02))
+            st.plotly_chart(fig, use_container_width=True)
+
+        return  # Não mostra as outras tabs no modo consolidado
+
+    # ========== MODO NORMAL: Filial individual ==========
     # IMPORTANTE: Calcula Fluxo de Caixa PRIMEIRO para ter rendimentos dinâmicos
-    # Isso garante que calcular_resultado_financeiro use os rendimentos corretos
     motor.calcular_fluxo_caixa()
-    
+
     # Calcula resumo (agora usando rendimentos do fluxo de caixa)
     resumo = motor.get_resumo_financeiro()
-    
+
     # ========== CARDS DE RESUMO ==========
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         render_metric_card(
-            "📉 Despesas Financeiras", 
+            "📉 Despesas Financeiras",
             format_currency(resumo["resumo"]["total_despesas_financeiras"]),
             card_type="danger"
         )
@@ -18337,27 +19765,27 @@ def pagina_financeiro():
             format_currency(resumo["aplicacoes"]["saldo_final"]),
             card_type="default"
         )
-    
+
     st.markdown("<br>", unsafe_allow_html=True)
-    
+
     # ========== TABS ==========
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Resumo", 
-        "🏗️ Investimentos (CAPEX)", 
-        "📋 Financiamentos", 
+        "📊 Resumo",
+        "🏗️ Investimentos (CAPEX)",
+        "📋 Financiamentos",
         "💳 Cheque Especial",
         "📈 Aplicações"
     ])
-    
+
     # ========== TAB 1: RESUMO ==========
     with tab1:
         st.markdown("#### 📊 Resumo Financeiro Mensal")
-        
+
         mensal = resumo["mensal"]
-        
+
         # ===== TABELA ESTILIZADA DE RESUMO =====
         html = '<table style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">'
-        
+
         # Header
         html += '<tr style="background:linear-gradient(135deg, #1a365d 0%, #2c5282 100%); color:white;">'
         html += '<th style="padding:10px 8px; text-align:left; font-weight:600;">Mês</th>'
@@ -18368,7 +19796,7 @@ def pagina_financeiro():
         html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">📈 Rendimentos</th>'
         html += '<th style="padding:10px 8px; text-align:center; font-weight:600;">💵 Resultado</th>'
         html += '</tr>'
-        
+
         for m in range(12):
             bg_color = "#f7fafc" if m % 2 == 0 else "#edf2f7"
             juros_inv = mensal["juros_investimentos"][m]
@@ -18377,9 +19805,9 @@ def pagina_financeiro():
             total_desp = mensal["total_despesas"][m]
             rendim = mensal["rendimentos_aplicacoes"][m]
             resultado = mensal["resultado_liquido"][m]
-            
+
             result_color = "#276749" if resultado >= 0 else "#c53030"
-            
+
             html += f'<tr style="background:{bg_color};">'
             html += f'<td style="padding:8px; text-align:left; font-weight:600;">{MESES_ABREV[m]}</td>'
             html += f'<td style="padding:8px; text-align:right; color:#c53030;">R$ {juros_inv:,.0f}</td>'
@@ -18389,7 +19817,7 @@ def pagina_financeiro():
             html += f'<td style="padding:8px; text-align:right; color:#276749;">R$ {rendim:,.0f}</td>'
             html += f'<td style="padding:8px; text-align:right; color:{result_color}; font-weight:600;">R$ {resultado:,.0f}</td>'
             html += '</tr>'
-        
+
         # Linha TOTAL
         total_juros_inv = sum(mensal["juros_investimentos"])
         total_juros_fin = sum(mensal["juros_financiamentos"])
@@ -18397,9 +19825,9 @@ def pagina_financeiro():
         total_desp = sum(mensal["total_despesas"])
         total_rend = sum(mensal["rendimentos_aplicacoes"])
         total_result = sum(mensal["resultado_liquido"])
-        
+
         result_color_total = "#9ae6b4" if total_result >= 0 else "#feb2b2"
-        
+
         html += f'<tr style="background:linear-gradient(135deg, #2c5282 0%, #2b6cb0 100%); color:white; font-weight:bold;">'
         html += f'<td style="padding:10px 8px; text-align:left;">TOTAL</td>'
         html += f'<td style="padding:10px 8px; text-align:right;">R$ {total_juros_inv:,.0f}</td>'
@@ -18411,7 +19839,7 @@ def pagina_financeiro():
         html += '</tr>'
         html += '</table>'
         st.markdown(html, unsafe_allow_html=True)
-        
+
         # ===== TABELA DE PARCELAS (se houver financiamentos) =====
         if pf.financiamentos or pf.investimentos:
             st.markdown("---")
@@ -19034,9 +20462,142 @@ def pagina_financeiro():
 # PÁGINA DIVIDENDOS
 # ============================================
 
+def _pagina_dividendos_consolidado():
+    """Mostra dividendos consolidados de todas as filiais - v1.99.75"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"📊 **Visão Consolidada** - Dividendos de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "resultado_liquido": 0,
+        "reserva_legal": 0,
+        "reserva_investimento": 0,
+        "lucro_distribuivel": 0,
+        "total_dividendos": 0
+    }
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula dividendos da filial
+                div = motor.calcular_dividendos()
+                indicadores = div.get("indicadores", {})
+
+                resultado_liq = indicadores.get("total_resultado_liquido", 0)
+                reserva_leg = indicadores.get("total_reserva_legal", 0)
+                reserva_inv = indicadores.get("total_reserva_investimento", 0)
+                lucro_dist = indicadores.get("total_lucro_distribuivel", 0)
+                total_div = indicadores.get("total_dividendos", 0)
+
+                # Acumula totais
+                totais["resultado_liquido"] += resultado_liq
+                totais["reserva_legal"] += reserva_leg
+                totais["reserva_investimento"] += reserva_inv
+                totais["lucro_distribuivel"] += lucro_dist
+                totais["total_dividendos"] += total_div
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Resultado Líquido": f"R$ {resultado_liq:,.0f}",
+                    "Reserva Legal": f"R$ {reserva_leg:,.0f}",
+                    "Reserva Invest.": f"R$ {reserva_inv:,.0f}",
+                    "Lucro Distribuível": f"R$ {lucro_dist:,.0f}",
+                    "Dividendos": f"R$ {total_div:,.0f}",
+                    "Payout": f"{indicadores.get('payout', 0)*100:.1f}%"
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Resultado Líquido": "R$ 0",
+                    "Reserva Legal": "R$ 0",
+                    "Reserva Invest.": "R$ 0",
+                    "Lucro Distribuível": "R$ 0",
+                    "Dividendos": "R$ 0",
+                    "Payout": "0%"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Resultado Líquido": f"Erro: {str(e)[:20]}",
+                "Reserva Legal": "-",
+                "Reserva Invest.": "-",
+                "Lucro Distribuível": "-",
+                "Dividendos": "-",
+                "Payout": "-"
+            })
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Totais Consolidados")
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    with col1:
+        st.metric("📈 Resultado Líquido", f"R$ {totais['resultado_liquido']/1000:,.0f}k")
+
+    with col2:
+        st.metric("📋 Reserva Legal", f"R$ {totais['reserva_legal']/1000:,.0f}k")
+
+    with col3:
+        st.metric("🏗️ Reserva Invest.", f"R$ {totais['reserva_investimento']/1000:,.0f}k")
+
+    with col4:
+        st.metric("💵 Lucro Distribuível", f"R$ {totais['lucro_distribuivel']/1000:,.0f}k")
+
+    with col5:
+        payout_total = (totais['total_dividendos'] / totais['lucro_distribuivel'] * 100) if totais['lucro_distribuivel'] > 0 else 0
+        st.metric("💰 Total Dividendos", f"R$ {totais['total_dividendos']/1000:,.0f}k", f"Payout: {payout_total:.0f}%")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    # ===== RESUMO =====
+    st.divider()
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.success(f"✅ **TOTAL DIVIDENDOS: R$ {totais['total_dividendos']:,.0f}**")
+
+    with col2:
+        lucro_retido = totais['resultado_liquido'] - totais['total_dividendos']
+        st.info(f"💼 **Lucro Retido: R$ {lucro_retido:,.0f}**")
+
+
 def pagina_dividendos():
     """Página de distribuição de dividendos"""
     st.title("📊 Dividendos")
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_dividendos_consolidado()
+        return
 
     # CORREÇÃO v1.99.19: Key única por cenário para evitar cross-contamination
     cenario_key_div = st.session_state.get('cenario_edicao', 'Conservador')
