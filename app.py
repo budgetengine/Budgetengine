@@ -2043,6 +2043,12 @@ st.markdown("""
 # Gerenciador de clientes
 if 'cliente_manager' not in st.session_state:
     st.session_state.cliente_manager = ClienteManager()
+    # v1.99.89: Sincroniza do Supabase ao iniciar (garante filiais atualizadas)
+    from modules.cliente_manager import sincronizar_do_supabase
+    try:
+        sincronizar_do_supabase()
+    except Exception as e:
+        print(f"[SYNC] Aviso: {e}")
 
 # ============================================
 # FUNÇÕES DE PERSISTÊNCIA (ANTES DA INICIALIZAÇÃO)
