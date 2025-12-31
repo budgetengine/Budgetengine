@@ -2911,54 +2911,95 @@ with st.sidebar:
     motor = st.session_state.get('motor')
     usar_cenarios = getattr(motor, 'usar_cenarios', True) if motor else True
     
-    # Define opções base
-    opcoes_menu = []
-    
-    # Só adiciona Cenários se estiver habilitado
+    # ========== MENU ORGANIZADO POR SEÇÕES ==========
+
+    # Inicializa página selecionada
+    if 'pagina_selecionada' not in st.session_state:
+        st.session_state.pagina_selecionada = "🏠 Dashboard"
+
+    pagina = st.session_state.pagina_selecionada
+
+    # Função para criar radio e atualizar seleção
+    def menu_radio(opcoes, key):
+        # Verifica se alguma opção deste grupo está selecionada
+        idx = None
+        for i, op in enumerate(opcoes):
+            if op == st.session_state.pagina_selecionada:
+                idx = i
+                break
+
+        sel = st.radio(
+            "nav", opcoes,
+            index=idx if idx is not None else None,
+            key=key,
+            label_visibility="collapsed"
+        )
+        if sel and sel != st.session_state.pagina_selecionada:
+            st.session_state.pagina_selecionada = sel
+            st.rerun()
+        return sel
+
+    # ----- SEÇÃO: CENÁRIOS -----
     if usar_cenarios:
-        opcoes_menu.append("🎯 Cenários")
-        opcoes_menu.append("📊 Comparativo Cenários")
-    
-    opcoes_menu.extend([
+        st.caption("📊 CENÁRIOS")
+        menu_radio(["🎯 Cenários", "📊 Comparativo Cenários"], "menu_cenarios")
+        st.divider()
+
+    # ----- SEÇÃO: ANÁLISES -----
+    st.caption("📈 ANÁLISES")
+    menu_radio([
         "🏠 Dashboard",
         "🤖 Consultor IA",
-        "⚙️ Premissas", 
-        "📈 Atendimentos", 
-        "👔 Folha Funcionários", 
+        "⚙️ Premissas",
+        "📈 Atendimentos",
+        "👔 Folha Funcionários",
         "🏥 Folha Fisioterapeutas",
         "🎯 Simulador Metas",
-        "💼 Simples Nacional", 
-        "💰 Financeiro", 
+        "💼 Simples Nacional",
+        "💰 Financeiro",
         "📊 Dividendos",
-        "📋 DRE Simulado", 
-        "🏦 FC Simulado", 
+        "📋 DRE Simulado",
+        "🏦 FC Simulado",
         "📊 Taxa Ocupação",
         "⚖️ Ponto Equilíbrio",
         "🎯 Custeio ABC",
+    ], "menu_analises")
+
+    st.divider()
+
+    # ----- SEÇÃO: LANÇAMENTOS -----
+    st.caption("✏️ LANÇAMENTOS")
+    menu_radio([
         "✅ Lançar Realizado",
         "📊 Orçado x Realizado",
         "📋 DRE Comparativo",
-        "👥 Clientes", 
-        "📥 Importar Dados", 
-        "📄 DRE (Excel)", 
+    ], "menu_lancamentos")
+
+    st.divider()
+
+    # ----- SEÇÃO: SISTEMA -----
+    st.caption("⚙️ SISTEMA")
+    menu_radio([
+        "👥 Clientes",
+        "📥 Importar Dados",
+        "📄 DRE (Excel)",
         "📄 FC (Excel)",
-    ])
-    
-    # Adiciona opções de Admin apenas para administradores
+    ], "menu_sistema")
+
+    # ----- SEÇÃO: ADMIN -----
     user_logado = get_current_user() if AUTH_ENABLED else None
     is_admin_user = user_logado and user_logado.get("role") == "admin" if user_logado else True
-    
+
     if is_admin_user:
-        opcoes_menu.extend([
+        st.divider()
+        st.caption("🔧 ADMIN")
+        menu_radio([
             "🔧 Admin",
             "🛠️ Diagnóstico Dev"
-        ])
-    
-    pagina = st.radio(
-        "Navegação",
-        opcoes_menu,
-        label_visibility="collapsed"
-    )
+        ], "menu_admin")
+
+    # Pega página atual
+    pagina = st.session_state.pagina_selecionada
     
     # AUTO-SAVE: Salva automaticamente ao mudar de página
     if st.session_state.pagina_anterior and st.session_state.pagina_anterior != pagina:
