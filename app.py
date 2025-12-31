@@ -11722,9 +11722,214 @@ def pagina_fluxo_caixa():
 
 
 
+def _pagina_fc_consolidado():
+    """Mostra Fluxo de Caixa consolidado de todas as filiais - v1.99.77"""
+    from modules.cliente_manager import carregar_motores_cenarios
+    import pandas as pd
+
+    manager = st.session_state.cliente_manager
+    cliente_id = st.session_state.cliente_id
+    cenario_ativo = st.session_state.get('cenario_ativo', 'Conservador')
+
+    # Busca todas as filiais do cliente
+    filiais = manager.listar_filiais(cliente_id)
+
+    if not filiais:
+        st.warning("⚠️ Nenhuma filial encontrada para este cliente.")
+        return
+
+    st.info(f"🏦 **Visão Consolidada** - Fluxo de Caixa de todas as filiais ({cenario_ativo})")
+
+    # Carrega dados de cada filial
+    dados_filiais = []
+    totais = {
+        "total_entradas": 0,
+        "total_saidas": 0,
+        "variacao": 0,
+        "saldo_inicial": 0,
+        "saldo_final": 0,
+        "saldo_aplicacoes": 0,
+        "meses_atencao": 0
+    }
+
+    # Arrays mensais consolidados
+    entradas_mensal = [0.0] * 12
+    saidas_mensal = [0.0] * 12
+    saldo_final_mensal = [0.0] * 12
+
+    for filial in filiais:
+        filial_id = filial["id"]
+        filial_nome = filial["nome"]
+
+        try:
+            resultado = carregar_motores_cenarios(manager, cliente_id, filial_id)
+            motores = resultado.get("motores", {})
+            motor = motores.get(cenario_ativo)
+
+            if motor:
+                # Calcula FC da filial
+                fc = motor.calcular_fluxo_caixa()
+                resumo = motor.get_resumo_fluxo_caixa()
+
+                total_entradas = resumo.get("total_entradas", 0)
+                total_saidas = resumo.get("total_saidas", 0)
+                variacao = resumo.get("variacao_ano", 0)
+                saldo_inicial = resumo.get("saldo_inicial", 0)
+                saldo_final = resumo.get("saldo_final", 0)
+                saldo_aplic = resumo.get("saldo_aplicacoes_final", 0)
+                meses_atencao = resumo.get("meses_atencao", 0)
+
+                # Acumula totais
+                totais["total_entradas"] += total_entradas
+                totais["total_saidas"] += total_saidas
+                totais["variacao"] += variacao
+                totais["saldo_inicial"] += saldo_inicial
+                totais["saldo_final"] += saldo_final
+                totais["saldo_aplicacoes"] += saldo_aplic
+                totais["meses_atencao"] += meses_atencao
+
+                # Acumula mensais
+                entradas_fc = fc.get("Total Entradas", [0]*12)
+                saidas_fc = fc.get("Total Saídas", [0]*12)
+                saldo_fc = fc.get("Saldo Final", [0]*12)
+                for m in range(12):
+                    entradas_mensal[m] += entradas_fc[m]
+                    saidas_mensal[m] += saidas_fc[m]
+                    saldo_final_mensal[m] += saldo_fc[m]
+
+                # Liquidez total
+                liquidez = saldo_final + saldo_aplic
+
+                # Dados da filial para tabela
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Entradas": f"R$ {total_entradas:,.0f}",
+                    "Saídas": f"R$ {total_saidas:,.0f}",
+                    "Variação": f"R$ {variacao:,.0f}",
+                    "Saldo Final": f"R$ {saldo_final:,.0f}",
+                    "Aplicações": f"R$ {saldo_aplic:,.0f}",
+                    "Liquidez": f"R$ {liquidez:,.0f}",
+                    "⚠️ Atenção": f"{meses_atencao} mês(es)" if meses_atencao > 0 else "OK"
+                })
+            else:
+                dados_filiais.append({
+                    "Filial": filial_nome,
+                    "Entradas": "R$ 0",
+                    "Saídas": "R$ 0",
+                    "Variação": "R$ 0",
+                    "Saldo Final": "R$ 0",
+                    "Aplicações": "R$ 0",
+                    "Liquidez": "R$ 0",
+                    "⚠️ Atenção": "-"
+                })
+        except Exception as e:
+            dados_filiais.append({
+                "Filial": filial_nome,
+                "Entradas": "Erro",
+                "Saídas": "-",
+                "Variação": "-",
+                "Saldo Final": "-",
+                "Aplicações": "-",
+                "Liquidez": "-",
+                "⚠️ Atenção": "-"
+            })
+
+    # ===== CARDS DE TOTAIS =====
+    st.subheader("📊 Totais Consolidados")
+
+    # Linha 1: Fluxo
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("📈 Total Entradas", f"R$ {totais['total_entradas']/1000:,.0f}k")
+
+    with col2:
+        st.metric("📉 Total Saídas", f"R$ {totais['total_saidas']/1000:,.0f}k")
+
+    with col3:
+        color = "normal" if totais['variacao'] >= 0 else "inverse"
+        st.metric("📊 Variação Ano", f"R$ {totais['variacao']/1000:,.0f}k", delta_color=color)
+
+    with col4:
+        color = "normal" if totais['saldo_final'] >= 0 else "inverse"
+        st.metric("💰 Saldo Final", f"R$ {totais['saldo_final']/1000:,.0f}k", delta_color=color)
+
+    # Linha 2: Indicadores
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("🏦 Aplicações", f"R$ {totais['saldo_aplicacoes']/1000:,.0f}k")
+
+    with col2:
+        liquidez_total = totais['saldo_final'] + totais['saldo_aplicacoes']
+        st.metric("💵 Liquidez Total", f"R$ {liquidez_total/1000:,.0f}k")
+
+    with col3:
+        status = "🟢" if totais['meses_atencao'] == 0 else "🔴"
+        st.metric("⚠️ Meses Atenção", f"{status} {totais['meses_atencao']}")
+
+    with col4:
+        media_saldo = totais['saldo_final'] / len(filiais) if filiais else 0
+        st.metric("📍 Média por Filial", f"R$ {media_saldo/1000:,.0f}k")
+
+    st.divider()
+
+    # ===== TABELA POR FILIAL =====
+    st.subheader("🏢 Detalhamento por Filial")
+
+    if dados_filiais:
+        df = pd.DataFrame(dados_filiais)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # ===== GRÁFICO EVOLUÇÃO MENSAL CONSOLIDADA =====
+    st.subheader("📈 Evolução Mensal Consolidada")
+
+    import plotly.graph_objects as go
+    MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
+    fig = go.Figure()
+
+    # Barras de saldo final
+    fig.add_trace(go.Bar(
+        x=MESES,
+        y=saldo_final_mensal,
+        marker_color=['#c62828' if v < 0 else '#2e7d32' for v in saldo_final_mensal],
+        name="Saldo Final Consolidado"
+    ))
+
+    # Linha zero
+    fig.add_hline(y=0, line_dash="dash", line_color="gray")
+
+    fig.update_layout(
+        height=350,
+        margin=dict(l=20, r=20, t=30, b=20),
+        xaxis_title="",
+        yaxis_title="R$",
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # ===== RESUMO =====
+    st.divider()
+
+    if totais['saldo_final'] >= 0:
+        st.success(f"✅ **SALDO FINAL CONSOLIDADO: R$ {totais['saldo_final']:,.0f}** | Liquidez Total: R$ {liquidez_total:,.0f}")
+    else:
+        st.error(f"❌ **SALDO FINAL CONSOLIDADO: R$ {totais['saldo_final']:,.0f}** | Liquidez Total: R$ {liquidez_total:,.0f}")
+
+
 def pagina_fc_simulado():
     """Página de Fluxo de Caixa Simulado - Usa o motor de cálculo dinâmico"""
     render_header()
+
+    # ===== MODO CONSOLIDADO =====
+    if st.session_state.get('filial_id') == 'consolidado':
+        _pagina_fc_consolidado()
+        return
 
     st.markdown('<div class="section-header"><h3>🏦 Fluxo de Caixa Simulado</h3></div>', unsafe_allow_html=True)
 
