@@ -2976,9 +2976,10 @@ with st.sidebar:
         "📄 FC (Excel)",
     ], "menu_sistema")
 
-    # ----- SEÇÃO: ADMIN E LANÇAMENTOS (só para admins) -----
+    # ----- SEÇÃO: ADMIN E LANÇAMENTOS -----
     user_logado = get_current_user() if AUTH_ENABLED else None
-    is_admin_user = user_logado and user_logado.get("role") == "admin" if user_logado else True
+    # TEMPORÁRIO: Libera acesso para qualquer usuário logado (ou se auth desabilitado)
+    is_admin_user = True if not AUTH_ENABLED else (user_logado is not None)
 
     if is_admin_user:
         st.divider()
