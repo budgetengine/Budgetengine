@@ -84,10 +84,18 @@ def _backup_antes_salvar(arquivo_path: str) -> bool:
         backup_subdir = os.path.join(BACKUP_DIR, cliente)
         os.makedirs(backup_subdir, exist_ok=True)
 
-        # Nome com timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Nome com timestamp + milissegundos para garantir unicidade
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_nome = f"{timestamp}_{nome_arquivo}"
         backup_path = os.path.join(backup_subdir, backup_nome)
+
+        # Se por algum motivo já existir, adiciona contador
+        contador = 1
+        backup_path_original = backup_path
+        while os.path.exists(backup_path):
+            backup_nome = f"{timestamp}_{contador}_{nome_arquivo}"
+            backup_path = os.path.join(backup_subdir, backup_nome)
+            contador += 1
 
         # Copia
         shutil.copy2(arquivo_path, backup_path)
