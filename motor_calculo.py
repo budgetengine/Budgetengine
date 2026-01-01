@@ -3001,13 +3001,13 @@ class MotorCalculo:
             else:  # capacidade
                 gap_fisio = gap_faturamento * participacao  # Por enquanto igual a proporcional
             
-            # Calcula sessões adicionais para este fisio
+            # v1.99.99: Sessões crescem pelo % da meta direto (não baseado em gap)
             valor_sessao_fisio = faturamento_fisio / sessoes_fisio if sessoes_fisio > 0 else valor_medio_sessao
-            sessoes_adicionais = gap_fisio / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
+            sessoes_adicionais = sessoes_fisio * pct_crescimento_meta
             
-            # Novos valores
+            # Novos valores - sessões crescem %, faturamento segue
             sessoes_nova = sessoes_fisio + sessoes_adicionais
-            faturamento_novo = faturamento_fisio + gap_fisio
+            faturamento_novo = sessoes_nova * valor_sessao_fisio
             
             # Calcula nova remuneração usando mesma lógica do motor
             tipo_rem = fisio_obj.tipo_remuneracao if fisio_obj else "percentual"
@@ -3228,13 +3228,13 @@ class MotorCalculo:
                 qtd_fisios = len(dados_mensais_fisios)
                 gap_fisio = gap_anual / qtd_fisios if qtd_fisios > 0 else 0
             
-            # Sessões adicionais anuais
+            # v1.99.99: Sessões crescem pelo % da meta direto (não baseado em gap)
             valor_sessao_fisio = dados["total_faturamento"] / dados["total_sessoes"] if dados["total_sessoes"] > 0 else valor_medio_sessao
-            sessoes_adicionais = gap_fisio / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
-            
-            # Novos totais anuais
+            sessoes_adicionais = dados["total_sessoes"] * pct_crescimento_meta
+
+            # Novos totais anuais - sessões crescem %, faturamento segue
             sessoes_meta = dados["total_sessoes"] + sessoes_adicionais
-            faturamento_meta = dados["total_faturamento"] + gap_fisio
+            faturamento_meta = sessoes_meta * valor_sessao_fisio
             
             # Calcula nova remuneração
             tipo_rem = dados["tipo_remuneracao"]
@@ -3279,35 +3279,22 @@ class MotorCalculo:
                 # Gap deste mês que todos os fisios precisam cobrir
                 gap_mes_total = meta_fat_mes - fat_total_fisios_mes
                 
-                # Gap deste fisio neste mês (proporcional à sua participação)
-                if modo_distribuicao == "proporcional":
-                    gap_fisio_mes = gap_mes_total * participacao_mes
-                else:
-                    qtd_fisios = len(dados_mensais_fisios)
-                    gap_fisio_mes = gap_mes_total / qtd_fisios if qtd_fisios > 0 else 0
-                
-                # Meta de faturamento do fisio neste mês
-                fat_meta_fisio_mes = fat_atual_mes + gap_fisio_mes
-                
-                # Sessões adicionais para este mês (calculadas após verificar faturamento)
+                # v1.99.99: Sessões crescem pelo % da meta direto (não baseado em gap)
+                # Calcula valor por sessão
                 valor_sessao_fisio = fat_atual_mes / dados_mes["sessoes"] if dados_mes["sessoes"] > 0 else valor_medio_sessao
-                
-                # Faturamento meta nunca pode ser menor que atual
-                if fat_meta_fisio_mes < fat_atual_mes:
-                    fat_meta_fisio_mes = fat_atual_mes
-                
-                # Agora calcula gap REAL de faturamento (após proteção)
-                gap_fisio_mes_real = fat_meta_fisio_mes - fat_atual_mes
-                
-                # Sessões adicionais baseadas no gap REAL
-                sessoes_add_mes = gap_fisio_mes_real / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
-                
-                # Sessões meta
+
+                # Sessões crescem diretamente pelo %
+                sessoes_add_mes = dados_mes["sessoes"] * pct_crescimento_meta
                 sessoes_meta_mes = dados_mes["sessoes"] + sessoes_add_mes
-                
-                # IMPORTANTE: Sessões meta nunca pode ser menor que atual
+
+                # Faturamento segue as sessões
+                fat_meta_fisio_mes = sessoes_meta_mes * valor_sessao_fisio
+
+                # Proteções: nunca pode ser menor que atual
                 if sessoes_meta_mes < dados_mes["sessoes"]:
                     sessoes_meta_mes = dados_mes["sessoes"]
+                if fat_meta_fisio_mes < fat_atual_mes:
+                    fat_meta_fisio_mes = fat_atual_mes
                 
                 # Remuneração proporcional às NOVAS sessões
                 if tipo_rem == "valor_fixo":
@@ -3725,7 +3712,7 @@ class MotorCalculo:
             "qtd_alteracoes": len(alteracoes),
             "fat_2025": fat_2025,
             "fat_meta": fat_meta,
-            "fat_anterior": fat_atual,
+            "fat_anterior": fat_base,
             "fat_novo": fat_novo,
             "fator_ajuste": fator_ajuste,
         }
