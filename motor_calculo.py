@@ -3476,23 +3476,24 @@ class MotorCalculo:
     
     def aplicar_simulacao_metas(self, resultado_simulacao: dict) -> dict:
         """
-        Aplica os resultados de uma simulação de metas ao motor.
-        
-        LÓGICA:
-        1. Calcula faturamento meta: Fat_2025 × (1 + pct_meta)
-        2. Calcula faturamento atual do motor
-        3. Calcula fator de ajuste
-        4. Ajusta sessoes_mes_base de cada serviço proporcionalmente
-        5. Resultado: Motor produz EXATAMENTE o valor da meta
-        
+        Aplica simulação de metas usando lógica GOAL SEEK (Atingir Meta do Excel).
+
+        LÓGICA v2.0.1:
+        Pergunta: "Quero crescer X% em faturamento. Quantas sessões preciso?"
+
+        1. fat_meta = Fat_2025 × (1 + pct_meta)  -- meta de faturamento
+        2. fat_base = sessões_atuais × valor_2026 × 12  -- receita atual a preços 2026
+        3. fator_ajuste = fat_meta / fat_base  -- quanto ajustar sessões
+        4. Aplica fator em todos os serviços/fisioterapeutas/proprietários
+
+        EXEMPLO: Preços +18%, meta +20% faturamento:
+        - fator = 1.20 / 1.18 ≈ 1.017 (apenas ~2% mais sessões!)
+
         Args:
             resultado_simulacao: Dict retornado por simular_meta_faturamento()
-        
+
         Returns:
-            dict com:
-                - sucesso: bool
-                - alteracoes: Lista de alterações feitas
-                - snapshot_anterior: Dados antes da alteração (para desfazer)
+            dict com sucesso, alteracoes, snapshot_anterior, fat_2025, fat_meta, etc.
         """
         if not resultado_simulacao:
             return {"sucesso": False, "erro": "Simulação inválida"}
@@ -3508,13 +3509,8 @@ class MotorCalculo:
 
         fat_meta = fat_2025 * (1 + pct_meta)
 
-        # 2. Calcula faturamento BASE (sem crescimento) para determinar o fator
-        # CORREÇÃO v1.99.7: A meta é relativa a Fat_2025, então:
-        #   Fat_meta = Fat_2025 × (1 + pct_meta)
-        #   Como zeramos crescimento, sessões_novas × valor × 12 = Fat_meta
-        #   Então fator = Fat_meta / Fat_base = (1 + pct_meta) se Fat_base ≈ Fat_2025
-
-        # Primeiro, tenta calcular Fat_base (sessões atuais × valor × 12, sem crescimento)
+        # 2. Calcula fat_base = sessões_atuais × valor_2026 × 12
+        # (o que as sessões atuais produziriam a preços de 2026)
         fat_base = 0
 
         for srv_nome, srv in self.servicos.items():
@@ -3553,13 +3549,15 @@ class MotorCalculo:
                 except (TypeError, ValueError):
                     return 0
 
-            valor = getattr(srv, 'valor_2025', 0) or 0
+            # v2.0.1: GOAL SEEK - Usa valor_2026 para calcular fat_base
+            # fat_base = sessões_atuais × valor_2026 (o que produziria hoje a preços de 2026)
+            valor = getattr(srv, 'valor_2026', 0) or 0
             if valor == 0:
                 valor = _extrair_valor(self.valores_proprietario.get(srv_nome, 0))
             if valor == 0:
                 valor = _extrair_valor(self.valores_profissional.get(srv_nome, 0))
             if valor == 0:
-                valor = getattr(srv, 'valor_2026', 0) or 0
+                valor = getattr(srv, 'valor_2025', 0) or 0
 
             try:
                 sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
@@ -3568,37 +3566,48 @@ class MotorCalculo:
             except (TypeError, ValueError):
                 pass
 
-        # v1.99.99: CORREÇÃO DEFINITIVA - Crescimento de SESSÕES baseado em 2025
+        # v2.0.1: GOAL SEEK - Atingir Meta (estilo Excel)
         #
         # LÓGICA DO USUÁRIO:
-        # "Quero crescer 20% em relação a 2025" significa:
-        # - SESSÕES devem ser 20% maiores que as sessões de 2025
-        # - Preço de 2026 é SEPARADO - reajuste não conta como crescimento
-        # - Crescimento = MAIS ATIVIDADE (sessões), não valor monetário
+        # "Quero crescer 20% em FATURAMENTO de 2025 para 2026"
+        # Pergunta: Quantas SESSÕES preciso a preços de 2026 para atingir essa meta?
         #
         # CÁLCULO:
-        # 1. sessoes_2025 = fat_2025 / valor_medio_2025
-        # 2. sessoes_meta = sessoes_2025 × (1 + pct_meta)
-        # 3. fator = sessoes_meta / sessoes_atuais
+        # 1. fat_meta = fat_2025 × (1 + pct_meta)  -- meta de faturamento
+        # 2. fat_base = sessões_atuais × valor_2026  -- o que sessões atuais produziriam
+        # 3. fator_ajuste = fat_meta / fat_base  -- ajuste necessário
         #
-        # Como não temos valor_2025 diretamente, usamos:
-        # - Se sessões atuais ≈ sessões de 2025 (não mudaram), fator = 1 + pct_meta
-        # - Esta é a interpretação correta: sessões crescem pelo % especificado
+        # EXEMPLO: Se preços subiram 18% e meta é +20% faturamento:
+        # - fat_base ≈ fat_2025 × 1.18 (mais receita por sessão)
+        # - fat_meta = fat_2025 × 1.20 (meta)
+        # - fator = 1.20 / 1.18 ≈ 1.017 (apenas ~2% mais sessões!)
 
         if fat_2025 == 0:
             fator_ajuste = 1.0
             print(f"[METAS-CALC] ⚠️ fat_2025=0, usando fator=1.0")
+        elif fat_base == 0:
+            fator_ajuste = 1.0
+            print(f"[METAS-CALC] ⚠️ fat_base=0, usando fator=1.0")
         else:
-            # CORREÇÃO SIMPLES E DIRETA:
-            # Se usuário quer +20% de crescimento, sessões aumentam 20%
-            # Independente de preços, inflação, ou estado atual
-            fator_ajuste = 1 + pct_meta
+            # v2.0.1: GOAL SEEK - Atingir Meta estilo Excel
+            # Pergunta: Quantas sessões a preço de 2026 para atingir fat_meta?
+            #
+            # fat_meta = fat_2025 × (1 + pct_meta)  -- meta de faturamento
+            # fat_base = sessões_atuais × valor_2026 -- o que sessões atuais produziriam
+            # fator_ajuste = fat_meta / fat_base -- ajuste necessário nas sessões
+            #
+            # Exemplo: Se preços subiram 18% e meta é +20% faturamento:
+            #   fat_base = fat_2025 × 1.18 (mais receita com mesmas sessões)
+            #   fat_meta = fat_2025 × 1.20 (meta)
+            #   fator = 1.20 / 1.18 = 1.017 (apenas ~2% mais sessões!)
+            fator_ajuste = fat_meta / fat_base
 
-            print(f"[METAS-CALC] fat_2025={fat_2025:,.0f} (base do exercício anterior)")
-            print(f"[METAS-CALC] fat_base={fat_base:,.0f} (projeção atual - apenas referência)")
+            print(f"[METAS-CALC] fat_2025={fat_2025:,.0f} (faturamento exercício anterior)")
+            print(f"[METAS-CALC] fat_meta={fat_meta:,.0f} (meta: fat_2025 × {1+pct_meta:.2f})")
+            print(f"[METAS-CALC] fat_base={fat_base:,.0f} (sessões atuais × valor_2026)")
             print(f"[METAS-CALC] pct_meta={pct_meta*100:+.1f}%")
-            print(f"[METAS-CALC] fator_ajuste={fator_ajuste:.4f} ({(fator_ajuste-1)*100:+.1f}%)")
-            print(f"[METAS-CALC] Sessões aumentam {pct_meta*100:+.1f}% → crescimento REAL de atividade")
+            print(f"[METAS-CALC] fator_ajuste={fator_ajuste:.4f} ({(fator_ajuste-1)*100:+.1f}% sessões)")
+            print(f"[METAS-CALC] GOAL SEEK: sessões × {fator_ajuste:.4f} → faturamento +{pct_meta*100:.1f}%")
         
         # 3. Guarda snapshot para possível rollback
         snapshot = {
@@ -3725,7 +3734,7 @@ class MotorCalculo:
             "qtd_alteracoes": len(alteracoes),
             "fat_2025": fat_2025,
             "fat_meta": fat_meta,
-            "fat_anterior": fat_atual,
+            "fat_anterior": fat_base,
             "fat_novo": fat_novo,
             "fator_ajuste": fator_ajuste,
         }
