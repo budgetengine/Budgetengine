@@ -6406,8 +6406,11 @@ class MotorCalculo:
         
         # CP Fornecedores - AUTO ou MANUAL
         if pfc.usar_cp_folha_auto:
-            # Calcula baseado em Despesas Fixas + CV de Dezembro
-            cp_fornecedores = total_despesas[11]  # Dezembro
+            # v1.99.94: Usa valores_2025[11] (Dez do ano anterior) em vez de projeção
+            cp_fornecedores = 0.0
+            for desp in self.despesas_fixas.values():
+                if hasattr(desp, 'valores_2025') and desp.valores_2025:
+                    cp_fornecedores += (desp.valores_2025[11] or 0) if len(desp.valores_2025) > 11 else 0
         else:
             cp_fornecedores = pfc.cp_fornecedores
         
