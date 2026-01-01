@@ -1619,12 +1619,15 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         # v1.99.49: CORREÇÃO CRÍTICA - Definir cenario_origem para evitar bloqueio
         motor_cons = criar_motor_padrao()
         motor_cons.cenario_origem = "Conservador"
+        motor_cons.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         motor_pess = criar_motor_padrao()
         motor_pess.cenario_origem = "Pessimista"
+        motor_pess.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         motor_otim = criar_motor_padrao()
         motor_otim.cenario_origem = "Otimista"
+        motor_otim.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         return {
             "cenario_ativo": "Conservador",
@@ -1658,6 +1661,8 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
                 print(f"[LOAD-CENARIOS] {cenario_nome}: sessões={total_sessoes:.0f}, IPCA={ipca*100:.1f}%")
             # v1.99.49: CORREÇÃO CRÍTICA - Definir cenario_origem
             motor.cenario_origem = cenario_nome
+            # v1.99.92: CORREÇÃO CRÍTICA - Definir filial_origem para evitar contaminação entre filiais
+            motor.filial_origem = filial_id
             # v1.99.73: CORREÇÃO - Aplicar fatores do cenário (fator_receita, etc)
             motor.aplicar_cenario(cenario_nome)
             motores[cenario_nome] = motor
@@ -1675,15 +1680,18 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         motor_base = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_base)
         motor_base.cenario_origem = "Conservador"  # v1.99.49: CORREÇÃO
+        motor_base.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         # Cria cópias para os outros cenários
         motor_pess = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_pess)
         motor_pess.cenario_origem = "Pessimista"  # v1.99.49: CORREÇÃO
+        motor_pess.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         motor_otim = criar_motor_padrao()
         dict_para_motor(dados_brutos, motor_otim)
         motor_otim.cenario_origem = "Otimista"  # v1.99.49: CORREÇÃO
+        motor_otim.filial_origem = filial_id  # v1.99.92: Proteção contra contaminação
 
         return {
             "cenario_ativo": dados_brutos.get("cenario_oficial", "Conservador"),
@@ -1699,13 +1707,13 @@ def carregar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_i
         }
 
 
-def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str, 
-                            motores: Dict, cenario_ativo: str = "Conservador", 
+def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id: str,
+                            motores: Dict, cenario_ativo: str = "Conservador",
                             usar_cenarios: bool = True, cenario_aprovado: str = None,
                             modelo_eficiencia: str = "profissional"):
     """
     Salva os 3 motores de uma filial no novo formato.
-    
+
     Args:
         manager: ClienteManager
         cliente_id: ID do cliente
@@ -1716,6 +1724,21 @@ def salvar_motores_cenarios(manager: ClienteManager, cliente_id: str, filial_id:
         cenario_aprovado: Qual cenário foi aprovado (None se nenhum)
         modelo_eficiencia: Modelo de eficiência selecionado (profissional/infraestrutura)
     """
+    # ============================================
+    # v1.99.92: PROTEÇÃO CONTRA CONTAMINAÇÃO ENTRE FILIAIS
+    # Verifica se cada motor pertence à filial sendo salva
+    # ============================================
+    for cenario_nome, motor in motores.items():
+        if motor is None:
+            continue
+        filial_origem = getattr(motor, 'filial_origem', None)
+        # Se motor tem filial_origem definida e não bate com filial_id, BLOQUEIA
+        if filial_origem and filial_origem != filial_id:
+            print(f"[SAVE-BLOQUEADO] ⛔ CONTAMINAÇÃO DETECTADA!")
+            print(f"[SAVE-BLOQUEADO] Motor {cenario_nome} pertence a '{filial_origem}' mas tentando salvar em '{filial_id}'")
+            print(f"[SAVE-BLOQUEADO] Salvamento CANCELADO para proteger dados!")
+            return False
+
     dados = {
         "_version": "2.0",
         "_format": "multi_cenario",

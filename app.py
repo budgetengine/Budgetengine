@@ -166,6 +166,21 @@ CODIGOS_ERRO = {
 # Changelog do Sistema
 CHANGELOG = [
     {
+        "versao": "1.99.92",
+        "data": "2026-01-01",
+        "tipo": "fix",
+        "descricao": "CRÍTICO: Proteção TOTAL contra contaminação entre filiais",
+        "detalhes": [
+            "PROBLEMA: Dados de uma filial podiam ser salvos em outra (ex: Leblon → Copacabana)",
+            "CAUSA: filial_origem não era definido em todos os lugares de criação de motor",
+            "SOLUÇÃO 1: filial_origem definido em carregar_motores_cenarios (3 lugares)",
+            "SOLUÇÃO 2: filial_origem definido em app.py criar cliente/filial (2 lugares)",
+            "SOLUÇÃO 3: Verificação em salvar_motores_cenarios BLOQUEIA se filial_origem != filial_id",
+            "LOG: [SAVE-BLOQUEADO] ⛔ CONTAMINAÇÃO DETECTADA quando tentativa é bloqueada",
+            "PACTO ALAN: Verificação rigorosa - nunca mais perder dados por contaminação"
+        ]
+    },
+    {
         "versao": "1.99.53",
         "data": "2024-12-30",
         "tipo": "fix",
@@ -3523,12 +3538,15 @@ def render_seletor_cliente_filial():
                                     tipo_relatorio="Filial"
                                 )
                                 motor_novo.cenario_origem = "Conservador"
-                                
+                                motor_novo.filial_origem = filial_id  # v1.99.92: Proteção contaminação
+
                                 motor_pess = criar_motor_vazio()
                                 motor_pess.cenario_origem = "Pessimista"
+                                motor_pess.filial_origem = filial_id  # v1.99.92: Proteção contaminação
                                 motor_otim = criar_motor_vazio()
                                 motor_otim.cenario_origem = "Otimista"
-                                
+                                motor_otim.filial_origem = filial_id  # v1.99.92: Proteção contaminação
+
                                 st.session_state.motores_cenarios = {
                                     "Conservador": motor_novo,
                                     "Pessimista": motor_pess,
@@ -3574,11 +3592,14 @@ def render_seletor_cliente_filial():
                                 # CORREÇÃO v1.99.0: Cria motores_cenarios para nova filial
                                 motor_cons = criar_motor_vazio()
                                 motor_cons.cenario_origem = "Conservador"
+                                motor_cons.filial_origem = filial_id  # v1.99.92: Proteção contaminação
                                 motor_pess = criar_motor_vazio()
                                 motor_pess.cenario_origem = "Pessimista"
+                                motor_pess.filial_origem = filial_id  # v1.99.92: Proteção contaminação
                                 motor_otim = criar_motor_vazio()
                                 motor_otim.cenario_origem = "Otimista"
-                                
+                                motor_otim.filial_origem = filial_id  # v1.99.92: Proteção contaminação
+
                                 st.session_state.motores_cenarios = {
                                     "Conservador": motor_cons,
                                     "Pessimista": motor_pess,

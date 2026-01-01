@@ -1,0 +1,790 @@
+{
+  "_format": "multi_cenario",
+  "_version": "2.0",
+  "cenarios": {
+    "Otimista": {
+      "macro": {
+        "igpm": 0.0,
+        "ipca": 0.0,
+        "dissidio": 0.0,
+        "reajuste_tarifas": 0.0,
+        "taxa_antecipacao": 0.05,
+        "reajuste_contratos": 0.0,
+        "taxa_cartao_debito": 0.0211,
+        "taxa_cartao_credito": 0.0354
+      },
+      "despesas": {},
+      "servicos": {},
+      "pagamento": {
+        "outros": 0.0,
+        "dinheiro_pix": 0.0,
+        "cartao_debito": 0.0,
+        "cartao_credito": 0.0,
+        "pct_antecipacao": 0.3
+      },
+      "aplicacoes": {
+        "pct_cdi": 1.0,
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225
+      },
+      "operacional": {
+        "num_salas": 0,
+        "dias_uteis_mes": 0,
+        "modelo_tributario": "PJ - Simples Nacional",
+        "num_fisioterapeutas": 0,
+        "modo_calculo_sessoes": "servico",
+        "horas_atendimento_dia": 0
+      },
+      "ano_anterior": 2025,
+      "mes_dissidio": 0,
+      "premissas_fc": {
+        "cp_impostos": 0,
+        "saldo_minimo": 0.0,
+        "caixa_inicial": 0.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0,
+        "cp_encargos_clt": 0.0,
+        "cp_fornecedores": 0,
+        "usar_receita_auto": true,
+        "usar_cp_folha_auto": true,
+        "cp_folha_colaboradores": 0.0,
+        "cp_folha_fisioterapeutas": 0,
+        "receita_dez_ano_anterior": 0.0,
+        "receita_nov_ano_anterior": 0.0,
+        "receita_out_ano_anterior": 0.0,
+        "cp_retirada_proprietarios": 0.0,
+        "recebimento_avista_no_mes": true
+      },
+      "sazonalidade": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "investimentos": [],
+      "profissionais": {},
+      "proprietarios": {},
+      "usar_cenarios": true,
+      "cadastro_salas": {
+        "salas": [
+          {
+            "tipo": "Individual",
+            "ativa": true,
+            "numero": 1,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 2,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 3,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 4,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          }
+        ],
+        "dias_uteis_mes": 0,
+        "horas_funcionamento_dia": 0
+      },
+      "financiamentos": [],
+      "cenario_oficial": "Conservador",
+      "fisioterapeutas": {},
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.0,
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.0
+        },
+        "pct_gerencia_equipe": 0.01,
+        "pct_producao_propria": 0.6,
+        "pct_faturamento_total": 0.2,
+        "pct_base_remuneracao_ger": 0.75,
+        "pct_base_remuneracao_prop": 0.75
+      },
+      "premissas_folha": {
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06,
+        "aliquota_fgts": 0.08,
+        "dias_uteis_mes": 22,
+        "desconto_vt_pct": 0.06,
+        "regime_tributario": "PJ - Simples Nacional",
+        "deducao_dependente_ir": 0.0
+      },
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {},
+      "premissas_simples": {
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28,
+        "aliquota_inss_pf": 0.11,
+        "faturamento_pf_anual": 0.0
+      },
+      "custo_pessoal_mensal": 0.0,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "premissas_dividendos": {
+        "distribuir": true,
+        "frequencia": "Trimestral",
+        "mostrar_no_dre": true,
+        "pct_distribuir": 0.3,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2
+      },
+      "valores_profissional": {},
+      "valores_proprietario": {},
+      "usar_comparativo_anterior": false
+    },
+    "Pessimista": {
+      "macro": {
+        "igpm": 0.0,
+        "ipca": 0.0,
+        "dissidio": 0.0,
+        "reajuste_tarifas": 0.0,
+        "taxa_antecipacao": 0.05,
+        "reajuste_contratos": 0.0,
+        "taxa_cartao_debito": 0.0211,
+        "taxa_cartao_credito": 0.0354
+      },
+      "despesas": {},
+      "servicos": {},
+      "pagamento": {
+        "outros": 0.0,
+        "dinheiro_pix": 0.0,
+        "cartao_debito": 0.0,
+        "cartao_credito": 0.0,
+        "pct_antecipacao": 0.3
+      },
+      "aplicacoes": {
+        "pct_cdi": 1.0,
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225
+      },
+      "operacional": {
+        "num_salas": 0,
+        "dias_uteis_mes": 0,
+        "modelo_tributario": "PJ - Simples Nacional",
+        "num_fisioterapeutas": 0,
+        "modo_calculo_sessoes": "servico",
+        "horas_atendimento_dia": 0
+      },
+      "ano_anterior": 2025,
+      "mes_dissidio": 0,
+      "premissas_fc": {
+        "cp_impostos": 0,
+        "saldo_minimo": 0.0,
+        "caixa_inicial": 0.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0,
+        "cp_encargos_clt": 0.0,
+        "cp_fornecedores": 0,
+        "usar_receita_auto": true,
+        "usar_cp_folha_auto": true,
+        "cp_folha_colaboradores": 0.0,
+        "cp_folha_fisioterapeutas": 0,
+        "receita_dez_ano_anterior": 0.0,
+        "receita_nov_ano_anterior": 0.0,
+        "receita_out_ano_anterior": 0.0,
+        "cp_retirada_proprietarios": 0.0,
+        "recebimento_avista_no_mes": true
+      },
+      "sazonalidade": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "investimentos": [],
+      "profissionais": {},
+      "proprietarios": {},
+      "usar_cenarios": true,
+      "cadastro_salas": {
+        "salas": [
+          {
+            "tipo": "Individual",
+            "ativa": true,
+            "numero": 1,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 2,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 3,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 4,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          }
+        ],
+        "dias_uteis_mes": 0,
+        "horas_funcionamento_dia": 0
+      },
+      "financiamentos": [],
+      "cenario_oficial": "Conservador",
+      "fisioterapeutas": {},
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.0,
+          "2": 0.0,
+          "3": 0.0,
+          "4": 0.0
+        },
+        "pct_gerencia_equipe": 0.01,
+        "pct_producao_propria": 0.6,
+        "pct_faturamento_total": 0.2,
+        "pct_base_remuneracao_ger": 0.75,
+        "pct_base_remuneracao_prop": 0.75
+      },
+      "premissas_folha": {
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06,
+        "aliquota_fgts": 0.08,
+        "dias_uteis_mes": 22,
+        "desconto_vt_pct": 0.06,
+        "regime_tributario": "PJ - Simples Nacional",
+        "deducao_dependente_ir": 0.0
+      },
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {},
+      "premissas_simples": {
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28,
+        "aliquota_inss_pf": 0.11,
+        "faturamento_pf_anual": 0.0
+      },
+      "custo_pessoal_mensal": 0.0,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "premissas_dividendos": {
+        "distribuir": true,
+        "frequencia": "Trimestral",
+        "mostrar_no_dre": true,
+        "pct_distribuir": 0.3,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2
+      },
+      "valores_profissional": {},
+      "valores_proprietario": {},
+      "usar_comparativo_anterior": false
+    },
+    "Conservador": {
+      "macro": {
+        "igpm": 0.0,
+        "ipca": 0.0,
+        "dissidio": 0.0,
+        "reajuste_tarifas": 0.0,
+        "taxa_antecipacao": 0.05,
+        "reajuste_contratos": 0.0,
+        "taxa_cartao_debito": 0.021099999999999997,
+        "taxa_cartao_credito": 0.0354
+      },
+      "despesas": {},
+      "servicos": {},
+      "pagamento": {
+        "outros": 0.0,
+        "dinheiro_pix": 0.0,
+        "cartao_debito": 0.0,
+        "cartao_credito": 0.0,
+        "pct_antecipacao": 0.3
+      },
+      "aplicacoes": {
+        "pct_cdi": 1.0,
+        "saldo_inicial": 0.0,
+        "taxa_selic_anual": 0.1225
+      },
+      "operacional": {
+        "num_salas": 0,
+        "dias_uteis_mes": 0,
+        "modelo_tributario": "PJ - Simples Nacional",
+        "num_fisioterapeutas": 0,
+        "modo_calculo_sessoes": "servico",
+        "horas_atendimento_dia": 0
+      },
+      "ano_anterior": 2025,
+      "mes_dissidio": 5,
+      "premissas_fc": {
+        "cp_impostos": 0,
+        "saldo_minimo": 0.0,
+        "caixa_inicial": 0.0,
+        "pct_cartao_1x": 0.3333,
+        "pct_cartao_2x": 0.3333,
+        "pct_cartao_3x": 0.3334,
+        "pct_cartao_4x": 0.0,
+        "pct_cartao_5x": 0.0,
+        "pct_cartao_6x": 0.0,
+        "cp_encargos_clt": 0.0,
+        "cp_fornecedores": 0,
+        "usar_receita_auto": true,
+        "usar_cp_folha_auto": true,
+        "cp_folha_colaboradores": 0.0,
+        "cp_folha_fisioterapeutas": 0,
+        "receita_dez_ano_anterior": 0.0,
+        "receita_nov_ano_anterior": 0.0,
+        "receita_out_ano_anterior": 0.0,
+        "cp_retirada_proprietarios": 0.0,
+        "recebimento_avista_no_mes": true
+      },
+      "sazonalidade": [
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "investimentos": [],
+      "profissionais": {},
+      "proprietarios": {},
+      "usar_cenarios": true,
+      "cadastro_salas": {
+        "salas": [
+          {
+            "tipo": "Individual",
+            "ativa": true,
+            "numero": 1,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 2,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 3,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 4,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 5,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 6,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 7,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 8,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 9,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 10,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 11,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 12,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 13,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 14,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          },
+          {
+            "tipo": "Individual",
+            "ativa": false,
+            "numero": 15,
+            "metros_quadrados": 0.0,
+            "servicos_atendidos": []
+          }
+        ],
+        "dias_uteis_mes": 0,
+        "horas_funcionamento_dia": 0
+      },
+      "financiamentos": [],
+      "cenario_oficial": "Conservador",
+      "fisioterapeutas": {},
+      "premissas_fisio": {
+        "niveis_remuneracao": {
+          "1": 0.25,
+          "2": 0.25,
+          "3": 0.25,
+          "4": 0.25
+        },
+        "pct_gerencia_equipe": 0.01,
+        "pct_producao_propria": 0.6,
+        "pct_faturamento_total": 0.2,
+        "pct_base_remuneracao_ger": 0.75,
+        "pct_base_remuneracao_prop": 0.75
+      },
+      "premissas_folha": {
+        "mes_dissidio": 5,
+        "pct_dissidio": 0.06,
+        "aliquota_fgts": 0.08,
+        "dias_uteis_mes": 22,
+        "desconto_vt_pct": 0.06,
+        "regime_tributario": "PJ - Simples Nacional",
+        "deducao_dependente_ir": 0.0
+      },
+      "ajustes_cenarios": {
+        "Otimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário favorável: crescimento acelerado, otimização de custos"
+        },
+        "Pessimista": {
+          "sessoes": {},
+          "valores": {},
+          "despesas": {},
+          "descricao": "Cenário de crise: redução de demanda, aumento de custos"
+        }
+      },
+      "funcionarios_clt": {},
+      "socios_prolabore": {},
+      "premissas_simples": {
+        "teto_inss_pf": 908.86,
+        "limite_fator_r": 0.28,
+        "aliquota_inss_pf": 0.11,
+        "faturamento_pf_anual": 0.0
+      },
+      "custo_pessoal_mensal": 0.0,
+      "faturamento_anterior": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "premissas_dividendos": {
+        "distribuir": true,
+        "frequencia": "Trimestral",
+        "mostrar_no_dre": true,
+        "pct_distribuir": 0.3,
+        "pct_reserva_legal": 0.05,
+        "pct_reserva_investimento": 0.2
+      },
+      "valores_profissional": {},
+      "valores_proprietario": {},
+      "usar_comparativo_anterior": false
+    }
+  },
+  "cenario_ativo": "Conservador",
+  "usar_cenarios": true,
+  "cenario_aprovado": null,
+  "modelo_eficiencia": "profissional"
+}
