@@ -23869,68 +23869,117 @@ def pagina_backup():
             clientes_backup = [d.name for d in backup_dir.iterdir() if d.is_dir()]
 
             if clientes_backup:
-                cliente_sel = st.selectbox(
-                    "Selecione o cliente:",
-                    options=clientes_backup,
-                    key="restaurar_cliente"
-                )
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    cliente_sel = st.selectbox(
+                        "1️⃣ Selecione o cliente:",
+                        options=clientes_backup,
+                        key="restaurar_cliente"
+                    )
 
                 if cliente_sel:
                     cliente_backup_dir = backup_dir / cliente_sel
                     backups_disponiveis = sorted(cliente_backup_dir.glob("*.json"), reverse=True)
 
                     if backups_disponiveis:
-                        # Formata opções
-                        opcoes_backup = {}
-                        for b in backups_disponiveis[:20]:  # Mostra até 20 mais recentes
-                            partes = b.stem.split("_", 2)
+                        # Agrupa por filial (ignora config.json)
+                        filiais_disponiveis = set()
+                        for b in backups_disponiveis:
+                            # Extrai nome da filial do backup
+                            partes = b.stem.split("_")
                             if len(partes) >= 3:
-                                data_str, hora_str, arquivo = partes
-                                try:
-                                    label = f"{arquivo} - {data_str[6:8]}/{data_str[4:6]}/{data_str[:4]} {hora_str[:2]}:{hora_str[2:4]}"
-                                    opcoes_backup[label] = str(b)
-                                except:
-                                    opcoes_backup[b.name] = str(b)
+                                # Pega a última parte (nome do arquivo sem .json)
+                                filial_nome = partes[-1]
+                                if filial_nome != "config":  # Ignora config
+                                    filiais_disponiveis.add(filial_nome)
 
-                        backup_sel = st.selectbox(
-                            "Selecione o backup:",
-                            options=list(opcoes_backup.keys()),
-                            key="restaurar_backup"
-                        )
+                        filiais_lista = sorted(list(filiais_disponiveis))
 
-                        if backup_sel:
-                            backup_path = opcoes_backup[backup_sel]
+                        if filiais_lista:
+                            with col2:
+                                filial_sel = st.selectbox(
+                                    "2️⃣ Selecione a filial:",
+                                    options=filiais_lista,
+                                    key="restaurar_filial"
+                                )
 
-                            # Preview do backup
-                            with st.expander("👁️ Preview do backup"):
-                                try:
-                                    with open(backup_path, 'r', encoding='utf-8') as f:
-                                        dados = json.load(f)
+                            if filial_sel:
+                                st.markdown("---")
+                                st.markdown(f"**3️⃣ Backups disponíveis para `{filial_sel}`:**")
 
-                                    # Mostra informações principais
-                                    if "nome_filial" in dados:
-                                        st.write(f"**Filial:** {dados.get('nome_filial', '?')}")
-                                    if "servicos" in dados:
-                                        st.write(f"**Serviços:** {len(dados.get('servicos', []))}")
-                                    if "profissionais" in dados:
-                                        st.write(f"**Profissionais:** {len(dados.get('profissionais', []))}")
-                                except Exception as e:
-                                    st.error(f"Erro ao ler backup: {e}")
+                                # Filtra backups da filial selecionada
+                                backups_filial = [b for b in backups_disponiveis if b.stem.endswith(f"_{filial_sel}")]
 
-                            # Botão de restauração
-                            col1, col2 = st.columns([1, 3])
-                            with col1:
-                                if st.button("🔄 Restaurar", type="primary", key="btn_restaurar"):
-                                    try:
-                                        from modules.cliente_manager import restaurar_backup
+                                # Formata opções
+                                opcoes_backup = {}
+                                for b in backups_filial[:20]:  # Mostra até 20 mais recentes
+                                    partes = b.stem.split("_")
+                                    if len(partes) >= 4:  # Com microssegundos
+                                        data_str = partes[0]
+                                        hora_str = partes[1]
+                                        try:
+                                            data_fmt = f"{data_str[6:8]}/{data_str[4:6]}/{data_str[:4]}"
+                                            hora_fmt = f"{hora_str[:2]}:{hora_str[2:4]}:{hora_str[4:6]}"
+                                            label = f"📅 {data_fmt} ⏰ {hora_fmt}"
+                                            opcoes_backup[label] = str(b)
+                                        except:
+                                            opcoes_backup[b.name] = str(b)
+                                    elif len(partes) >= 3:  # Sem microssegundos (backups antigos)
+                                        data_str = partes[0]
+                                        hora_str = partes[1]
+                                        try:
+                                            data_fmt = f"{data_str[6:8]}/{data_str[4:6]}/{data_str[:4]}"
+                                            hora_fmt = f"{hora_str[:2]}:{hora_str[2:4]}:{hora_str[4:6]}"
+                                            label = f"📅 {data_fmt} ⏰ {hora_fmt}"
+                                            opcoes_backup[label] = str(b)
+                                        except:
+                                            opcoes_backup[b.name] = str(b)
 
-                                        if restaurar_backup(backup_path):
-                                            st.success("✅ Backup restaurado com sucesso!")
-                                            st.info("Recarregue a página para ver as alterações.")
-                                        else:
-                                            st.error("❌ Erro ao restaurar backup")
-                                    except Exception as e:
-                                        st.error(f"❌ Erro: {e}")
+                                if opcoes_backup:
+                                    backup_sel = st.selectbox(
+                                        "Selecione a versão:",
+                                        options=list(opcoes_backup.keys()),
+                                        key="restaurar_backup"
+                                    )
+
+                                    if backup_sel:
+                                        backup_path = opcoes_backup[backup_sel]
+
+                                        # Preview do backup
+                                        with st.expander("👁️ Preview do backup"):
+                                            try:
+                                                with open(backup_path, 'r', encoding='utf-8') as f:
+                                                    dados = json.load(f)
+
+                                                # Mostra informações principais
+                                                if "nome_filial" in dados:
+                                                    st.write(f"**Filial:** {dados.get('nome_filial', '?')}")
+                                                if "servicos" in dados:
+                                                    st.write(f"**Serviços:** {len(dados.get('servicos', []))}")
+                                                if "profissionais" in dados:
+                                                    st.write(f"**Profissionais:** {len(dados.get('profissionais', []))}")
+                                                if "funcionarios_clt" in dados:
+                                                    st.write(f"**Funcionários CLT:** {len(dados.get('funcionarios_clt', []))}")
+                                            except Exception as e:
+                                                st.error(f"Erro ao ler backup: {e}")
+
+                                        # Botão de restauração
+                                        col1, col2 = st.columns([1, 3])
+                                        with col1:
+                                            if st.button("🔄 Restaurar", type="primary", key="btn_restaurar"):
+                                                try:
+                                                    from modules.cliente_manager import restaurar_backup
+
+                                                    if restaurar_backup(backup_path):
+                                                        st.success("✅ Backup restaurado com sucesso!")
+                                                        st.info("Recarregue a página para ver as alterações.")
+                                                    else:
+                                                        st.error("❌ Erro ao restaurar backup")
+                                                except Exception as e:
+                                                    st.error(f"❌ Erro: {e}")
+                        else:
+                            st.info("Nenhum backup de filial disponível (apenas config).")
                     else:
                         st.info("Nenhum backup disponível para este cliente.")
             else:
