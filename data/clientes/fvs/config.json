@@ -1,12 +1,14 @@
 {
   "id": "fvs",
   "nome": "FVS",
-  "cnpj": "",
+  "cnpj": null,
   "contato": "",
   "email": "",
   "telefone": "",
   "filiais": [
-    "copacabana"
+    "copacabana",
+    "leblon",
+    "meta"
   ],
   "premissas_macro": {
     "ipca": 0.045,
@@ -18,6 +20,6 @@
     "taxa_debito": 0.0211,
     "taxa_antecipacao": 0.05
   },
-  "data_criacao": "2025-12-26T17:05:29.115190",
-  "data_atualizacao": "2025-12-26T17:05:41.731036"
+  "data_criacao": "2025-12-26T11:37:51.208889+00:00",
+  "data_atualizacao": "2026-01-01T09:36:29.190757"
 }
