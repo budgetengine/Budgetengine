@@ -3542,21 +3542,31 @@ class MotorCalculo:
                             sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
 
             # ===== CALCULA VALOR DO SERVIÇO =====
+            # v1.99.93: valores_proprietario/profissional têm estrutura {'antes': X, 'depois': Y}
+            def _extrair_valor(v):
+                if v is None:
+                    return 0
+                if isinstance(v, dict):
+                    return float(v.get('depois', v.get('antes', 0)) or 0)
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return 0
+
             valor = getattr(srv, 'valor_2025', 0) or 0
             if valor == 0:
-                valor = (self.valores_proprietario.get(srv_nome, 0) or 0)
+                valor = _extrair_valor(self.valores_proprietario.get(srv_nome, 0))
             if valor == 0:
-                valor = (self.valores_profissional.get(srv_nome, 0) or 0)
+                valor = _extrair_valor(self.valores_profissional.get(srv_nome, 0))
             if valor == 0:
                 valor = getattr(srv, 'valor_2026', 0) or 0
 
-            # v1.99.93: Força conversão para float (pode vir string do JSON)
             try:
                 sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
                 valor_num = float(valor) if valor else 0
                 fat_base += sessoes_num * valor_num * 12
             except (TypeError, ValueError):
-                pass  # Ignora valores inválidos
+                pass
 
         # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
         # v1.99.93: Proteção contra divisão por zero
