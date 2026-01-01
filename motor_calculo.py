@@ -3568,16 +3568,35 @@ class MotorCalculo:
             except (TypeError, ValueError):
                 pass
 
-        # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
-        # v1.99.93: Proteção contra divisão por zero
-        if fat_base == 0 or fat_2025 == 0 or abs(fat_base - fat_2025) / max(fat_2025, 1) > 0.5:
-            # Fallback: usa fator direto (1 + pct_meta)
-            # Isso garante que o resultado será Fat_2025 × (1 + pct_meta)
-            fator_ajuste = 1 + pct_meta
-            fat_atual = fat_2025
+        # v1.99.98: CORREÇÃO CRÍTICA - Meta é SEMPRE relativa a 2025
+        #
+        # PROBLEMA ANTERIOR:
+        # O código usava fator = fat_meta / fat_base, onde fat_base = sessões_atuais × valor × 12
+        # Se as sessões já foram modificadas (ex: copiadas de outro cenário), fat_base ≠ fat_2025
+        # Resultado: fator errado, aumento insignificante
+        #
+        # CORREÇÃO:
+        # 1. Calcular "sessões base 2025" = fat_2025 / (valor_medio × 12)
+        # 2. Calcular "sessões meta" = sessões_base × (1 + pct_meta)
+        # 3. Fator = sessões_meta / sessões_atuais
+        #
+        # Ou simplificado: fator = (fat_2025 × (1 + pct)) / fat_base
+        # Isso SEMPRE leva ao resultado correto, independente do estado atual
+
+        if fat_2025 == 0 or fat_base == 0:
+            fator_ajuste = 1.0
+            fat_atual = fat_2025 or fat_base
+            print(f"[METAS-CALC] ⚠️ fat_2025={fat_2025:,.0f} ou fat_base={fat_base:,.0f} é zero, usando fator=1.0")
         else:
+            # Fator que leva de fat_base → fat_meta (alvo)
+            fator_ajuste = fat_meta / fat_base
             fat_atual = fat_base
-            fator_ajuste = fat_meta / fat_atual
+
+            print(f"[METAS-CALC] fat_2025={fat_2025:,.0f}")
+            print(f"[METAS-CALC] fat_meta={fat_meta:,.0f} (fat_2025 × {1+pct_meta:.2f})")
+            print(f"[METAS-CALC] fat_base={fat_base:,.0f} (projeção atual)")
+            print(f"[METAS-CALC] fator_ajuste={fator_ajuste:.4f} ({(fator_ajuste-1)*100:+.1f}%)")
+            print(f"[METAS-CALC] Resultado esperado: fat_base × fator = {fat_base * fator_ajuste:,.0f}")
         
         # 3. Guarda snapshot para possível rollback
         snapshot = {
