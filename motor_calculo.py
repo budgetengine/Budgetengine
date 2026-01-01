@@ -3514,59 +3514,57 @@ class MotorCalculo:
         #   Como zeramos crescimento, sessões_novas × valor × 12 = Fat_meta
         #   Então fator = Fat_meta / Fat_base = (1 + pct_meta) se Fat_base ≈ Fat_2025
 
-        # Primeiro, tenta calcular Fat_base (sessões atuais × valor × 12, sem crescimento)
+        # v1.99.95: Calcula Fat_base usando MESMA lógica da receita real
+        # (com sazonalidade, valores antes/depois, etc.) para precisão no fator_ajuste
         fat_base = 0
+        try:
+            for srv_nome in self.servicos:
+                for mes in range(12):
+                    fat_base += self.calcular_receita_servico_mes(srv_nome, mes)
+        except Exception:
+            # Fallback: cálculo simplificado se der erro
+            fat_base = 0
+            for srv_nome, srv in self.servicos.items():
+                sessoes_base_total = 0
+                modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
+                if modo == "servico":
+                    sessoes_base_total = srv.sessoes_mes_base or 0
+                else:
+                    for fisio in self.fisioterapeutas.values():
+                        if fisio.ativo:
+                            sessoes_base_total += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
+                    if sessoes_base_total == 0:
+                        for prop in self.proprietarios.values():
+                            if getattr(prop, 'ativo', True):
+                                sessoes_base_total += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+                        for prof in self.profissionais.values():
+                            if getattr(prof, 'ativo', True):
+                                sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
 
-        for srv_nome, srv in self.servicos.items():
-            sessoes_base_total = 0
-            valor = 0
+                def _extrair_valor(v):
+                    if v is None:
+                        return 0
+                    if isinstance(v, dict):
+                        return float(v.get('depois', v.get('antes', 0)) or 0)
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return 0
 
-            # ===== CALCULA SESSÕES BASE =====
-            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
+                valor = getattr(srv, 'valor_2025', 0) or 0
+                if valor == 0:
+                    valor = _extrair_valor(self.valores_proprietario.get(srv_nome, 0))
+                if valor == 0:
+                    valor = _extrair_valor(self.valores_profissional.get(srv_nome, 0))
+                if valor == 0:
+                    valor = getattr(srv, 'valor_2026', 0) or 0
 
-            if modo == "servico":
-                sessoes_base_total = srv.sessoes_mes_base or 0
-            else:
-                # Modo profissional - soma sessões de fisioterapeutas
-                for fisio in self.fisioterapeutas.values():
-                    if fisio.ativo:
-                        sessoes_base_total += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
-
-                # Fallback: proprietarios + profissionais
-                if sessoes_base_total == 0:
-                    for prop in self.proprietarios.values():
-                        if getattr(prop, 'ativo', True):
-                            sessoes_base_total += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
-                    for prof in self.profissionais.values():
-                        if getattr(prof, 'ativo', True):
-                            sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
-
-            # ===== CALCULA VALOR DO SERVIÇO =====
-            # v1.99.93: valores_proprietario/profissional têm estrutura {'antes': X, 'depois': Y}
-            def _extrair_valor(v):
-                if v is None:
-                    return 0
-                if isinstance(v, dict):
-                    return float(v.get('depois', v.get('antes', 0)) or 0)
                 try:
-                    return float(v)
+                    sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
+                    valor_num = float(valor) if valor else 0
+                    fat_base += sessoes_num * valor_num * 12
                 except (TypeError, ValueError):
-                    return 0
-
-            valor = getattr(srv, 'valor_2025', 0) or 0
-            if valor == 0:
-                valor = _extrair_valor(self.valores_proprietario.get(srv_nome, 0))
-            if valor == 0:
-                valor = _extrair_valor(self.valores_profissional.get(srv_nome, 0))
-            if valor == 0:
-                valor = getattr(srv, 'valor_2026', 0) or 0
-
-            try:
-                sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
-                valor_num = float(valor) if valor else 0
-                fat_base += sessoes_num * valor_num * 12
-            except (TypeError, ValueError):
-                pass
+                    pass
 
         # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
         # v1.99.93: Proteção contra divisão por zero
