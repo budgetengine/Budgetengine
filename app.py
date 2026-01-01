@@ -2043,12 +2043,7 @@ st.markdown("""
 # Gerenciador de clientes
 if 'cliente_manager' not in st.session_state:
     st.session_state.cliente_manager = ClienteManager()
-    # v1.99.89: Sincroniza do Supabase ao iniciar (garante filiais atualizadas)
-    from modules.cliente_manager import sincronizar_do_supabase
-    try:
-        sincronizar_do_supabase()
-    except Exception as e:
-        print(f"[SYNC] Aviso: {e}")
+    # REMOVIDO v1.99.90: Sincronização automática DESATIVADA - causava perda de dados
 
 # ============================================
 # FUNÇÕES DE PERSISTÊNCIA (ANTES DA INICIALIZAÇÃO)
@@ -12314,13 +12309,13 @@ def pagina_clientes():
                                     try:
                                         # Renomear a filial no arquivo da filial
                                         import os
+                                        from modules.cliente_manager import _salvar_json_seguro
                                         filial_path = f"data/clientes/{cliente_id}/{filial_id}.json"
                                         if os.path.exists(filial_path):
                                             with open(filial_path, 'r', encoding='utf-8') as f:
                                                 filial_data = json.load(f)
                                             filial_data['nome'] = novo_nome_filial
-                                            with open(filial_path, 'w', encoding='utf-8') as f:
-                                                json.dump(filial_data, f, ensure_ascii=False, indent=2)
+                                            _salvar_json_seguro(filial_path, filial_data)
                                             st.success(f"✅ Filial renomeada para '{novo_nome_filial}'!")
                                             st.session_state[f'show_edit_filial_{cliente_id}_{filial_id}'] = False
                                             st.rerun()
@@ -12348,18 +12343,20 @@ def pagina_clientes():
                                     else:
                                         # Alternativa: excluir diretamente
                                         import os
+                                        from modules.cliente_manager import _backup_antes_salvar
                                         filial_json = f"data/clientes/{cliente_id}/{filial_id}.json"
                                         if os.path.exists(filial_json):
+                                            _backup_antes_salvar(filial_json)  # BACKUP ANTES DE DELETAR
                                             os.remove(filial_json)
                                         # Atualizar config - filiais é lista de strings (IDs)
+                                        from modules.cliente_manager import _salvar_json_seguro, _backup_antes_salvar
                                         config_path = f"data/clientes/{cliente_id}/config.json"
                                         if os.path.exists(config_path):
                                             with open(config_path, 'r', encoding='utf-8') as f:
                                                 config = json.load(f)
                                             # Filtra removendo o ID da filial (é string, não dict)
                                             config['filiais'] = [f_id for f_id in config.get('filiais', []) if f_id != filial_id]
-                                            with open(config_path, 'w', encoding='utf-8') as f:
-                                                json.dump(config, f, ensure_ascii=False, indent=2)
+                                            _salvar_json_seguro(config_path, config)
                                     st.success("✅ Filial excluída!")
                                     st.session_state[f'confirm_del_filial_{cliente_id}_{filial_id}'] = False
                                     # Limpa filial atual se for a excluída

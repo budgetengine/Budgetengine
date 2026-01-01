@@ -51,6 +51,129 @@ def _obter_supabase():
     return _conectar_supabase()
 
 
+# ============================================
+# BACKUP AUTOMÁTICO - v1.99.90
+# NUNCA perde dados - backup antes de qualquer escrita
+# ============================================
+import shutil
+
+BACKUP_DIR = "data/backups"
+
+def _backup_antes_salvar(arquivo_path: str) -> bool:
+    """
+    FAZ BACKUP ANTES DE QUALQUER ESCRITA.
+    Chamado automaticamente antes de salvar qualquer JSON.
+    """
+    if not os.path.exists(arquivo_path):
+        return True  # Arquivo novo, não precisa backup
+
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+
+        # Mantém estrutura: data/backups/fvs/20250101_093600_leblon.json
+        partes = arquivo_path.replace("\\", "/").split("/")
+        if "clientes" in partes:
+            idx = partes.index("clientes")
+            cliente = partes[idx + 1] if idx + 1 < len(partes) else "unknown"
+            nome_arquivo = partes[-1]
+        else:
+            cliente = "unknown"
+            nome_arquivo = os.path.basename(arquivo_path)
+
+        # Cria subpasta do cliente
+        backup_subdir = os.path.join(BACKUP_DIR, cliente)
+        os.makedirs(backup_subdir, exist_ok=True)
+
+        # Nome com timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_nome = f"{timestamp}_{nome_arquivo}"
+        backup_path = os.path.join(backup_subdir, backup_nome)
+
+        # Copia
+        shutil.copy2(arquivo_path, backup_path)
+        print(f"[BACKUP] ✅ {cliente}/{nome_arquivo} → {backup_nome}")
+        return True
+
+    except Exception as e:
+        print(f"[BACKUP] ⚠️ Erro (não crítico): {e}")
+        return True  # Não bloqueia salvamento
+
+
+def _salvar_json_seguro(arquivo_path: str, dados: dict) -> bool:
+    """
+    SALVA JSON COM BACKUP AUTOMÁTICO.
+    Use esta função em vez de json.dump direto.
+    """
+    # 1. FAZ BACKUP PRIMEIRO
+    _backup_antes_salvar(arquivo_path)
+
+    # 2. Salva o arquivo
+    try:
+        os.makedirs(os.path.dirname(arquivo_path), exist_ok=True)
+        with open(arquivo_path, 'w', encoding='utf-8') as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[SALVAR] ❌ Erro ao salvar {arquivo_path}: {e}")
+        return False
+
+
+def listar_backups(cliente_id: str = None) -> list:
+    """Lista backups disponíveis para restauração."""
+    backups = []
+    if not os.path.exists(BACKUP_DIR):
+        return backups
+
+    for root, dirs, files in os.walk(BACKUP_DIR):
+        for f in sorted(files, reverse=True):
+            if f.endswith('.json'):
+                if cliente_id and cliente_id not in root:
+                    continue
+                caminho = os.path.join(root, f)
+                stat = os.stat(caminho)
+                backups.append({
+                    "arquivo": caminho,
+                    "nome": f,
+                    "tamanho_kb": round(stat.st_size / 1024, 1),
+                    "data": datetime.fromtimestamp(stat.st_mtime)
+                })
+    return backups
+
+
+def restaurar_backup(backup_path: str) -> bool:
+    """Restaura um backup para o local original."""
+    if not os.path.exists(backup_path):
+        print(f"[BACKUP] ❌ Não encontrado: {backup_path}")
+        return False
+
+    try:
+        # Extrai info do nome: 20250101_093600_leblon.json
+        nome = os.path.basename(backup_path)
+        partes = nome.split("_", 2)  # max 2 splits
+        if len(partes) >= 3:
+            nome_original = partes[2]  # leblon.json
+        else:
+            nome_original = nome
+
+        # Descobre cliente da pasta
+        rel = os.path.relpath(backup_path, BACKUP_DIR)
+        cliente = rel.split(os.sep)[0] if os.sep in rel else "fvs"
+
+        destino = os.path.join("data/clientes", cliente, nome_original)
+
+        # Backup do atual antes de restaurar
+        _backup_antes_salvar(destino)
+
+        # Restaura
+        shutil.copy2(backup_path, destino)
+        print(f"[BACKUP] ✅ Restaurado: {backup_path} → {destino}")
+        return True
+
+    except Exception as e:
+        print(f"[BACKUP] ❌ Erro ao restaurar: {e}")
+        return False
+
+
 def sincronizar_do_supabase(data_dir: str = "data/clientes") -> Dict:
     """
     SINCRONIZAÇÃO COMPLETA: Baixa todos os dados do Supabase para o local.
@@ -98,11 +221,10 @@ def sincronizar_do_supabase(data_dir: str = "data/clientes") -> Dict:
                 filial_id = branch["slug"]
                 filiais_ids.append(filial_id)
 
-                # Salva dados da filial localmente
+                # Salva dados da filial localmente (COM BACKUP AUTOMÁTICO)
                 if branch.get("data"):
                     filial_path = os.path.join(cliente_path, f"{filial_id}.json")
-                    with open(filial_path, 'w', encoding='utf-8') as f:
-                        json.dump(branch["data"], f, ensure_ascii=False, indent=2)
+                    _salvar_json_seguro(filial_path, branch["data"])
                     stats["filiais"] += 1
                     stats["atualizados"].append(f"{cliente_id}/{filial_id}")
                     print(f"[SYNC] ✅ {cliente_id}/{filial_id} atualizado")
@@ -131,8 +253,7 @@ def sincronizar_do_supabase(data_dir: str = "data/clientes") -> Dict:
                 "data_atualizacao": datetime.now().isoformat()
             }
 
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
+            _salvar_json_seguro(config_path, config)
 
             stats["clientes"] += 1
             print(f"[SYNC] ✅ Cliente {cliente_id} com {len(filiais_ids)} filiais")
@@ -325,10 +446,9 @@ class ClienteManager:
             "data_criacao": cliente.data_criacao,
             "data_atualizacao": cliente.data_atualizacao
         }
-        
-        with open(path_config, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    
+
+        _salvar_json_seguro(path_config, data)
+
     def atualizar_cliente(self, cliente: Cliente):
         """Atualiza dados do cliente"""
         self._salvar_config_cliente(cliente)
@@ -338,6 +458,10 @@ class ClienteManager:
         import shutil
         path = self._path_cliente(cliente_id)
         if os.path.exists(path):
+            # BACKUP DE TODOS OS ARQUIVOS ANTES DE DELETAR
+            for arquivo in os.listdir(path):
+                if arquivo.endswith('.json'):
+                    _backup_antes_salvar(os.path.join(path, arquivo))
             shutil.rmtree(path)
     
     # ========== FILIAIS ==========
@@ -427,11 +551,8 @@ class ClienteManager:
         }
         
         path_filial = self._path_filial(cliente_id, filial_id)
-        # Garantir que o diretório existe
-        os.makedirs(os.path.dirname(path_filial), exist_ok=True)
-        with open(path_filial, 'w', encoding='utf-8') as f:
-            json.dump(dados_filial, f, ensure_ascii=False, indent=2)
-        
+        _salvar_json_seguro(path_filial, dados_filial)
+
         return filial_id
     
     def carregar_filial(self, cliente_id: str, filial_id: str) -> Optional[Dict]:
@@ -496,10 +617,9 @@ class ClienteManager:
         # CORREÇÃO: Garantir que o diretório existe antes de salvar
         os.makedirs(os.path.dirname(path_filial), exist_ok=True)
         
-        # Salva JSON local (backup)
+        # Salva JSON local (COM BACKUP AUTOMÁTICO)
         try:
-            with open(path_filial, 'w', encoding='utf-8') as f:
-                json.dump(dados, f, ensure_ascii=False, indent=2)
+            _salvar_json_seguro(path_filial, dados)
             sucesso_local = True
             print(f"[SAVE] JSON local salvo: {path_filial}")
         except Exception as e:
@@ -570,8 +690,9 @@ class ClienteManager:
         
         path_filial = self._path_filial(cliente_id, filial_id)
         if os.path.exists(path_filial):
+            _backup_antes_salvar(path_filial)  # BACKUP ANTES DE DELETAR
             os.remove(path_filial)
-    
+
     def listar_filiais(self, cliente_id: str) -> List[Dict]:
         """Lista filiais de um cliente"""
         cliente = self.carregar_cliente(cliente_id)

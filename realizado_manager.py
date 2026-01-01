@@ -9,6 +9,9 @@ from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
+# v1.99.90: Import backup seguro
+from modules.cliente_manager import _salvar_json_seguro
+
 
 # ============================================
 # ESTRUTURAS DE DADOS
@@ -239,9 +242,8 @@ class RealizadoManager:
                 "status": lancamento.status,
             }
         
-        with open(path, 'w', encoding='utf-8') as f:
-            json.dump(dados, f, ensure_ascii=False, indent=2)
-    
+        _salvar_json_seguro(path, dados)
+
     def salvar_lancamento_mes(self, cliente_id: str, filial_id: str, 
                               lancamento: LancamentoMesRealizado, ano: int = 2026):
         """Salva lançamento de um mês específico"""
