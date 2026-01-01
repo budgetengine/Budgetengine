@@ -2958,10 +2958,17 @@ with st.sidebar:
     # Separador visual 3
     st.markdown("<hr style='margin:5px 0; border:none; border-top:1px solid #ddd;'>", unsafe_allow_html=True)
 
-    opcoes_admin = [
-        "🔧 Admin",
-        "🛠️ Diagnóstico Dev",
-    ]
+    # Verifica se é admin para mostrar opção BACKUP
+    user = get_current_user() if AUTH_ENABLED else None
+    is_admin_user = user and user.get("role") == "admin" if user else True  # Se não tem auth, mostra tudo
+
+    opcoes_admin = ["🔧 Admin"]
+
+    # BACKUP só aparece para admins
+    if is_admin_user:
+        opcoes_admin.append("📦 BACKUP")
+
+    opcoes_admin.append("🛠️ Diagnóstico Dev")
 
     # Junta todas as opções para o radio (sem separadores)
     todas_opcoes = opcoes_menu + opcoes_lancamentos + opcoes_sistema + opcoes_admin
@@ -23621,6 +23628,316 @@ render_seletor_cliente_filial()
 # ============================================
 
 # ============================================
+# PÁGINA DE BACKUP - v1.99.91
+# ============================================
+
+def pagina_backup():
+    """Página de gerenciamento de backups - download do Supabase e restauração"""
+
+    st.title("📦 BACKUP")
+    st.caption("Gerenciamento de backups e sincronização segura")
+
+    # Tabs
+    tab1, tab2, tab3 = st.tabs([
+        "☁️ Baixar do Supabase",
+        "📁 Backups Locais",
+        "🔄 Restaurar Backup"
+    ])
+
+    # ===== TAB 1: BAIXAR DO SUPABASE =====
+    with tab1:
+        st.markdown("### ☁️ Baixar Dados do Supabase")
+        st.info("**SEGURO:** Sempre faz backup local antes de sobrescrever qualquer arquivo.")
+
+        # Tenta conectar ao Supabase
+        try:
+            from modules.cliente_manager import _obter_supabase, sincronizar_do_supabase
+            supabase = _obter_supabase()
+
+            if not supabase:
+                st.error("❌ Supabase não configurado. Verifique as credenciais.")
+                return
+
+            st.success("✅ Conectado ao Supabase")
+
+            # Botão para visualizar o que tem no Supabase
+            if st.button("🔍 Ver dados no Supabase", use_container_width=True):
+                with st.spinner("Buscando dados..."):
+                    try:
+                        # Busca companies
+                        resp_companies = supabase.table("companies").select("*").execute()
+
+                        if not resp_companies.data:
+                            st.warning("Nenhuma empresa encontrada no Supabase.")
+                        else:
+                            st.markdown(f"**{len(resp_companies.data)} empresa(s) encontrada(s):**")
+
+                            for company in resp_companies.data:
+                                company_id = company["id"]
+                                company_name = company["name"]
+
+                                # Busca branches
+                                resp_branches = supabase.table("branches").select("*").eq("company_id", company_id).execute()
+
+                                with st.expander(f"🏢 {company_name} ({len(resp_branches.data)} filiais)"):
+                                    for branch in resp_branches.data:
+                                        filial_nome = branch.get("name", branch.get("slug", "?"))
+                                        filial_slug = branch.get("slug", "?")
+                                        tem_dados = "✅ Com dados" if branch.get("data") else "⚠️ VAZIO"
+
+                                        # Mostra status de cada filial
+                                        col1, col2 = st.columns([3, 1])
+                                        with col1:
+                                            st.write(f"📍 **{filial_nome}** ({filial_slug})")
+                                        with col2:
+                                            if branch.get("data"):
+                                                st.success(tem_dados)
+                                            else:
+                                                st.warning(tem_dados)
+                    except Exception as e:
+                        st.error(f"Erro ao buscar dados: {e}")
+
+            st.markdown("---")
+
+            # Opções de download
+            st.markdown("### 📥 Opções de Download")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                # Download de cliente específico
+                st.markdown("**Download por Cliente:**")
+
+                try:
+                    resp_companies = supabase.table("companies").select("*").execute()
+                    opcoes_clientes = {c["name"]: c["id"] for c in resp_companies.data}
+
+                    if opcoes_clientes:
+                        cliente_selecionado = st.selectbox(
+                            "Selecione o cliente:",
+                            options=list(opcoes_clientes.keys()),
+                            key="backup_cliente_select"
+                        )
+
+                        if st.button("📥 Baixar este cliente", key="btn_baixar_cliente"):
+                            company_id = opcoes_clientes[cliente_selecionado]
+                            with st.spinner(f"Baixando {cliente_selecionado}..."):
+                                try:
+                                    # Busca dados da company e branches
+                                    resp_branches = supabase.table("branches").select("*").eq("company_id", company_id).execute()
+
+                                    import re
+                                    cliente_id = cliente_selecionado.lower()
+                                    cliente_id = re.sub(r'[áàãâä]', 'a', cliente_id)
+                                    cliente_id = re.sub(r'[éèêë]', 'e', cliente_id)
+                                    cliente_id = re.sub(r'[íìîï]', 'i', cliente_id)
+                                    cliente_id = re.sub(r'[óòõôö]', 'o', cliente_id)
+                                    cliente_id = re.sub(r'[úùûü]', 'u', cliente_id)
+                                    cliente_id = re.sub(r'[ç]', 'c', cliente_id)
+                                    cliente_id = re.sub(r'[^a-z0-9]', '_', cliente_id)
+                                    cliente_id = re.sub(r'_+', '_', cliente_id).strip('_')
+
+                                    from modules.cliente_manager import _salvar_json_seguro
+
+                                    cliente_path = f"data/clientes/{cliente_id}"
+                                    os.makedirs(cliente_path, exist_ok=True)
+
+                                    baixados = 0
+                                    vazios = 0
+                                    for branch in resp_branches.data:
+                                        if branch.get("data"):
+                                            filial_path = os.path.join(cliente_path, f"{branch['slug']}.json")
+                                            _salvar_json_seguro(filial_path, branch["data"])
+                                            baixados += 1
+                                        else:
+                                            vazios += 1
+
+                                    if baixados > 0:
+                                        st.success(f"✅ Baixados: {baixados} filiais")
+                                    if vazios > 0:
+                                        st.warning(f"⚠️ Ignorados (vazios): {vazios} filiais")
+
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
+                except Exception as e:
+                    st.error(f"Erro ao listar clientes: {e}")
+
+            with col2:
+                # Download completo
+                st.markdown("**Download Completo:**")
+                st.warning("⚠️ Baixa TODOS os dados de TODAS as empresas")
+
+                if st.button("📥 Baixar TUDO do Supabase", key="btn_baixar_tudo", type="primary"):
+                    with st.spinner("Baixando todos os dados..."):
+                        resultado = sincronizar_do_supabase()
+
+                        if resultado["erros"]:
+                            for erro in resultado["erros"]:
+                                st.error(f"❌ {erro}")
+                        else:
+                            st.success(f"""
+                            ✅ **Download concluído!**
+                            - Clientes: {resultado['clientes']}
+                            - Filiais: {resultado['filiais']}
+                            """)
+                            if resultado.get("atualizados"):
+                                with st.expander("Ver detalhes"):
+                                    for item in resultado["atualizados"]:
+                                        st.write(f"✅ {item}")
+
+        except ImportError as e:
+            st.error(f"❌ Módulo não disponível: {e}")
+        except Exception as e:
+            st.error(f"❌ Erro: {e}")
+
+    # ===== TAB 2: BACKUPS LOCAIS =====
+    with tab2:
+        st.markdown("### 📁 Backups Locais")
+        st.info("Backups são criados automaticamente antes de qualquer salvamento.")
+
+        backup_dir = Path("BACKUP")
+
+        if not backup_dir.exists():
+            st.warning("Nenhum backup encontrado ainda.")
+        else:
+            # Lista pastas de clientes com backups
+            clientes_backup = [d for d in backup_dir.iterdir() if d.is_dir()]
+
+            if not clientes_backup:
+                st.warning("Nenhum backup encontrado.")
+            else:
+                st.markdown(f"**{len(clientes_backup)} cliente(s) com backups:**")
+
+                for cliente_dir in sorted(clientes_backup):
+                    backups = list(cliente_dir.glob("*.json"))
+
+                    with st.expander(f"🏢 {cliente_dir.name} ({len(backups)} backups)"):
+                        if backups:
+                            # Agrupa por filial
+                            backups_por_filial = {}
+                            for b in backups:
+                                # Nome do backup: YYYYMMDD_HHMMSS_arquivo.json
+                                partes = b.stem.split("_", 2)
+                                if len(partes) >= 3:
+                                    filial_nome = partes[2]
+                                    if filial_nome not in backups_por_filial:
+                                        backups_por_filial[filial_nome] = []
+                                    backups_por_filial[filial_nome].append(b)
+
+                            for filial, lista_backups in backups_por_filial.items():
+                                st.markdown(f"**📍 {filial}** ({len(lista_backups)} versões)")
+
+                                # Mostra os 5 mais recentes
+                                for backup_file in sorted(lista_backups, reverse=True)[:5]:
+                                    # Extrai data/hora do nome
+                                    partes = backup_file.stem.split("_")
+                                    if len(partes) >= 2:
+                                        data_str = partes[0]
+                                        hora_str = partes[1]
+                                        try:
+                                            data_formatada = f"{data_str[6:8]}/{data_str[4:6]}/{data_str[:4]}"
+                                            hora_formatada = f"{hora_str[:2]}:{hora_str[2:4]}:{hora_str[4:6]}"
+                                            st.caption(f"  📄 {data_formatada} {hora_formatada}")
+                                        except:
+                                            st.caption(f"  📄 {backup_file.name}")
+                        else:
+                            st.caption("Nenhum backup")
+
+                # Estatísticas
+                st.markdown("---")
+                total_backups = sum(len(list(d.glob("*.json"))) for d in clientes_backup)
+                tamanho_total = sum(f.stat().st_size for d in clientes_backup for f in d.glob("*.json"))
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total de Backups", total_backups)
+                with col2:
+                    tamanho_mb = tamanho_total / (1024 * 1024)
+                    st.metric("Tamanho Total", f"{tamanho_mb:.2f} MB")
+
+    # ===== TAB 3: RESTAURAR BACKUP =====
+    with tab3:
+        st.markdown("### 🔄 Restaurar Backup")
+        st.warning("⚠️ Restaurar um backup **substitui** o arquivo atual. Um novo backup é criado antes.")
+
+        backup_dir = Path("BACKUP")
+
+        if not backup_dir.exists():
+            st.info("Nenhum backup disponível para restauração.")
+        else:
+            # Seleciona cliente
+            clientes_backup = [d.name for d in backup_dir.iterdir() if d.is_dir()]
+
+            if clientes_backup:
+                cliente_sel = st.selectbox(
+                    "Selecione o cliente:",
+                    options=clientes_backup,
+                    key="restaurar_cliente"
+                )
+
+                if cliente_sel:
+                    cliente_backup_dir = backup_dir / cliente_sel
+                    backups_disponiveis = sorted(cliente_backup_dir.glob("*.json"), reverse=True)
+
+                    if backups_disponiveis:
+                        # Formata opções
+                        opcoes_backup = {}
+                        for b in backups_disponiveis[:20]:  # Mostra até 20 mais recentes
+                            partes = b.stem.split("_", 2)
+                            if len(partes) >= 3:
+                                data_str, hora_str, arquivo = partes
+                                try:
+                                    label = f"{arquivo} - {data_str[6:8]}/{data_str[4:6]}/{data_str[:4]} {hora_str[:2]}:{hora_str[2:4]}"
+                                    opcoes_backup[label] = str(b)
+                                except:
+                                    opcoes_backup[b.name] = str(b)
+
+                        backup_sel = st.selectbox(
+                            "Selecione o backup:",
+                            options=list(opcoes_backup.keys()),
+                            key="restaurar_backup"
+                        )
+
+                        if backup_sel:
+                            backup_path = opcoes_backup[backup_sel]
+
+                            # Preview do backup
+                            with st.expander("👁️ Preview do backup"):
+                                try:
+                                    with open(backup_path, 'r', encoding='utf-8') as f:
+                                        dados = json.load(f)
+
+                                    # Mostra informações principais
+                                    if "nome_filial" in dados:
+                                        st.write(f"**Filial:** {dados.get('nome_filial', '?')}")
+                                    if "servicos" in dados:
+                                        st.write(f"**Serviços:** {len(dados.get('servicos', []))}")
+                                    if "profissionais" in dados:
+                                        st.write(f"**Profissionais:** {len(dados.get('profissionais', []))}")
+                                except Exception as e:
+                                    st.error(f"Erro ao ler backup: {e}")
+
+                            # Botão de restauração
+                            col1, col2 = st.columns([1, 3])
+                            with col1:
+                                if st.button("🔄 Restaurar", type="primary", key="btn_restaurar"):
+                                    try:
+                                        from modules.cliente_manager import restaurar_backup
+
+                                        if restaurar_backup(backup_path):
+                                            st.success("✅ Backup restaurado com sucesso!")
+                                            st.info("Recarregue a página para ver as alterações.")
+                                        else:
+                                            st.error("❌ Erro ao restaurar backup")
+                                    except Exception as e:
+                                        st.error(f"❌ Erro: {e}")
+                    else:
+                        st.info("Nenhum backup disponível para este cliente.")
+            else:
+                st.info("Nenhum backup disponível.")
+
+
+# ============================================
 # PÁGINA DE DIAGNÓSTICO PARA DESENVOLVIMENTO
 # ============================================
 
@@ -25766,6 +26083,8 @@ elif pagina == "📄 FC (Excel)":
     pagina_fluxo_caixa()
 elif pagina == "🔧 Admin":
     pagina_admin()
+elif pagina == "📦 BACKUP":
+    pagina_backup()
 elif pagina == "🛠️ Diagnóstico Dev":
     pagina_diagnostico_dev()
 

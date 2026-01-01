@@ -57,7 +57,7 @@ def _obter_supabase():
 # ============================================
 import shutil
 
-BACKUP_DIR = "data/backups"
+BACKUP_DIR = "BACKUP"
 
 def _backup_antes_salvar(arquivo_path: str) -> bool:
     """
