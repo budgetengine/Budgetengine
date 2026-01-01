@@ -19940,7 +19940,7 @@ def pagina_simulador_metas():
                 st.error(f"Erro ao exportar: {e}")
         
         with col_act2:
-            if st.button(f"✅ Aprovar no Cenário: {cenario_edicao}", use_container_width=True, type="secondary"):
+            if st.button(f"✅ Aprovar no Cenário: {cenario_metas_key}", use_container_width=True, type="secondary"):
                 # v1.99.22: Key específica por cenário
                 st.session_state[f'confirmar_aprovacao_metas_{cenario_metas_key}'] = True
 
@@ -19959,7 +19959,7 @@ def pagina_simulador_metas():
         confirmar_key = f'confirmar_aprovacao_metas_{cenario_metas_key}'
         if st.session_state.get(confirmar_key, False):
             st.markdown("---")
-            st.warning(f"⚠️ **ATENÇÃO:** Isso vai alterar o cenário {cenario_edicao}!")
+            st.warning(f"⚠️ **ATENÇÃO:** Isso vai alterar o cenário {cenario_metas_key}!")
             col_c1, col_c2 = st.columns(2)
             with col_c1:
                 if st.button("✅ Confirmar", type="primary", use_container_width=True):
@@ -20004,10 +20004,11 @@ def pagina_simulador_metas():
 
                     # CORREÇÃO v1.99.3: Pega uma CÓPIA do motor para aplicar metas
                     # Isso garante que modificações não afetam outros cenários acidentalmente
-                    motor_cenario_original = st.session_state.motores_cenarios.get(cenario_edicao)
+                    # v1.99.97: CRÍTICO - Usa cenario_metas_key (capturado no início) ao invés de cenario_edicao
+                    motor_cenario_original = st.session_state.motores_cenarios.get(cenario_metas_key)
                     if motor_cenario_original:
                         # Faz cópia independente para aplicar metas
-                        motor_cenario = _copiar_motor(motor_cenario_original, cenario_edicao)
+                        motor_cenario = _copiar_motor(motor_cenario_original, cenario_metas_key)
                         
                         # Aplica no motor COPIADO
                         resultado_aplicacao = motor_cenario.aplicar_simulacao_metas(resultado)
@@ -20032,14 +20033,15 @@ def pagina_simulador_metas():
                             log_info(f"[METAS-FIX] Limpou pct_crescimento de {len(motor_cenario.servicos)} serviços")
 
                             # 3. Limpa ajustes_cenarios do cenário
-                            if hasattr(motor_cenario, 'ajustes_cenarios') and cenario_edicao in motor_cenario.ajustes_cenarios:
-                                motor_cenario.ajustes_cenarios[cenario_edicao] = {
+                            # v1.99.97: Usa cenario_metas_key
+                            if hasattr(motor_cenario, 'ajustes_cenarios') and cenario_metas_key in motor_cenario.ajustes_cenarios:
+                                motor_cenario.ajustes_cenarios[cenario_metas_key] = {
                                     "sessoes": {},
                                     "valores": {},
                                     "despesas": {},
                                     "descricao": f"Ajustes limpos após simulação de metas"
                                 }
-                                log_info(f"[METAS-FIX] Limpou ajustes_cenarios[{cenario_edicao}]")
+                                log_info(f"[METAS-FIX] Limpou ajustes_cenarios[{cenario_metas_key}]")
 
                             # 4. v1.99.25: Limpa pct_reajuste dos serviços para evitar dupla aplicação de inflação
                             # A simulação usa valor_2025 mas receita usa valor_2026*(1+pct_reajuste), causando 0.3% extra
@@ -20051,13 +20053,14 @@ def pagina_simulador_metas():
 
                             # CORREÇÃO v1.99.3: Salva motor modificado DE VOLTA no dicionário
                             # Sem isso, as metas não eram persistidas corretamente!
-                            st.session_state.motores_cenarios[cenario_edicao] = motor_cenario
+                            # v1.99.97: CRÍTICO - Salva no cenário CORRETO (cenario_metas_key)
+                            st.session_state.motores_cenarios[cenario_metas_key] = motor_cenario
                             
                             # CORREÇÃO v1.99.9: FORÇA separação de TODOS os cenários
                             # Recria cada motor com deepcopy para garantir isolamento total
                             import copy
                             novos_motores = {}
-                            log_info(f"[DEEPCOPY-DEBUG] Iniciando recriação após aprovar {cenario_edicao}")
+                            log_info(f"[DEEPCOPY-DEBUG] Iniciando recriação após aprovar {cenario_metas_key}")
                             for cen_nome in ["Conservador", "Pessimista", "Otimista"]:
                                 motor_original = st.session_state.motores_cenarios.get(cen_nome)
                                 if motor_original:
@@ -20088,7 +20091,8 @@ def pagina_simulador_metas():
                                 print(f"[METAS-POS-OK] ✅ Motores independentes após deepcopy. IDs: {ids_pos}")
 
                             # Atualiza o motor atual para refletir as mudanças
-                            st.session_state.motor = _copiar_motor(st.session_state.motores_cenarios[cenario_edicao], cenario_edicao)
+                            # v1.99.97: Usa cenario_metas_key para pegar motor correto
+                            st.session_state.motor = _copiar_motor(st.session_state.motores_cenarios[cenario_metas_key], cenario_metas_key)
                             # v1.99.14: Marca como edição legítima para não bloquear sync
                             st.session_state.motor._edicao_legitima = True
                             
@@ -20135,8 +20139,8 @@ def pagina_simulador_metas():
                                         st.session_state.get('modelo_eficiencia', 'profissional')
                                     )
                                     if resultado_save:
-                                        st.toast(f"✅ Meta aplicada e SALVA em {cenario_edicao}!", icon="✅")
-                                        st.session_state.ultima_acao_metas = f"✅ Meta salva com sucesso em {cenario_edicao}"
+                                        st.toast(f"✅ Meta aplicada e SALVA em {cenario_metas_key}!", icon="✅")
+                                        st.session_state.ultima_acao_metas = f"✅ Meta salva com sucesso em {cenario_metas_key}"
                                     else:
                                         st.toast(f"⚠️ Problema ao salvar!", icon="⚠️")
                                         st.session_state.ultima_acao_metas = f"⚠️ Meta aplicada mas NÃO foi salva no banco"
