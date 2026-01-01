@@ -3496,62 +3496,65 @@ class MotorCalculo:
         """
         if not resultado_simulacao:
             return {"sucesso": False, "erro": "Simulação inválida"}
-        
-        pct_meta = resultado_simulacao["meta_input"]["pct_crescimento"]
-        
+
+        # v1.99.93: Proteção completa contra valores None
+        pct_meta = resultado_simulacao.get("meta_input", {}).get("pct_crescimento", 0) or 0
+
         # 1. Calcula faturamento 2025 e meta
-        fat_2025 = sum(getattr(self, 'faturamento_anterior', [0.0] * 12))
+        fat_anterior = getattr(self, 'faturamento_anterior', None) or [0.0] * 12
+        fat_2025 = sum((v or 0) for v in fat_anterior)
         if fat_2025 == 0:
             return {"sucesso": False, "erro": "Faturamento 2025 não preenchido"}
-        
+
         fat_meta = fat_2025 * (1 + pct_meta)
-        
+
         # 2. Calcula faturamento BASE (sem crescimento) para determinar o fator
         # CORREÇÃO v1.99.7: A meta é relativa a Fat_2025, então:
         #   Fat_meta = Fat_2025 × (1 + pct_meta)
         #   Como zeramos crescimento, sessões_novas × valor × 12 = Fat_meta
         #   Então fator = Fat_meta / Fat_base = (1 + pct_meta) se Fat_base ≈ Fat_2025
-        
+
         # Primeiro, tenta calcular Fat_base (sessões atuais × valor × 12, sem crescimento)
         fat_base = 0
-        
+
         for srv_nome, srv in self.servicos.items():
             sessoes_base_total = 0
             valor = 0
-            
+
             # ===== CALCULA SESSÕES BASE =====
             modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
-            
+
             if modo == "servico":
                 sessoes_base_total = srv.sessoes_mes_base or 0
             else:
                 # Modo profissional - soma sessões de fisioterapeutas
                 for fisio in self.fisioterapeutas.values():
                     if fisio.ativo:
-                        sessoes_base_total += fisio.sessoes_por_servico.get(srv_nome, 0)
-                
+                        sessoes_base_total += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
+
                 # Fallback: proprietarios + profissionais
                 if sessoes_base_total == 0:
                     for prop in self.proprietarios.values():
                         if getattr(prop, 'ativo', True):
-                            sessoes_base_total += prop.sessoes_por_servico.get(srv_nome, 0)
+                            sessoes_base_total += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
                     for prof in self.profissionais.values():
                         if getattr(prof, 'ativo', True):
-                            sessoes_base_total += prof.sessoes_por_servico.get(srv_nome, 0)
-            
+                            sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
+
             # ===== CALCULA VALOR DO SERVIÇO =====
             valor = getattr(srv, 'valor_2025', 0) or 0
             if valor == 0:
-                valor = self.valores_proprietario.get(srv_nome, 0)
+                valor = (self.valores_proprietario.get(srv_nome, 0) or 0)
             if valor == 0:
-                valor = self.valores_profissional.get(srv_nome, 0)
+                valor = (self.valores_profissional.get(srv_nome, 0) or 0)
             if valor == 0:
                 valor = getattr(srv, 'valor_2026', 0) or 0
-            
-            fat_base += sessoes_base_total * valor * 12
-        
+
+            fat_base += (sessoes_base_total or 0) * (valor or 0) * 12
+
         # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
-        if fat_base == 0 or abs(fat_base - fat_2025) / fat_2025 > 0.5:
+        # v1.99.93: Proteção contra divisão por zero
+        if fat_base == 0 or fat_2025 == 0 or abs(fat_base - fat_2025) / max(fat_2025, 1) > 0.5:
             # Fallback: usa fator direto (1 + pct_meta)
             # Isso garante que o resultado será Fat_2025 × (1 + pct_meta)
             fator_ajuste = 1 + pct_meta
