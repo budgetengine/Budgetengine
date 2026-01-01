@@ -3550,7 +3550,13 @@ class MotorCalculo:
             if valor == 0:
                 valor = getattr(srv, 'valor_2026', 0) or 0
 
-            fat_base += (sessoes_base_total or 0) * (valor or 0) * 12
+            # v1.99.93: Força conversão para float (pode vir string do JSON)
+            try:
+                sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
+                valor_num = float(valor) if valor else 0
+                fat_base += sessoes_num * valor_num * 12
+            except (TypeError, ValueError):
+                pass  # Ignora valores inválidos
 
         # Se não conseguiu calcular fat_base, usa fat_2025 e fator direto
         # v1.99.93: Proteção contra divisão por zero
