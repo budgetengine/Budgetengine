@@ -166,6 +166,22 @@ CODIGOS_ERRO = {
 # Changelog do Sistema
 CHANGELOG = [
     {
+        "versao": "1.99.96",
+        "data": "2026-01-01",
+        "tipo": "fix",
+        "descricao": "DIAGNÓSTICO: Verificação de contaminação entre cenários ao aplicar metas",
+        "detalhes": [
+            "PROBLEMA: Ao aplicar meta em Pessimista, Conservador também era afetado",
+            "DIAGNÓSTICO: Adicionado log [METAS-PRE] com sessões/IDs ANTES de aplicar",
+            "VERIFICAÇÃO: Detecta se motores compartilham mesma referência (ID)",
+            "VERIFICAÇÃO: Detecta se dicts fisioterapeutas são compartilhados",
+            "CORREÇÃO: Se contaminação detectada, recria motores com _copiar_motor",
+            "LOG: [METAS-CONTAM] quando contaminação é detectada",
+            "LOG: [METAS-POS-OK/ERRO] confirma isolamento após deepcopy",
+            "PACTO ALAN: Identificar raiz do problema antes de declarar resolvido"
+        ]
+    },
+    {
         "versao": "1.99.92",
         "data": "2026-01-01",
         "tipo": "fix",
@@ -19950,6 +19966,42 @@ def pagina_simulador_metas():
                     # v1.99.24: REMOVIDO sync que causava contaminação cruzada
                     # A simulação usa motor direto de motores_cenarios, não precisa sync antes
 
+                    # v1.99.96: VERIFICAÇÃO CRÍTICA - Detecta contaminação ANTES de aplicar metas
+                    motores_check = st.session_state.get('motores_cenarios', {})
+                    contaminacao_pre = False
+
+                    # Log do estado ANTES de aplicar
+                    for cen_nome, m in motores_check.items():
+                        if m:
+                            sess = sum(sum(f.sessoes_por_servico.values()) for f in m.fisioterapeutas.values()) if m.fisioterapeutas else 0
+                            print(f"[METAS-PRE] {cen_nome}: {sess:.0f} sessões, ID=...{str(id(m))[-6:]}")
+
+                    # Verifica se motores compartilham referências
+                    ids_motores = {nome: id(m) for nome, m in motores_check.items() if m}
+                    if len(set(ids_motores.values())) < len(ids_motores):
+                        print(f"[METAS-CONTAM] ⛔ ALERTA: Motores compartilham mesmo ID! {ids_motores}")
+                        contaminacao_pre = True
+
+                    # Verifica se fisioterapeutas são compartilhados
+                    for c1 in motores_check:
+                        for c2 in motores_check:
+                            if c1 < c2 and motores_check[c1] and motores_check[c2]:
+                                if motores_check[c1].fisioterapeutas is motores_check[c2].fisioterapeutas:
+                                    print(f"[METAS-CONTAM] ⛔ {c1} e {c2} compartilham dict fisioterapeutas!")
+                                    contaminacao_pre = True
+
+                    # Se detectou contaminação, RECRIA os motores antes de continuar
+                    if contaminacao_pre:
+                        print("[METAS-FIX] ⚠️ Recriando motores por contaminação detectada!")
+                        novos = {}
+                        for cn, m in motores_check.items():
+                            if m:
+                                novos[cn] = _copiar_motor(m, cn)
+                            else:
+                                novos[cn] = None
+                        st.session_state.motores_cenarios = novos
+                        _limpar_keys_widgets("METAS-CONTAM-FIX")
+
                     # CORREÇÃO v1.99.3: Pega uma CÓPIA do motor para aplicar metas
                     # Isso garante que modificações não afetam outros cenários acidentalmente
                     motor_cenario_original = st.session_state.motores_cenarios.get(cenario_edicao)
@@ -20027,7 +20079,14 @@ def pagina_simulador_metas():
                                     )
                                     log_info(f"[DEEPCOPY-DEBUG] {cen_nome}: receita_antes={total_antes:,.0f} receita_depois={total_depois:,.0f} diff={total_depois-total_antes:+,.0f} sessoes={total_sess:.0f}")
                             st.session_state.motores_cenarios = novos_motores
-                            
+
+                            # v1.99.96: Verificação PÓS-deepcopy - confirma isolamento
+                            ids_pos = {n: id(m) for n, m in novos_motores.items() if m}
+                            if len(set(ids_pos.values())) < len(ids_pos):
+                                print(f"[METAS-POS-ERRO] ⛔ CRÍTICO: Motores AINDA compartilham ID após deepcopy! {ids_pos}")
+                            else:
+                                print(f"[METAS-POS-OK] ✅ Motores independentes após deepcopy. IDs: {ids_pos}")
+
                             # Atualiza o motor atual para refletir as mudanças
                             st.session_state.motor = _copiar_motor(st.session_state.motores_cenarios[cenario_edicao], cenario_edicao)
                             # v1.99.14: Marca como edição legítima para não bloquear sync
