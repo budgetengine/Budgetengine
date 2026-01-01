@@ -702,20 +702,20 @@ class ClienteManager:
             os.remove(path_filial)
 
     def listar_filiais(self, cliente_id: str) -> List[Dict]:
-        """Lista filiais de um cliente"""
+        """Lista filiais de um cliente - MOSTRA TODAS, mesmo vazias"""
         cliente = self.carregar_cliente(cliente_id)
         if not cliente:
             return []
-        
+
         filiais = []
         for filial_id in cliente.filiais:
             dados = self.carregar_filial(cliente_id, filial_id)
-            if dados:
-                filiais.append({
-                    "id": filial_id,
-                    "nome": dados.get("nome", filial_id)
-                })
-        
+            # SEMPRE mostra a filial, mesmo se dados estiver vazio
+            filiais.append({
+                "id": filial_id,
+                "nome": dados.get("nome", filial_id) if dados else filial_id
+            })
+
         return filiais
 
 
