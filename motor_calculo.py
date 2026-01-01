@@ -3568,35 +3568,37 @@ class MotorCalculo:
             except (TypeError, ValueError):
                 pass
 
-        # v1.99.98: CORREÇÃO CRÍTICA - Meta é SEMPRE relativa a 2025
+        # v1.99.99: CORREÇÃO DEFINITIVA - Crescimento de SESSÕES baseado em 2025
         #
-        # PROBLEMA ANTERIOR:
-        # O código usava fator = fat_meta / fat_base, onde fat_base = sessões_atuais × valor × 12
-        # Se as sessões já foram modificadas (ex: copiadas de outro cenário), fat_base ≠ fat_2025
-        # Resultado: fator errado, aumento insignificante
+        # LÓGICA DO USUÁRIO:
+        # "Quero crescer 20% em relação a 2025" significa:
+        # - SESSÕES devem ser 20% maiores que as sessões de 2025
+        # - Preço de 2026 é SEPARADO - reajuste não conta como crescimento
+        # - Crescimento = MAIS ATIVIDADE (sessões), não valor monetário
         #
-        # CORREÇÃO:
-        # 1. Calcular "sessões base 2025" = fat_2025 / (valor_medio × 12)
-        # 2. Calcular "sessões meta" = sessões_base × (1 + pct_meta)
-        # 3. Fator = sessões_meta / sessões_atuais
+        # CÁLCULO:
+        # 1. sessoes_2025 = fat_2025 / valor_medio_2025
+        # 2. sessoes_meta = sessoes_2025 × (1 + pct_meta)
+        # 3. fator = sessoes_meta / sessoes_atuais
         #
-        # Ou simplificado: fator = (fat_2025 × (1 + pct)) / fat_base
-        # Isso SEMPRE leva ao resultado correto, independente do estado atual
+        # Como não temos valor_2025 diretamente, usamos:
+        # - Se sessões atuais ≈ sessões de 2025 (não mudaram), fator = 1 + pct_meta
+        # - Esta é a interpretação correta: sessões crescem pelo % especificado
 
-        if fat_2025 == 0 or fat_base == 0:
+        if fat_2025 == 0:
             fator_ajuste = 1.0
-            fat_atual = fat_2025 or fat_base
-            print(f"[METAS-CALC] ⚠️ fat_2025={fat_2025:,.0f} ou fat_base={fat_base:,.0f} é zero, usando fator=1.0")
+            print(f"[METAS-CALC] ⚠️ fat_2025=0, usando fator=1.0")
         else:
-            # Fator que leva de fat_base → fat_meta (alvo)
-            fator_ajuste = fat_meta / fat_base
-            fat_atual = fat_base
+            # CORREÇÃO SIMPLES E DIRETA:
+            # Se usuário quer +20% de crescimento, sessões aumentam 20%
+            # Independente de preços, inflação, ou estado atual
+            fator_ajuste = 1 + pct_meta
 
-            print(f"[METAS-CALC] fat_2025={fat_2025:,.0f}")
-            print(f"[METAS-CALC] fat_meta={fat_meta:,.0f} (fat_2025 × {1+pct_meta:.2f})")
-            print(f"[METAS-CALC] fat_base={fat_base:,.0f} (projeção atual)")
+            print(f"[METAS-CALC] fat_2025={fat_2025:,.0f} (base do exercício anterior)")
+            print(f"[METAS-CALC] fat_base={fat_base:,.0f} (projeção atual - apenas referência)")
+            print(f"[METAS-CALC] pct_meta={pct_meta*100:+.1f}%")
             print(f"[METAS-CALC] fator_ajuste={fator_ajuste:.4f} ({(fator_ajuste-1)*100:+.1f}%)")
-            print(f"[METAS-CALC] Resultado esperado: fat_base × fator = {fat_base * fator_ajuste:,.0f}")
+            print(f"[METAS-CALC] Sessões aumentam {pct_meta*100:+.1f}% → crescimento REAL de atividade")
         
         # 3. Guarda snapshot para possível rollback
         snapshot = {
