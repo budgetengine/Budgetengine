@@ -1320,9 +1320,9 @@ class Cenario:
             fator_receita=0.75,
             fator_despesas=1.0,  # Inflação já aplicada via Premissas Macro
             fator_crescimento=0.50,
-            fator_inflacao=1.20
+            fator_inflacao=1.20  # Crise = inflação alta = reajuste maior
         )
-    
+
     @classmethod
     def conservador(cls) -> 'Cenario':
         return cls(
@@ -1333,7 +1333,7 @@ class Cenario:
             fator_crescimento=0.75,
             fator_inflacao=1.08
         )
-    
+
     @classmethod
     def base(cls) -> 'Cenario':
         return cls(
@@ -1344,7 +1344,7 @@ class Cenario:
             fator_crescimento=1.0,
             fator_inflacao=1.0
         )
-    
+
     @classmethod
     def otimista(cls) -> 'Cenario':
         return cls(
@@ -1353,7 +1353,7 @@ class Cenario:
             fator_receita=1.15,
             fator_despesas=1.0,  # Inflação já aplicada via Premissas Macro
             fator_crescimento=1.30,
-            fator_inflacao=0.95
+            fator_inflacao=0.95  # Favorável = inflação baixa = reajuste menor
         )
     
     @classmethod
@@ -2506,7 +2506,7 @@ class MotorCalculo:
         # APLICA SAZONALIDADE
         fator_sazonalidade = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
         return sessoes * fator_sazonalidade
-    
+
     def validar_sessoes(self) -> dict:
         """
         Valida consistência das sessões entre serviços e profissionais.
@@ -2705,14 +2705,15 @@ class MotorCalculo:
         
         # Produção própria do proprietário - CALCULA DINAMICAMENTE
         # Soma faturamento dos serviços que proprietários atendem
-        producao_propria = 0
+        # BUG #7 CORRIGIDO: Primeiro coleta serviços, depois soma (evita contagem dupla)
         servicos_proprietario = set()
         for fisio in self.fisioterapeutas.values():
             if fisio.cargo == "Proprietário" and fisio.ativo:
                 for srv in fisio.sessoes_por_servico.keys():
                     servicos_proprietario.add(srv)
-                    producao_propria += faturamento_por_servico.get(srv, 0)
-        
+        # Calcula producao_propria UMA vez só (após coletar todos os serviços)
+        producao_propria = sum(faturamento_por_servico.get(srv, 0) for srv in servicos_proprietario)
+
         # Faturamento da equipe (sem serviços do proprietário)
         faturamento_equipe = producao_total - producao_propria
         
@@ -2939,9 +2940,11 @@ class MotorCalculo:
         # 1. Calcula situação atual usando função existente
         folha_atual = self.calcular_folha_fisioterapeutas_mes(mes_referencia)
         
-        # 2. Extrai dados atuais dos fisioterapeutas
+        # 2. Extrai dados atuais dos fisioterapeutas E proprietários (v1.99.56)
         faturamento_fisios_atual = sum(f["faturamento"] for f in folha_atual["fisioterapeutas"])
+        faturamento_fisios_atual += sum(p.get("faturamento", 0) for p in folha_atual.get("proprietarios", []))
         sessoes_atual = sum(f["sessoes"] for f in folha_atual["fisioterapeutas"])
+        sessoes_atual += sum(p.get("sessoes", 0) for p in folha_atual.get("proprietarios", []))
         remuneracao_atual = folha_atual["total_fisioterapeutas"]
         
         # 3. Define faturamento base para cálculo da meta
@@ -3177,7 +3180,9 @@ class MotorCalculo:
                 dados_mensais_fisios[nome]["total_remuneracao"] += fisio["remuneracao"]
             
             totais_anuais["faturamento_fisios"] += sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+            totais_anuais["faturamento_fisios"] += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
             totais_anuais["sessoes"] += sum(f["sessoes"] for f in folha_mes["fisioterapeutas"])
+            totais_anuais["sessoes"] += sum(p.get("sessoes", 0) for p in folha_mes.get("proprietarios", []))
             totais_anuais["remuneracao"] += folha_mes["total_fisioterapeutas"]
         
         # 3. Define base para cálculo da meta
@@ -3268,6 +3273,7 @@ class MotorCalculo:
                 # Participação do fisio no total dos fisios neste mês
                 folha_mes = self.calcular_folha_fisioterapeutas_mes(mes)
                 fat_total_fisios_mes = sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
+                fat_total_fisios_mes += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
                 participacao_mes = fat_atual_mes / fat_total_fisios_mes if fat_total_fisios_mes > 0 else 0
                 
                 # Gap deste mês que todos os fisios precisam cobrir
@@ -3517,7 +3523,7 @@ class MotorCalculo:
             modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
             
             if modo == "servico":
-                sessoes_base_total = srv.sessoes_mes_base
+                sessoes_base_total = srv.sessoes_mes_base or 0
             else:
                 # Modo profissional - soma sessões de fisioterapeutas
                 for fisio in self.fisioterapeutas.values():
@@ -3591,11 +3597,11 @@ class MotorCalculo:
         
         # 5a. Ajusta SERVIÇOS - sessoes_mes_base
         for nome_srv, srv in self.servicos.items():
-            sessoes_anterior = srv.sessoes_mes_base
-            srv.sessoes_mes_base = round(srv.sessoes_mes_base * fator_ajuste, 1)
-            
+            sessoes_anterior = srv.sessoes_mes_base or 0
+            srv.sessoes_mes_base = round((srv.sessoes_mes_base or 0) * fator_ajuste, 1)
+
             # Zera crescimento (já está embutido nas sessões)
-            cresc_anterior = srv.pct_crescimento
+            cresc_anterior = srv.pct_crescimento or 0
             srv.pct_crescimento = 0.0
             
             alteracoes.append({
@@ -3616,9 +3622,9 @@ class MotorCalculo:
         # 5b. Ajusta FISIOTERAPEUTAS - sessoes_por_servico
         for nome, fisio in self.fisioterapeutas.items():
             for servico in list(fisio.sessoes_por_servico.keys()):
-                sessoes_anterior = fisio.sessoes_por_servico[servico]
+                sessoes_anterior = fisio.sessoes_por_servico.get(servico, 0) or 0
                 fisio.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
-                
+
                 # Zera crescimento
                 fisio.pct_crescimento_por_servico[servico] = 0.0
                 
@@ -3634,7 +3640,7 @@ class MotorCalculo:
         # 5c. Ajusta PROPRIETÁRIOS - sessoes_por_servico
         for nome, prop in self.proprietarios.items():
             for servico in list(prop.sessoes_por_servico.keys()):
-                sessoes_anterior = prop.sessoes_por_servico[servico]
+                sessoes_anterior = prop.sessoes_por_servico.get(servico, 0) or 0
                 prop.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
                 prop.pct_crescimento_por_servico[servico] = 0.0
                 
@@ -3650,7 +3656,7 @@ class MotorCalculo:
         # 5d. Ajusta PROFISSIONAIS - sessoes_por_servico
         for nome, prof in self.profissionais.items():
             for servico in list(prof.sessoes_por_servico.keys()):
-                sessoes_anterior = prof.sessoes_por_servico[servico]
+                sessoes_anterior = prof.sessoes_por_servico.get(servico, 0) or 0
                 prof.sessoes_por_servico[servico] = round(sessoes_anterior * fator_ajuste, 1)
                 prof.pct_crescimento_por_servico[servico] = 0.0
                 
@@ -4040,11 +4046,11 @@ class MotorCalculo:
                     pct_crescimento_por_servico=dict(prop.pct_crescimento_por_servico) if prop.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões e crescimento se já existe
+                # v1.99.56: SUBSTITUI sessões (não mescla) para evitar duplicação
                 if prop.sessoes_por_servico:
-                    self.fisioterapeutas[nome].sessoes_por_servico.update(prop.sessoes_por_servico)
+                    self.fisioterapeutas[nome].sessoes_por_servico = dict(prop.sessoes_por_servico)
                 if prop.pct_crescimento_por_servico:
-                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prop.pct_crescimento_por_servico)
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico = dict(prop.pct_crescimento_por_servico)
         
         # ========== PROFISSIONAIS ==========
         # 3. Sincroniza de profissionais (Atendimentos) -> fisioterapeutas
@@ -4060,12 +4066,12 @@ class MotorCalculo:
                     pct_crescimento_por_servico=dict(prof.pct_crescimento_por_servico) if prof.pct_crescimento_por_servico else {}
                 )
             else:
-                # Atualiza sessões e crescimento se já existe
+                # v1.99.56: SUBSTITUI sessões (não mescla) para evitar duplicação
                 if prof.sessoes_por_servico:
-                    self.fisioterapeutas[nome].sessoes_por_servico.update(prof.sessoes_por_servico)
+                    self.fisioterapeutas[nome].sessoes_por_servico = dict(prof.sessoes_por_servico)
                 if prof.pct_crescimento_por_servico:
-                    self.fisioterapeutas[nome].pct_crescimento_por_servico.update(prof.pct_crescimento_por_servico)
-        
+                    self.fisioterapeutas[nome].pct_crescimento_por_servico = dict(prof.pct_crescimento_por_servico)
+
         # 4. Sincroniza de fisioterapeutas -> profissionais (sessões e crescimento)
         for nome, fisio in self.fisioterapeutas.items():
             if fisio.cargo in ["Fisioterapeuta", "Gerente"]:
@@ -4327,43 +4333,43 @@ class MotorCalculo:
         """
         Calcula quantidade de sessões no mês usando CRESCIMENTO LINEAR.
         Fórmula: base + (meta - base) / 13.1 * (mes + 0.944)
-        
+
         RESPEITA modo_calculo_sessoes:
         - "servico": Usa sessoes_mes_base e pct_crescimento do serviço
         - "profissional": Soma dos fisios com seus crescimentos individuais
         """
         modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
-        
+
         # ========================================
         # MODO SERVIÇO: Usa dados do cadastro de serviços
         # ========================================
         if modo == "servico":
             if servico not in self.servicos:
                 return 0
-            
+
             srv = self.servicos[servico]
             sessoes_base = srv.sessoes_mes_base
             pct_crescimento = srv.pct_crescimento
-            
+
             if sessoes_base == 0:
                 return 0
-            
+
             if pct_crescimento > 0:
                 crescimento_qtd = sessoes_base * pct_crescimento
                 cresc_mensal = crescimento_qtd / 13.1
                 sessoes = sessoes_base + cresc_mensal * (mes + 0.944)
             else:
                 sessoes = sessoes_base
-            
+
             # APLICA SAZONALIDADE
-            fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-            return sessoes * fator
-        
+            fator_sazon = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
+            return sessoes * fator_sazon
+
         # ========================================
         # MODO PROFISSIONAL: Soma dos cadastros com crescimento individual
         # ========================================
         total = 0
-        
+
         # Primeiro tenta fisioterapeutas (estrutura principal)
         for fisio in self.fisioterapeutas.values():
             if not fisio.ativo:
@@ -4377,7 +4383,7 @@ class MotorCalculo:
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
                 else:
                     total += sessoes_base
-        
+
         # FALLBACK: Se não encontrou em fisioterapeutas, tenta estruturas antigas
         if total == 0:
             # Proprietários (estrutura antiga)
@@ -4388,7 +4394,7 @@ class MotorCalculo:
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
-            
+
             # Profissionais (estrutura antiga)
             for prof in self.profissionais.values():
                 sessoes_base = prof.sessoes_por_servico.get(servico, 0)
@@ -4397,11 +4403,11 @@ class MotorCalculo:
                     crescimento_qtd = sessoes_base * pct_crescimento
                     cresc_mensal = crescimento_qtd / 13.1
                     total += sessoes_base + cresc_mensal * (mes + 0.944)
-        
-        # APLICA SAZONALIDADE no total
-        fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-        return total * fator
-    
+
+        # APLICA SAZONALIDADE
+        fator_sazon = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
+        return total * fator_sazon
+
     def calcular_sessoes_mes_por_tipo(self, servico: str, mes: int, tipo: str = "todos") -> float:
         """
         Calcula sessões por tipo (proprietario, profissional ou todos) com crescimento.
@@ -4512,9 +4518,9 @@ class MotorCalculo:
                         total += sessoes_base
         
         # APLICA SAZONALIDADE
-        fator = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-        return total * fator
-    
+        fator_sazon = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
+        return total * fator_sazon
+
     def calcular_valor_servico_mes(self, servico: str, mes: int, tipo: str = "profissional") -> float:
         """
         Calcula valor do serviço no mês.
@@ -4524,22 +4530,22 @@ class MotorCalculo:
         srv = self.servicos.get(servico)
         if not srv:
             return 0
-        
+
         # Pega valores antes/depois conforme tipo
         if tipo == "proprietario":
             valores = self.valores_proprietario.get(servico, {})
         else:
             valores = self.valores_profissional.get(servico, {})
-        
+
         # Se é dicionário com antes/depois
         if isinstance(valores, dict) and valores:
             valor_antes = valores.get("antes", 0)
             valor_depois = valores.get("depois", 0)
-            
+
             # Se não tem valor antes, usa valor depois
             if valor_antes == 0:
                 valor_antes = valor_depois
-            
+
             # Retorna valor conforme mês (mes 0=jan, 1=fev, 2=mar)
             # Reajuste em março = mes_reajuste 3, então mes >= 2 usa valor_depois
             if mes >= srv.mes_reajuste - 1:
@@ -4563,28 +4569,31 @@ class MotorCalculo:
                 return srv.valor_2026
     
     def calcular_receita_servico_mes(self, servico: str, mes: int) -> float:
-        """Calcula receita de um serviço em um mês específico"""
+        """
+        Calcula receita de um serviço em um mês específico.
+        v1.99.57: fator_receita já aplicado em calcular_sessoes_mes_por_tipo (não duplicar!)
+        """
         receita = 0
-        
-        # Receita de proprietários
+
+        # Receita de proprietários (sessões já incluem fator_receita do cenário)
         sessoes_prop = self.calcular_sessoes_mes_por_tipo(servico, mes, "proprietario")
         valor_prop = self.calcular_valor_servico_mes(servico, mes, "proprietario")
         receita += sessoes_prop * valor_prop
-        
-        # Receita de profissionais
+
+        # Receita de profissionais (sessões já incluem fator_receita do cenário)
         sessoes_prof = self.calcular_sessoes_mes_por_tipo(servico, mes, "profissional")
         valor_prof = self.calcular_valor_servico_mes(servico, mes, "profissional")
         receita += sessoes_prof * valor_prof
-        
-        # Aplicar ajustes do cenário (Pessimista/Otimista)
+
+        # Aplicar ajustes MANUAIS do cenário (Pessimista/Otimista)
         cenario_nome = self.cenario.nome if hasattr(self, 'cenario') else "Conservador"
-        
+
         if cenario_nome != "Conservador" and hasattr(self, 'ajustes_cenarios'):
             # Ajuste de sessões (soma às sessões base)
             ajuste_sessoes = self.get_ajuste_sessoes(cenario_nome, servico)
             # Ajuste de valor (soma ao valor base)
             ajuste_valor = self.get_ajuste_valor(cenario_nome, servico)
-            
+
             if ajuste_sessoes != 0:
                 # Calcular valor médio ponderado para as sessões adicionais
                 total_sessoes = sessoes_prop + sessoes_prof
@@ -4594,12 +4603,12 @@ class MotorCalculo:
                     valor_medio = (valor_prop + valor_prof) / 2 if (valor_prop + valor_prof) > 0 else 0
                 # Adicionar receita das sessões extras
                 receita += ajuste_sessoes * valor_medio
-            
+
             if ajuste_valor != 0:
                 # Aplicar ajuste de valor em todas as sessões
                 total_sessoes = sessoes_prop + sessoes_prof + ajuste_sessoes
                 receita += ajuste_valor * total_sessoes
-        
+
         return receita
     
     def calcular_receita_bruta_total(self) -> Dict[str, List[float]]:
