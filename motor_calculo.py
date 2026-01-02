@@ -3195,18 +3195,37 @@ class MotorCalculo:
         
         # 4. Calcula metas anuais
         faturamento_meta_anual = faturamento_base_anual * (1 + pct_crescimento_meta)
-        gap_anual = faturamento_meta_anual - totais_anuais["faturamento_fisios"]
-        
+
         # 5. Calcula META MENSAL usando proporção do faturamento 2025
-        # Cada mês terá exatamente +X% sobre o faturamento de 2025 daquele mês
         metas_mensais_2026 = []
         for i in range(12):
             meta_mes = fat_2025[i] * (1 + pct_crescimento_meta)
             metas_mensais_2026.append(meta_mes)
-        
-        # 6. Valor médio por sessão (anual)
-        valor_medio_sessao = totais_anuais["faturamento_fisios"] / totais_anuais["sessoes"] if totais_anuais["sessoes"] > 0 else 0
-        sessoes_adicionais_total = gap_anual / valor_medio_sessao if valor_medio_sessao > 0 else 0
+
+        # 6. GOAL SEEK v2.0.2: Usa get_valor_servico() igual ao display
+        # Calcula fat_base com a MESMA lógica de preços do display (inclui reajuste)
+        fat_base_premissas = 0
+        for srv_nome in self.servicos.keys():
+            sessoes_srv = 0
+            for fisio in self.fisioterapeutas.values():
+                if fisio.ativo:
+                    sessoes_srv += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
+            for prop in self.proprietarios.values():
+                if getattr(prop, 'ativo', True):
+                    sessoes_srv += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+            # Usa get_valor_servico para cada mês (igual ao display)
+            for mes in range(12):
+                valor_mes = self.get_valor_servico(srv_nome, mes, "profissional")
+                fat_base_premissas += sessoes_srv * valor_mes
+
+        if fat_base_premissas == 0:
+            fat_base_premissas = totais_anuais["faturamento_fisios"]
+
+        # GOAL SEEK: fator = fat_meta / fat_base
+        fator_goal_seek = faturamento_meta_anual / fat_base_premissas if fat_base_premissas > 0 else 1.0
+        sessoes_adicionais_total = totais_anuais["sessoes"] * (fator_goal_seek - 1)
+        gap_anual = faturamento_meta_anual - fat_base_premissas
+        valor_medio_sessao = fat_base_premissas / totais_anuais["sessoes"] if totais_anuais["sessoes"] > 0 else 0
         
         # 7. Distribui gap entre fisios (anual)
         resultado_fisios = []
@@ -3217,24 +3236,15 @@ class MotorCalculo:
             fisio_obj = self.fisioterapeutas.get(nome)
             if not fisio_obj or not fisio_obj.ativo:
                 continue
-            
-            # Participação proporcional no faturamento total dos fisios
-            participacao = dados["total_faturamento"] / totais_anuais["faturamento_fisios"] if totais_anuais["faturamento_fisios"] > 0 else 0
-            
-            # Distribui gap anual
-            if modo_distribuicao == "proporcional":
-                gap_fisio = gap_anual * participacao
-            else:  # igual
-                qtd_fisios = len(dados_mensais_fisios)
-                gap_fisio = gap_anual / qtd_fisios if qtd_fisios > 0 else 0
-            
-            # Sessões adicionais anuais
-            valor_sessao_fisio = dados["total_faturamento"] / dados["total_sessoes"] if dados["total_sessoes"] > 0 else valor_medio_sessao
-            sessoes_adicionais = gap_fisio / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
-            
-            # Novos totais anuais
+
+            # GOAL SEEK v2.0.2: Aplica o mesmo fator a todos os fisios
+            # Sessões do fisio × fator_goal_seek = sessões_meta
+            sessoes_adicionais = dados["total_sessoes"] * (fator_goal_seek - 1)
             sessoes_meta = dados["total_sessoes"] + sessoes_adicionais
-            faturamento_meta = dados["total_faturamento"] + gap_fisio
+
+            # Faturamento meta = sessões_meta × valor_medio (das premissas)
+            faturamento_meta = sessoes_meta * valor_medio_sessao if valor_medio_sessao > 0 else dados["total_faturamento"]
+            gap_fisio = faturamento_meta - dados["total_faturamento"]
             
             # Calcula nova remuneração
             tipo_rem = dados["tipo_remuneracao"]
@@ -3262,68 +3272,25 @@ class MotorCalculo:
             meses_meta = {}
             for mes in range(1, 13):
                 dados_mes = dados["meses"].get(mes, {"sessoes": 0, "faturamento": 0, "remuneracao": 0})
-                
-                # Meta deste mês específico: 2025_mes * (1 + pct_meta)
-                fat_2025_mes = fat_2025[mes - 1]
-                meta_fat_mes = fat_2025_mes * (1 + pct_crescimento_meta)
-                
-                # Quanto o fisio produz atualmente neste mês
-                fat_atual_mes = dados_mes["faturamento"]
-                
-                # Participação do fisio no total dos fisios neste mês
-                folha_mes = self.calcular_folha_fisioterapeutas_mes(mes)
-                fat_total_fisios_mes = sum(f["faturamento"] for f in folha_mes["fisioterapeutas"])
-                fat_total_fisios_mes += sum(p.get("faturamento", 0) for p in folha_mes.get("proprietarios", []))
-                participacao_mes = fat_atual_mes / fat_total_fisios_mes if fat_total_fisios_mes > 0 else 0
-                
-                # Gap deste mês que todos os fisios precisam cobrir
-                gap_mes_total = meta_fat_mes - fat_total_fisios_mes
-                
-                # Gap deste fisio neste mês (proporcional à sua participação)
-                if modo_distribuicao == "proporcional":
-                    gap_fisio_mes = gap_mes_total * participacao_mes
-                else:
-                    qtd_fisios = len(dados_mensais_fisios)
-                    gap_fisio_mes = gap_mes_total / qtd_fisios if qtd_fisios > 0 else 0
-                
-                # Meta de faturamento do fisio neste mês
-                fat_meta_fisio_mes = fat_atual_mes + gap_fisio_mes
-                
-                # Sessões adicionais para este mês (calculadas após verificar faturamento)
-                valor_sessao_fisio = fat_atual_mes / dados_mes["sessoes"] if dados_mes["sessoes"] > 0 else valor_medio_sessao
-                
-                # Faturamento meta nunca pode ser menor que atual
-                if fat_meta_fisio_mes < fat_atual_mes:
-                    fat_meta_fisio_mes = fat_atual_mes
-                
-                # Agora calcula gap REAL de faturamento (após proteção)
-                gap_fisio_mes_real = fat_meta_fisio_mes - fat_atual_mes
-                
-                # Sessões adicionais baseadas no gap REAL
-                sessoes_add_mes = gap_fisio_mes_real / valor_sessao_fisio if valor_sessao_fisio > 0 else 0
-                
-                # Sessões meta
-                sessoes_meta_mes = dados_mes["sessoes"] + sessoes_add_mes
-                
-                # IMPORTANTE: Sessões meta nunca pode ser menor que atual
-                if sessoes_meta_mes < dados_mes["sessoes"]:
-                    sessoes_meta_mes = dados_mes["sessoes"]
-                
+
+                # GOAL SEEK v2.0.2: Aplica fator_goal_seek às sessões do mês
+                sessoes_meta_mes = dados_mes["sessoes"] * fator_goal_seek
+
+                # Faturamento meta = sessões × valor_medio (premissas)
+                fat_meta_fisio_mes = sessoes_meta_mes * valor_medio_sessao if valor_medio_sessao > 0 else dados_mes["faturamento"] * fator_goal_seek
+
                 # Remuneração proporcional às NOVAS sessões
                 if tipo_rem == "valor_fixo":
                     rem_meta_mes = sessoes_meta_mes * (dados_mes["remuneracao"] / dados_mes["sessoes"]) if dados_mes["sessoes"] > 0 else 0
                 else:
                     rem_meta_mes = fat_meta_fisio_mes * pct_nivel * 0.75
-                
-                # IMPORTANTE: Remuneração nunca pode cair
-                if rem_meta_mes < dados_mes["remuneracao"]:
-                    rem_meta_mes = dados_mes["remuneracao"]
-                
+
                 meses_meta[mes] = {
                     "sessoes_atual": dados_mes["sessoes"],
                     "sessoes_meta": sessoes_meta_mes,
                     "faturamento_atual": dados_mes["faturamento"],
                     "faturamento_meta": fat_meta_fisio_mes,
+                    "faturamento_2025": fat_2025[mes - 1],
                     "remuneracao_atual": dados_mes["remuneracao"],
                     "remuneracao_meta": rem_meta_mes,
                 }
@@ -3509,13 +3476,12 @@ class MotorCalculo:
 
         fat_meta = fat_2025 * (1 + pct_meta)
 
-        # 2. Calcula fat_base = sessões_atuais × valor_2026 × 12
-        # (o que as sessões atuais produziriam a preços de 2026)
+        # 2. GOAL SEEK v2.0.2: Usa get_valor_servico() igual ao display
+        # Calcula fat_base com a MESMA lógica de preços do display (inclui reajuste)
         fat_base = 0
 
         for srv_nome, srv in self.servicos.items():
             sessoes_base_total = 0
-            valor = 0
 
             # ===== CALCULA SESSÕES BASE =====
             modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
@@ -3537,50 +3503,21 @@ class MotorCalculo:
                         if getattr(prof, 'ativo', True):
                             sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
 
-            # ===== CALCULA VALOR DO SERVIÇO =====
-            # v1.99.93: valores_proprietario/profissional têm estrutura {'antes': X, 'depois': Y}
-            def _extrair_valor(v):
-                if v is None:
-                    return 0
-                if isinstance(v, dict):
-                    return float(v.get('depois', v.get('antes', 0)) or 0)
-                try:
-                    return float(v)
-                except (TypeError, ValueError):
-                    return 0
-
-            # v2.0.1: GOAL SEEK - Usa valor_2026 para calcular fat_base
-            # fat_base = sessões_atuais × valor_2026 (o que produziria hoje a preços de 2026)
-            valor = getattr(srv, 'valor_2026', 0) or 0
-            if valor == 0:
-                valor = _extrair_valor(self.valores_proprietario.get(srv_nome, 0))
-            if valor == 0:
-                valor = _extrair_valor(self.valores_profissional.get(srv_nome, 0))
-            if valor == 0:
-                valor = getattr(srv, 'valor_2025', 0) or 0
-
+            # ===== CALCULA FAT_BASE USANDO get_valor_servico (igual display) =====
             try:
                 sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
-                valor_num = float(valor) if valor else 0
-                fat_base += sessoes_num * valor_num * 12
+                for mes in range(12):
+                    valor_mes = self.get_valor_servico(srv_nome, mes, "profissional")
+                    fat_base += sessoes_num * valor_mes
             except (TypeError, ValueError):
                 pass
 
-        # v2.0.1: GOAL SEEK - Atingir Meta (estilo Excel)
+        # v2.0.2: GOAL SEEK - Atingir Meta (estilo Excel)
+        # Usa get_valor_servico() igual ao display para consistência
         #
-        # LÓGICA DO USUÁRIO:
-        # "Quero crescer 20% em FATURAMENTO de 2025 para 2026"
-        # Pergunta: Quantas SESSÕES preciso a preços de 2026 para atingir essa meta?
-        #
-        # CÁLCULO:
-        # 1. fat_meta = fat_2025 × (1 + pct_meta)  -- meta de faturamento
-        # 2. fat_base = sessões_atuais × valor_2026  -- o que sessões atuais produziriam
-        # 3. fator_ajuste = fat_meta / fat_base  -- ajuste necessário
-        #
-        # EXEMPLO: Se preços subiram 18% e meta é +20% faturamento:
-        # - fat_base ≈ fat_2025 × 1.18 (mais receita por sessão)
-        # - fat_meta = fat_2025 × 1.20 (meta)
-        # - fator = 1.20 / 1.18 ≈ 1.017 (apenas ~2% mais sessões!)
+        # fat_meta = fat_2025 × (1 + pct_meta)
+        # fat_base = sessões × get_valor_servico(mês) para cada mês
+        # fator_ajuste = fat_meta / fat_base
 
         if fat_2025 == 0:
             fator_ajuste = 1.0
