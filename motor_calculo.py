@@ -3202,32 +3202,45 @@ class MotorCalculo:
             meta_mes = fat_2025[i] * (1 + pct_crescimento_meta)
             metas_mensais_2026.append(meta_mes)
 
-        # 6. GOAL SEEK v2.0.4: Calcula fat_base IGUAL ao display APÓS aplicar
-        # Após aplicar: pct_reajuste=0, pct_crescimento=0
-        # Display usa: sessoes_base × sazonalidade × valor_2026
-        # Então simulação deve usar a mesma fórmula
-        fat_base_premissas = 0
+        # 6. GOAL SEEK v2.0.5: Calcula fat_base usando EXATAMENTE a mesma função do display
+        # Primeiro zera pct_crescimento e pct_reajuste (como app.py faz após aplicar)
+        # Depois usa calcular_receita_servico_mes() para fat_base
+
+        # 6a. Salva valores originais
+        backup_crescimento = {}
+        backup_reajuste = {}
+        backup_fisio_cresc = {}
+
         for srv_nome, srv in self.servicos.items():
-            valor_2026 = srv.valor_2026 or 0
+            backup_crescimento[srv_nome] = srv.pct_crescimento
+            backup_reajuste[srv_nome] = srv.pct_reajuste
 
-            # Pega sessoes_base SEM crescimento (igual display após aplicar)
-            sessoes_base = 0
-            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
-            if modo == "servico":
-                sessoes_base = srv.sessoes_mes_base or 0
-            else:
-                for fisio in self.fisioterapeutas.values():
-                    if fisio.ativo:
-                        sessoes_base += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
-                for prop in self.proprietarios.values():
-                    if getattr(prop, 'ativo', True):
-                        sessoes_base += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+        for nome, fisio in self.fisioterapeutas.items():
+            backup_fisio_cresc[nome] = dict(fisio.pct_crescimento_por_servico)
 
-            # Aplica só sazonalidade (sem pct_crescimento)
+        # 6b. Zera temporariamente (simula estado após aplicar)
+        for srv in self.servicos.values():
+            srv.pct_crescimento = 0.0
+            srv.pct_reajuste = 0.0
+
+        for fisio in self.fisioterapeutas.values():
+            for srv_nome in fisio.pct_crescimento_por_servico:
+                fisio.pct_crescimento_por_servico[srv_nome] = 0.0
+
+        # 6c. Calcula fat_base usando a mesma função do display
+        fat_base_premissas = 0
+        for srv_nome in self.servicos:
             for mes in range(12):
-                fator_saz = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-                sessoes_mes = sessoes_base * fator_saz
-                fat_base_premissas += sessoes_mes * valor_2026
+                fat_base_premissas += self.calcular_receita_servico_mes(srv_nome, mes)
+
+        # 6d. Restaura valores originais
+        for srv_nome, srv in self.servicos.items():
+            srv.pct_crescimento = backup_crescimento.get(srv_nome, 0)
+            srv.pct_reajuste = backup_reajuste.get(srv_nome, 0)
+
+        for nome, fisio in self.fisioterapeutas.items():
+            if nome in backup_fisio_cresc:
+                fisio.pct_crescimento_por_servico = backup_fisio_cresc[nome]
 
         if fat_base_premissas == 0:
             fat_base_premissas = totais_anuais["faturamento_fisios"]
@@ -3487,34 +3500,49 @@ class MotorCalculo:
 
         fat_meta = fat_2025 * (1 + pct_meta)
 
-        # 2. GOAL SEEK v2.0.4: Calcula fat_base IGUAL ao display APÓS aplicar
-        # Após aplicar: pct_reajuste=0, pct_crescimento=0
-        # Display usa: sessoes_base × sazonalidade × valor_2026
-        fat_base = 0
+        # 2. GOAL SEEK v2.0.5: Calcula fat_base usando EXATAMENTE a mesma função do display
+        # Primeiro zera pct_crescimento e pct_reajuste (como app.py faz após aplicar)
+        # Depois usa calcular_receita_servico_mes() para fat_base
+
+        # 2a. Salva valores originais
+        backup_crescimento = {}
+        backup_reajuste = {}
+        backup_fisio_cresc = {}
 
         for srv_nome, srv in self.servicos.items():
-            valor_2026 = srv.valor_2026 or 0
+            backup_crescimento[srv_nome] = srv.pct_crescimento
+            backup_reajuste[srv_nome] = srv.pct_reajuste
 
-            # Pega sessoes_base SEM crescimento
-            sessoes_base = 0
-            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
-            if modo == "servico":
-                sessoes_base = srv.sessoes_mes_base or 0
-            else:
-                for fisio in self.fisioterapeutas.values():
-                    if fisio.ativo:
-                        sessoes_base += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
-                for prop in self.proprietarios.values():
-                    if getattr(prop, 'ativo', True):
-                        sessoes_base += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+        for nome, fisio in self.fisioterapeutas.items():
+            backup_fisio_cresc[nome] = dict(fisio.pct_crescimento_por_servico)
 
-            # Aplica só sazonalidade (sem pct_crescimento, sem pct_reajuste)
+        # 2b. Zera temporariamente (simula estado após aplicar)
+        for srv in self.servicos.values():
+            srv.pct_crescimento = 0.0
+            srv.pct_reajuste = 0.0
+
+        for fisio in self.fisioterapeutas.values():
+            for srv_nome in fisio.pct_crescimento_por_servico:
+                fisio.pct_crescimento_por_servico[srv_nome] = 0.0
+
+        # 2c. Calcula fat_base usando a mesma função do display
+        fat_base = 0
+        for srv_nome in self.servicos:
             for mes in range(12):
-                fator_saz = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
-                sessoes_mes = sessoes_base * fator_saz
-                fat_base += sessoes_mes * valor_2026
+                fat_base += self.calcular_receita_servico_mes(srv_nome, mes)
 
-        # v2.0.4: GOAL SEEK - fator = fat_meta / fat_base
+        print(f"[METAS-CALC] fat_base (via calcular_receita_servico_mes) = R$ {fat_base:,.2f}")
+
+        # 2d. Restaura valores originais para cálculo do fator
+        for srv_nome, srv in self.servicos.items():
+            srv.pct_crescimento = backup_crescimento.get(srv_nome, 0)
+            srv.pct_reajuste = backup_reajuste.get(srv_nome, 0)
+
+        for nome, fisio in self.fisioterapeutas.items():
+            if nome in backup_fisio_cresc:
+                fisio.pct_crescimento_por_servico = backup_fisio_cresc[nome]
+
+        # v2.0.5: GOAL SEEK - fator = fat_meta / fat_base
 
         if fat_2025 == 0:
             fator_ajuste = 1.0
