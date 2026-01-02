@@ -3202,15 +3202,31 @@ class MotorCalculo:
             meta_mes = fat_2025[i] * (1 + pct_crescimento_meta)
             metas_mensais_2026.append(meta_mes)
 
-        # 6. GOAL SEEK v2.0.3: Usa valor_2026 SEM reajuste
-        # IMPORTANTE: Após aplicar simulação, pct_reajuste é zerado (app.py linha 20051)
-        # Então o display vai usar valor_2026 puro, sem reajuste
-        # A simulação deve usar a mesma base para o cálculo bater
+        # 6. GOAL SEEK v2.0.4: Calcula fat_base IGUAL ao display APÓS aplicar
+        # Após aplicar: pct_reajuste=0, pct_crescimento=0
+        # Display usa: sessoes_base × sazonalidade × valor_2026
+        # Então simulação deve usar a mesma fórmula
         fat_base_premissas = 0
         for srv_nome, srv in self.servicos.items():
             valor_2026 = srv.valor_2026 or 0
+
+            # Pega sessoes_base SEM crescimento (igual display após aplicar)
+            sessoes_base = 0
+            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
+            if modo == "servico":
+                sessoes_base = srv.sessoes_mes_base or 0
+            else:
+                for fisio in self.fisioterapeutas.values():
+                    if fisio.ativo:
+                        sessoes_base += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
+                for prop in self.proprietarios.values():
+                    if getattr(prop, 'ativo', True):
+                        sessoes_base += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+
+            # Aplica só sazonalidade (sem pct_crescimento)
             for mes in range(12):
-                sessoes_mes = self.get_sessoes_servico_mes(srv_nome, mes)
+                fator_saz = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
+                sessoes_mes = sessoes_base * fator_saz
                 fat_base_premissas += sessoes_mes * valor_2026
 
         if fat_base_premissas == 0:
@@ -3471,18 +3487,34 @@ class MotorCalculo:
 
         fat_meta = fat_2025 * (1 + pct_meta)
 
-        # 2. GOAL SEEK v2.0.3: Usa valor_2026 SEM reajuste
-        # IMPORTANTE: Após aplicar, pct_reajuste é zerado (app.py linha 20051)
-        # Então o display vai usar valor_2026 puro - a simulação deve usar igual
+        # 2. GOAL SEEK v2.0.4: Calcula fat_base IGUAL ao display APÓS aplicar
+        # Após aplicar: pct_reajuste=0, pct_crescimento=0
+        # Display usa: sessoes_base × sazonalidade × valor_2026
         fat_base = 0
 
         for srv_nome, srv in self.servicos.items():
             valor_2026 = srv.valor_2026 or 0
+
+            # Pega sessoes_base SEM crescimento
+            sessoes_base = 0
+            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
+            if modo == "servico":
+                sessoes_base = srv.sessoes_mes_base or 0
+            else:
+                for fisio in self.fisioterapeutas.values():
+                    if fisio.ativo:
+                        sessoes_base += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
+                for prop in self.proprietarios.values():
+                    if getattr(prop, 'ativo', True):
+                        sessoes_base += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
+
+            # Aplica só sazonalidade (sem pct_crescimento, sem pct_reajuste)
             for mes in range(12):
-                sessoes_mes = self.get_sessoes_servico_mes(srv_nome, mes)
+                fator_saz = self.sazonalidade.fatores[mes] if hasattr(self, 'sazonalidade') else 1.0
+                sessoes_mes = sessoes_base * fator_saz
                 fat_base += sessoes_mes * valor_2026
 
-        # v2.0.3: GOAL SEEK - fator = fat_meta / fat_base
+        # v2.0.4: GOAL SEEK - fator = fat_meta / fat_base
 
         if fat_2025 == 0:
             fator_ajuste = 1.0
