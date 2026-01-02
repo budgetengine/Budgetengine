@@ -3202,21 +3202,16 @@ class MotorCalculo:
             meta_mes = fat_2025[i] * (1 + pct_crescimento_meta)
             metas_mensais_2026.append(meta_mes)
 
-        # 6. GOAL SEEK v2.0.2: Usa get_valor_servico() igual ao display
-        # Calcula fat_base com a MESMA lógica de preços do display (inclui reajuste)
+        # 6. GOAL SEEK v2.0.3: Usa valor_2026 SEM reajuste
+        # IMPORTANTE: Após aplicar simulação, pct_reajuste é zerado (app.py linha 20051)
+        # Então o display vai usar valor_2026 puro, sem reajuste
+        # A simulação deve usar a mesma base para o cálculo bater
         fat_base_premissas = 0
-        for srv_nome in self.servicos.keys():
-            sessoes_srv = 0
-            for fisio in self.fisioterapeutas.values():
-                if fisio.ativo:
-                    sessoes_srv += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
-            for prop in self.proprietarios.values():
-                if getattr(prop, 'ativo', True):
-                    sessoes_srv += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
-            # Usa get_valor_servico para cada mês (igual ao display)
+        for srv_nome, srv in self.servicos.items():
+            valor_2026 = srv.valor_2026 or 0
             for mes in range(12):
-                valor_mes = self.get_valor_servico(srv_nome, mes, "profissional")
-                fat_base_premissas += sessoes_srv * valor_mes
+                sessoes_mes = self.get_sessoes_servico_mes(srv_nome, mes)
+                fat_base_premissas += sessoes_mes * valor_2026
 
         if fat_base_premissas == 0:
             fat_base_premissas = totais_anuais["faturamento_fisios"]
@@ -3476,48 +3471,18 @@ class MotorCalculo:
 
         fat_meta = fat_2025 * (1 + pct_meta)
 
-        # 2. GOAL SEEK v2.0.2: Usa get_valor_servico() igual ao display
-        # Calcula fat_base com a MESMA lógica de preços do display (inclui reajuste)
+        # 2. GOAL SEEK v2.0.3: Usa valor_2026 SEM reajuste
+        # IMPORTANTE: Após aplicar, pct_reajuste é zerado (app.py linha 20051)
+        # Então o display vai usar valor_2026 puro - a simulação deve usar igual
         fat_base = 0
 
         for srv_nome, srv in self.servicos.items():
-            sessoes_base_total = 0
+            valor_2026 = srv.valor_2026 or 0
+            for mes in range(12):
+                sessoes_mes = self.get_sessoes_servico_mes(srv_nome, mes)
+                fat_base += sessoes_mes * valor_2026
 
-            # ===== CALCULA SESSÕES BASE =====
-            modo = getattr(self.operacional, 'modo_calculo_sessoes', 'servico')
-
-            if modo == "servico":
-                sessoes_base_total = srv.sessoes_mes_base or 0
-            else:
-                # Modo profissional - soma sessões de fisioterapeutas
-                for fisio in self.fisioterapeutas.values():
-                    if fisio.ativo:
-                        sessoes_base_total += (fisio.sessoes_por_servico.get(srv_nome, 0) or 0)
-
-                # Fallback: proprietarios + profissionais
-                if sessoes_base_total == 0:
-                    for prop in self.proprietarios.values():
-                        if getattr(prop, 'ativo', True):
-                            sessoes_base_total += (prop.sessoes_por_servico.get(srv_nome, 0) or 0)
-                    for prof in self.profissionais.values():
-                        if getattr(prof, 'ativo', True):
-                            sessoes_base_total += (prof.sessoes_por_servico.get(srv_nome, 0) or 0)
-
-            # ===== CALCULA FAT_BASE USANDO get_valor_servico (igual display) =====
-            try:
-                sessoes_num = float(sessoes_base_total) if sessoes_base_total else 0
-                for mes in range(12):
-                    valor_mes = self.get_valor_servico(srv_nome, mes, "profissional")
-                    fat_base += sessoes_num * valor_mes
-            except (TypeError, ValueError):
-                pass
-
-        # v2.0.2: GOAL SEEK - Atingir Meta (estilo Excel)
-        # Usa get_valor_servico() igual ao display para consistência
-        #
-        # fat_meta = fat_2025 × (1 + pct_meta)
-        # fat_base = sessões × get_valor_servico(mês) para cada mês
-        # fator_ajuste = fat_meta / fat_base
+        # v2.0.3: GOAL SEEK - fator = fat_meta / fat_base
 
         if fat_2025 == 0:
             fator_ajuste = 1.0

@@ -21,7 +21,7 @@ DATABASE_PATH = DATA_DIR / "budget_engine.db"
 
 # Configurações do sistema
 APP_NAME = "Budget Engine"
-APP_VERSION = "2.0.2"
+APP_VERSION = "2.0.3"
 APP_SUBTITLE = "Motor de Orçamento | Consultoria em Controladoria"
 
 # Mapeamento de abas do Excel para o sistema
